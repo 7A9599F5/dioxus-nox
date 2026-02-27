@@ -70,9 +70,9 @@ mod tests;
 
 // Re-export public API
 pub use components::{
-    CommandAction, CommandActionPanel, CommandAnchor, CommandDialog, CommandEmpty, CommandForm,
-    CommandFormField, CommandGroup, CommandHighlight, CommandInput, CommandItem, CommandList,
-    CommandLoading, CommandModeIndicator, CommandPage, CommandPalette, CommandPreview,
+    CommandAction, CommandActionPanel, CommandAnchor, CommandCallout, CommandDialog, CommandEmpty,
+    CommandForm, CommandFormField, CommandGroup, CommandHighlight, CommandInput, CommandItem,
+    CommandList, CommandLoading, CommandModeIndicator, CommandPage, CommandPalette, CommandPreview,
     CommandQuickInput, CommandRoot, CommandSeparator, CommandSheet, CommandShortcut,
 };
 pub use context::{CommandContext, use_command_context};

@@ -11,6 +11,7 @@ fn main() {
 fn App() -> Element {
     let palette = use_command_palette(true);
     let mut last_search = use_signal(String::new);
+    let mut show_list_callout = use_signal(|| true);
 
     // Wave 2 demo / test-harness state
     let mut should_filter = use_signal(|| true);
@@ -125,10 +126,31 @@ fn App() -> Element {
                         },
                     }
 
+                    // Input-area callout: visible only when the search field is empty
+                    if last_search.read().is_empty() {
+                        CommandCallout {
+                            class: "input-hint",
+                            r#"Tip: type ">" for commands, "/" for files"#
+                        }
+                    }
+
                     CommandList {
                         label: "Commands",
                         CommandEmpty { "No results found." }
                         CommandLoading { "Loading..." }
+
+                        // List callout: dismissible first-run hint before the first group
+                        if show_list_callout() {
+                            CommandCallout {
+                                dismissible: true,
+                                on_dismiss: move |_| show_list_callout.set(false),
+                                "New here? Try typing "
+                                kbd { ">" }
+                                " for editor commands or "
+                                kbd { "/" }
+                                " for files."
+                            }
+                        }
 
                         CommandGroup {
                             id: "navigation",

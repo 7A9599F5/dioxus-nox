@@ -3034,3 +3034,57 @@ pub fn CommandFormField(
         }
     }
 }
+
+/// A non-interactive informational callout. Can be placed in the input area
+/// (as a sibling to `CommandInput`) or inside `CommandList` (as a decorative row
+/// before/after groups). Does **not** register as a `CommandItem` — keyboard
+/// navigation never lands on it; `filtered_count` is unaffected.
+///
+/// Consumer controls visibility via signals. `dismissible=true` renders an
+/// unstyled dismiss button (`[data-cmdk-callout-dismiss]`) after children;
+/// `on_dismiss` fires on click. Consumer owns visible state.
+///
+/// # Example
+/// ```rust,ignore
+/// if show_tip() {
+///     CommandCallout {
+///         dismissible: true,
+///         on_dismiss: move |_| show_tip.set(false),
+///         "Try typing '>' for editor commands"
+///     }
+/// }
+/// ```
+#[component]
+pub fn CommandCallout(
+    /// Optional CSS class forwarded to the root element.
+    class: Option<String>,
+    /// Renders an unstyled dismiss button (`[data-cmdk-callout-dismiss]`) after children.
+    /// When clicked, fires `on_dismiss` (if set). Consumer owns visible state.
+    #[props(default)]
+    dismissible: bool,
+    /// Called when the auto-rendered dismiss button is clicked (requires `dismissible=true`).
+    on_dismiss: Option<EventHandler<()>>,
+    /// Any content: icon, text, links, custom dismiss button.
+    children: Element,
+) -> Element {
+    rsx! {
+        div {
+            "data-cmdk-callout": "",
+            role: "note",
+            class: class.unwrap_or_default(),
+            {children}
+            if dismissible {
+                button {
+                    "data-cmdk-callout-dismiss": "",
+                    "aria-label": "Dismiss",
+                    r#type: "button",
+                    onclick: move |_| {
+                        if let Some(cb) = &on_dismiss {
+                            cb.call(());
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
