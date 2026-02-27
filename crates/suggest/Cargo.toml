@@ -1,0 +1,18 @@
+[package]
+name = "dioxus-nox-suggest"
+version = "0.1.0"
+edition.workspace = true
+description = "Headless inline-trigger suggestion primitive — slash commands, @mentions, #hashtags"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "suggestions", "mention", "slash-command", "autocomplete"]
+categories = ["gui", "wasm", "web-programming"]
+
+[features]
+default = ["web"]
+web = []
+desktop = []
+mobile = []
+
+[dependencies]
+dioxus = { workspace = true }
