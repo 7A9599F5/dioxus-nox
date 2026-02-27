@@ -16,7 +16,7 @@ use dioxus_core::{Task, use_drop};
 
 use crate::context::{escape_js, use_markdown_context};
 use crate::parser::render_block_to_html_string;
-use crate::types::BlockEntry;
+use crate::types::{ActiveBlockInputEvent, BlockEntry};
 
 // ── JS generator functions ─────────────────────────────────────────────────
 
@@ -193,7 +193,12 @@ pub(crate) fn reconstruct_markdown(raws: &[String], is_list_items: &[bool]) -> S
 /// **Zero visual styles** — consumers style via the `class` prop and CSS targeting
 /// `[data-md-inline-editor]`, `[data-block-index]`.
 #[component]
-pub fn InlineEditor(class: Option<String>) -> Element {
+pub fn InlineEditor(
+    class: Option<String>,
+    /// Fires on every `oninput` with the active block's raw text + block-local cursor.
+    /// Used to wire inline-trigger suggestions without coupling markdown to suggest.
+    on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
+) -> Element {
     let ctx = use_markdown_context();
     let editor_id = ctx.inline_editor_id();
 
@@ -268,6 +273,14 @@ pub fn InlineEditor(class: Option<String>) -> Element {
                 }
             });
         });
+    }
+
+    // Keep on_active_block_input in sync across renders (EventHandler is Copy in Dioxus 0.7).
+    let oabi_sig: Signal<Option<EventHandler<ActiveBlockInputEvent>>> =
+        use_signal(|| on_active_block_input);
+    {
+        let mut oabi = oabi_sig;
+        oabi.set(on_active_block_input);
     }
 
     let editor_id_mount = editor_id.clone();
@@ -360,16 +373,30 @@ pub fn InlineEditor(class: Option<String>) -> Element {
                     let braws = block_raws_input.clone();
                     let bmetas = block_metas_input.clone();
                     spawn(async move {
-                        // Read textContent of the active block element.
+                        // Read textContent + block-local cursor from the active block element.
                         let js = format!(
                             r#"(function(){{
     var ed = document.getElementById('{eid}');
     var bl = ed ? ed.querySelector('[data-block-index="{idx}"]') : null;
-    dioxus.send(bl ? bl.textContent : '');
+    var text = bl ? bl.textContent : '';
+    var cursor = 0;
+    if (bl) {{
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {{
+            var range = document.createRange();
+            range.setStart(bl, 0);
+            try {{ range.setEnd(sel.focusNode, sel.focusOffset); cursor = range.toString().length; }}
+            catch(e) {{ cursor = 0; }}
+        }}
+    }}
+    dioxus.send([text, cursor]);
 }})();"#
                         );
                         let mut ev = document::eval(&js);
-                        if let Ok(text) = ev.recv::<String>().await {
+                        if let Ok((text, cursor_u64)) = ev.recv::<(String, u64)>().await {
+                            let cursor_utf16 = cursor_u64 as usize;
+                            // Clone before moving into the slot.
+                            let text_for_cb = text.clone();
                             // Update cached raw text for the active block.
                             if let Ok(mut raws) = braws.try_borrow_mut()
                                 && let Some(slot) = raws.get_mut(idx)
@@ -383,6 +410,14 @@ pub fn InlineEditor(class: Option<String>) -> Element {
                             );
                             ctx.handle_value_change(full_md);
                             ctx.trigger_parse.call(());
+                            // Fire the active block input callback if provided.
+                            if let Some(ref cb) = *oabi_sig.read() {
+                                cb.call(ActiveBlockInputEvent {
+                                    text: text_for_cb,
+                                    cursor_utf16,
+                                    block_idx: idx,
+                                });
+                            }
                         }
                     });
                 }

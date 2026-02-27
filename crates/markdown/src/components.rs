@@ -12,7 +12,8 @@ use crate::hooks::{
 };
 use crate::inline_editor::InlineEditor;
 use crate::types::{
-    CursorPosition, Layout, LivePreviewVariant, Mode, Orientation, Selection, VimAction, VimState,
+    ActiveBlockInputEvent, CursorPosition, Layout, LivePreviewVariant, Mode, Orientation,
+    Selection, VimAction, VimState,
 };
 
 // ── Internal hook: use_root_state ─────────────────────────────────────
@@ -225,6 +226,9 @@ pub fn Editor(
     /// Called on each keystroke while a slash command is active.
     /// Argument: the filter text typed after "/" (e.g., "hea" for "/hea").
     on_slash_filter: Option<EventHandler<String>>,
+    /// Fires on every `oninput` in inline mode with the active block's raw text + cursor.
+    /// Forwarded to [`InlineEditor`] when `LivePreviewVariant::Inline` is active.
+    on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
 ) -> Element {
     let ctx = use_context::<MarkdownContext>();
@@ -274,7 +278,7 @@ pub fn Editor(
                 "data-md-word-wrap": "true",
                 "data-disabled": disabled_attr,
                 ..additional_attributes,
-                InlineEditor {}
+                InlineEditor { on_active_block_input }
             }
         };
     }

@@ -416,6 +416,20 @@ impl SourceMap {
     }
 }
 
+/// Fired by [`InlineEditor`] on every `oninput` with the active block's raw text
+/// and cursor offset within that block.  Used by consumers to wire inline-trigger
+/// suggestions (e.g. `dioxus-nox-suggest`) without coupling markdown to suggest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveBlockInputEvent {
+    /// Raw markdown text of the active (cursor-bearing) block.
+    pub text: String,
+    /// Cursor position as a UTF-16 code-unit offset within `text`.
+    pub cursor_utf16: usize,
+    /// DOM block index (`data-block-index` attribute value).  Needed for
+    /// DOM-based text replacement after a slash-command selection.
+    pub block_idx: usize,
+}
+
 /// Generate JS for vim cursor movement via `eval()`.
 /// Targets the textarea with the given `editor_id`.
 pub(crate) fn vim_move_js(editor_id: &str, direction: &str) -> String {

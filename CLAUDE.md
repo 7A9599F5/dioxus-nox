@@ -1,7 +1,6 @@
 # dioxus-nox Workspace
 
-Headless component library for Dioxus 0.7 (Rust/WASM). 9 crates in `crates/`.
-Per-crate CLAUDE.md files exist in each `crates/*/CLAUDE.md` for crate-specific guidance.
+Headless component library for Dioxus 0.7 (Rust/WASM). 10 crates in `crates/`.
 
 ## Crate Inventory
 
@@ -14,8 +13,20 @@ Per-crate CLAUDE.md files exist in each `crates/*/CLAUDE.md` for crate-specific 
 | `dioxus-nox-gestures` | `crates/gestures` | 0.1.0 | Touch gesture primitives (swipe, long-press) |
 | `dioxus-nox-preview` | `crates/preview` | 0.1.0 | Debounced preview hook + LRU cache |
 | `dioxus-nox-shell` | `crates/shell` | 0.2.0 | Application shell layout primitive |
+| `dioxus-nox-suggest` | `crates/suggest` | 0.1.0 | Headless inline-trigger suggestion primitive (slash, @mentions, #hashtags) |
 | `dioxus-nox-tag-input` | `crates/tag-input` | 0.1.0 | Headless tag/multi-select input |
 | `dioxus-nox-markdown` | `crates/markdown` | 0.1.0 | Headless markdown editor/previewer/display |
+
+@crates/cmdk/CLAUDE.md
+@crates/virtualize/CLAUDE.md
+@crates/extensions/CLAUDE.md
+@crates/gestures/CLAUDE.md
+@crates/preview/CLAUDE.md
+@crates/shell/CLAUDE.md
+@crates/dnd/CLAUDE.md
+@crates/suggest/CLAUDE.md
+@crates/tag-input/CLAUDE.md
+@crates/markdown/CLAUDE.md
 
 ### Cross-Crate Relationships
 

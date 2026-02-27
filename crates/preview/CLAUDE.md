@@ -1,7 +1,6 @@
-# dioxus-nox-preview
+# dioxus-nox-preview — Debounced preview hook + LRU cache
 
-Debounced preview hook and LRU cache for navigable Dioxus lists.
-See workspace `CLAUDE.md` for shared conventions.
+> See workspace `CLAUDE.md` for Dioxus 0.7 gotchas, Radix conventions, web_sys policy.
 
 ## Crate Purpose
 
@@ -21,14 +20,16 @@ Standalone — zero dependency on dioxus-cmdk.
 - `PreviewPosition::as_data_attr(&self) -> Option<&'static str>`
 
 ## Module Structure
-
 - `lib.rs` — re-exports only
-- `position.rs` — PreviewPosition enum + as_data_attr()
-- `cache.rs` — PreviewCache (VecDeque-based LRU), PreviewCacheHandle, use_preview_cache
-- `debounce.rs` — use_debounced_active hook + task lifecycle
+- `position.rs` — `PreviewPosition` enum + `as_data_attr()`
+- `cache.rs` — `PreviewCache` (VecDeque LRU), `PreviewCacheHandle`, `use_preview_cache`
+- `debounce.rs` — `use_debounced_active` hook + task lifecycle
 - `tests.rs` — pure unit tests (no Dioxus runtime required)
 
 ## Key Design Decisions
+1. Non-reactive `Rc<RefCell<>>` for cache — cache reads driven by debounced signal, not signals themselves
+2. Immediate fire on non-wasm — no tokio dep; `gloo-timers` on wasm32 only
+3. `String` cache key in v0.1
 
 - **OQ-1 (LRU impl):** `VecDeque` (zero-dep). O(n) ops acceptable at ≤20 entries.
 - **OQ-2 (native debounce):** Immediate fire on non-wasm; no tokio dependency.
@@ -51,9 +52,8 @@ Standalone — zero dependency on dioxus-cmdk.
 - `Rc<RefCell<PreviewCache>>` for hot-path state (non-reactive, matches DragState pattern)
 
 ## CI Commands
-
 ```bash
-cargo test
-cargo clippy -- -D warnings
-cargo clippy --target wasm32-unknown-unknown -- -D warnings
+cargo check -p dioxus-nox-preview
+cargo test -p dioxus-nox-preview
+cargo clippy -p dioxus-nox-preview --target wasm32-unknown-unknown -- -D warnings
 ```

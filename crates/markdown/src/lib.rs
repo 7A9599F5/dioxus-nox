@@ -19,9 +19,9 @@ pub mod prelude {
     pub use crate::inline_editor::InlineEditor;
     pub use crate::parser::{index_to_line_col, parse_document};
     pub use crate::types::{
-        BlockEntry, CursorPosition, HeadingEntry, HtmlRenderPolicy, Layout, LivePreviewVariant,
-        Mode, Orientation, ParseOptions, ParseState, ParsedDoc, Selection, SourceMap,
-        SourceMapEntry, VimAction, VimMode, VimState,
+        ActiveBlockInputEvent, BlockEntry, CursorPosition, HeadingEntry, HtmlRenderPolicy, Layout,
+        LivePreviewVariant, Mode, Orientation, ParseOptions, ParseState, ParsedDoc, Selection,
+        SourceMap, SourceMapEntry, VimAction, VimMode, VimState,
     };
 }
 
