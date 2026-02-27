@@ -12,7 +12,7 @@ pub(crate) struct PreviewCache {
 }
 
 impl PreviewCache {
-    pub fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         let cap = capacity.max(1);
         Self {
             entries: VecDeque::with_capacity(cap),
@@ -23,7 +23,7 @@ impl PreviewCache {
     /// Insert or promote `id`. If the key already exists it is removed first
     /// (so the new entry always lands at the back / most-recently-used slot).
     /// Evicts the front entry when the cache exceeds `capacity`.
-    pub fn insert(&mut self, id: impl Into<String>, render: Rc<dyn Fn() -> Element>) {
+    pub(crate) fn insert(&mut self, id: impl Into<String>, render: Rc<dyn Fn() -> Element>) {
         let id = id.into();
         self.entries.retain(|(k, _)| k != &id);
         self.entries.push_back((id, render));
@@ -33,7 +33,7 @@ impl PreviewCache {
     }
 
     /// Returns a clone of the cached render closure for `id`, or `None`.
-    pub fn get(&self, id: &str) -> Option<Rc<dyn Fn() -> Element>> {
+    pub(crate) fn get(&self, id: &str) -> Option<Rc<dyn Fn() -> Element>> {
         self.entries
             .iter()
             .find(|(k, _)| k == id)
@@ -41,20 +41,20 @@ impl PreviewCache {
     }
 
     /// Remove the entry for `id` if present.
-    pub fn invalidate(&mut self, id: &str) {
+    pub(crate) fn invalidate(&mut self, id: &str) {
         self.entries.retain(|(k, _)| k != id);
     }
 
     /// Remove all entries.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.entries.clear();
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.entries.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 }
@@ -66,10 +66,22 @@ impl PreviewCache {
 /// Obtain one via [`use_preview_cache`].
 #[derive(Clone)]
 pub struct PreviewCacheHandle {
-    inner: Rc<RefCell<PreviewCache>>,
+    pub(crate) inner: Rc<RefCell<PreviewCache>>,
+}
+
+impl PartialEq for PreviewCacheHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
 }
 
 impl PreviewCacheHandle {
+    pub(crate) fn new(capacity: usize) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(PreviewCache::new(capacity))),
+        }
+    }
+
     /// Returns the cached render closure for `id`, or `None`.
     pub fn get(&self, id: &str) -> Option<Rc<dyn Fn() -> Element>> {
         self.inner.borrow().get(id)
@@ -107,7 +119,5 @@ impl PreviewCacheHandle {
 /// `capacity` is the maximum number of entries retained; the oldest entry
 /// is evicted when the limit is exceeded. Minimum effective capacity is 1.
 pub fn use_preview_cache(capacity: usize) -> PreviewCacheHandle {
-    use_hook(|| PreviewCacheHandle {
-        inner: Rc::new(RefCell::new(PreviewCache::new(capacity))),
-    })
+    use_hook(|| PreviewCacheHandle::new(capacity))
 }

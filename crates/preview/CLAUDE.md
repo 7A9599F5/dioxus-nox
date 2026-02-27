@@ -11,10 +11,10 @@ Standalone — zero dependency on dioxus-cmdk.
 
 ## Public API Surface
 
-- `use_debounced_active(active_id: ReadOnlySignal<Option<String>>, debounce_ms: u32) -> ReadOnlySignal<Option<String>>`
+- `use_debounced_active(active_id: ReadSignal<Option<String>>, debounce_ms: u32) -> ReadSignal<Option<String>>`
 - `use_preview_cache(capacity: usize) -> PreviewCacheHandle`
-- `PreviewCacheHandle::get(&self, id: &str) -> Option<Element>`
-- `PreviewCacheHandle::insert(&self, id: impl Into<String>, element: Element)`
+- `PreviewCacheHandle::get(&self, id: &str) -> Option<Rc<dyn Fn() -> Element>>`
+- `PreviewCacheHandle::insert(&self, id: impl Into<String>, render: Rc<dyn Fn() -> Element>)`
 - `PreviewCacheHandle::invalidate(&self, id: &str)`
 - `PreviewCacheHandle::clear(&self)`, `len(&self) -> usize`, `is_empty(&self) -> bool`
 - `PreviewPosition` enum: `None | Right | Bottom`
@@ -35,6 +35,9 @@ Standalone — zero dependency on dioxus-cmdk.
 - **OQ-3 (cache reactivity):** Non-reactive `Rc<RefCell<>>`. Cache reads driven by debounced signal.
 - **OQ-4 (cache key):** `String` for v0.1.
 - **OQ-5 (hook location):** `use_debounced_active` included in this crate.
+- **OQ-6 (closure cache):** Cache stores `Rc<dyn Fn() -> Element>` (render closures), not
+  `Element` directly, because `Element = Result<VNode, RenderError>` is not `Clone`.
+  Callers pass a closure that re-renders the preview on demand.
 
 ## Data Attributes
 

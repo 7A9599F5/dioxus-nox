@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::Element;
 
-use crate::cache::PreviewCache;
+use crate::cache::{PreviewCache, PreviewCacheHandle};
 use crate::position::PreviewPosition;
 
 // Helper: a closure that satisfies `Fn() -> Element`.
@@ -77,20 +77,70 @@ fn test_clear() {
 }
 
 #[test]
-fn test_len_and_is_empty() {
-    let mut cache = PreviewCache::new(5);
+fn test_cache_empty_on_construction() {
+    let cache = PreviewCache::new(5);
     assert!(cache.is_empty());
     assert_eq!(cache.len(), 0);
+}
 
+#[test]
+fn test_len_increases_after_insert() {
+    let mut cache = PreviewCache::new(5);
     cache.insert("x", stub());
     assert!(!cache.is_empty());
     assert_eq!(cache.len(), 1);
 
     cache.insert("y", stub());
     assert_eq!(cache.len(), 2);
+}
 
+#[test]
+fn test_len_decreases_after_invalidate() {
+    let mut cache = PreviewCache::new(5);
+    cache.insert("x", stub());
+    cache.insert("y", stub());
     cache.invalidate("x");
     assert_eq!(cache.len(), 1);
+}
+
+#[test]
+fn test_cache_zero_capacity_clamps_to_one() {
+    let mut cache = PreviewCache::new(0);
+    cache.insert("a", stub());
+    cache.insert("b", stub()); // must evict "a"
+    assert_eq!(cache.len(), 1, "capacity 0 must clamp to 1");
+    assert!(cache.get("a").is_none(), "a should be evicted");
+    assert!(cache.get("b").is_some());
+}
+
+// ── PreviewCacheHandle ────────────────────────────────────────────────────────
+
+#[test]
+fn test_handle_insert_and_get() {
+    let handle = PreviewCacheHandle::new(5);
+    handle.insert("a", stub());
+    assert!(handle.get("a").is_some());
+    assert!(handle.get("z").is_none());
+}
+
+#[test]
+fn test_handle_invalidate() {
+    let handle = PreviewCacheHandle::new(5);
+    handle.insert("a", stub());
+    handle.insert("b", stub());
+    handle.invalidate("a");
+    assert!(handle.get("a").is_none());
+    assert!(handle.get("b").is_some());
+}
+
+#[test]
+fn test_handle_clear() {
+    let handle = PreviewCacheHandle::new(5);
+    handle.insert("a", stub());
+    handle.insert("b", stub());
+    handle.clear();
+    assert!(handle.is_empty());
+    assert_eq!(handle.len(), 0);
 }
 
 // ── PreviewPosition ───────────────────────────────────────────────────────────

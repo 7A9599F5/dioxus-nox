@@ -21,7 +21,7 @@ pub fn use_debounced_active(
     active_id: ReadSignal<Option<String>>,
     debounce_ms: u32,
 ) -> ReadSignal<Option<String>> {
-    let mut debounced = use_signal(|| active_id.peek().clone());
+    let mut debounced = use_signal(|| active_id.read().clone());
     let task_ref: Rc<RefCell<Option<dioxus_core::Task>>> = use_hook(|| Rc::new(RefCell::new(None)));
 
     use_effect(move || {
@@ -33,18 +33,22 @@ pub fn use_debounced_active(
             old_task.cancel();
         }
 
+        // Non-WASM: always fire immediately regardless of debounce_ms (OQ-2).
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = debounce_ms; // intentionally unused on non-wasm
+            debounced.set(current);
+        }
+
+        // WASM path: zero-delay fires inline; non-zero schedules via gloo-timers.
+        #[cfg(target_arch = "wasm32")]
         if debounce_ms == 0 {
             debounced.set(current);
         } else {
             // Clone for the async block; keep `task_ref` for the outer store.
             let task_ref_inner = task_ref.clone();
             let new_task = spawn(async move {
-                // web_sys used here: confirmed no Dioxus 0.7 native API for
-                // sub-millisecond timers as of 2026-02-26.
-                // Non-WASM targets: fires immediately (instant local ops).
-                #[cfg(target_arch = "wasm32")]
                 TimeoutFuture::new(debounce_ms).await;
-
                 debounced.set(current);
                 *task_ref_inner.borrow_mut() = None;
             });

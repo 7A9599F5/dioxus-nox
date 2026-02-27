@@ -10,14 +10,17 @@ use crate::PreviewPosition;
 /// consumers can target them with CSS selectors. Ships **zero visual styles**.
 ///
 /// ```text
-/// [data-preview-position="right"]  { /* position the pane */ }
-/// [data-preview-loading="true"]    { /* show a spinner / skeleton */ }
+/// [data-preview-position="right"]   { /* position the pane */ }
+/// [data-preview-loading="true"]     { /* show a spinner / skeleton */ }
+/// [data-preview-loading="false"]    { /* hide the spinner */ }
 /// ```
+///
+/// `data-preview-loading` is always present on the element (either `"true"` or
+/// `"false"`), so both attribute selectors are reliable.
 #[component]
 pub fn Root(
-    /// Extra CSS classes applied to the root element.
-    #[props(default)]
-    class: Option<String>,
+    #[props(extends = GlobalAttributes)]
+    attributes: Vec<Attribute>,
     /// Positional hint written as `data-preview-position`.
     #[props(default)]
     position: PreviewPosition,
@@ -30,9 +33,9 @@ pub fn Root(
     let pos = position.as_data_attr();
     rsx! {
         div {
-            class: class,
             "data-preview-position": pos,
-            "data-preview-loading": if loading { Some("true") } else { None },
+            "data-preview-loading": if loading { "true" } else { "false" },
+            ..attributes,
             {children}
         }
     }
@@ -46,15 +49,14 @@ pub fn Root(
 /// Ships **zero visual styles**.
 #[component]
 pub fn Container(
-    /// Extra CSS classes applied to the container element.
-    #[props(default)]
-    class: Option<String>,
+    #[props(extends = GlobalAttributes)]
+    attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
     rsx! {
         div {
-            class: class,
             "data-preview": "true",
+            ..attributes,
             {children}
         }
     }
