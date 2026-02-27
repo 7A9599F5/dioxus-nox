@@ -1,0 +1,55 @@
+/* ==========================================================================
+   dx-dnd Grouped Feedback CSS — Essential group boundary indicators
+   ==========================================================================
+   These styles provide the minimum visual feedback for grouped/nested
+   container drag-and-drop to be perceptible:
+
+   - Group boundary drop indicators (external: between group and neighbors)
+   - Group boundary drop indicators (internal: into top/bottom of group)
+   - Adjacent item glow near group boundaries
+
+   Load this alongside styles-feedback.css for custom design systems.
+   For full opinionated defaults (group container styling, header/member
+   rows), load grouped-theme.css instead — it is a superset of this file.
+   ========================================================================== */
+
+/* ==========================================================================
+   Group Boundary Drop Indicators — External (between group and neighbor)
+   ========================================================================== */
+
+/* Group container edge highlights for external (between-items) indicators */
+[data-dnd-group-wrapper][data-drop-position="before"] > [data-dnd-group] {
+    border-top: 2px solid var(--dxdnd-primary);
+}
+[data-dnd-group-wrapper][data-drop-position="after"] > [data-dnd-group] {
+    border-bottom: 2px solid var(--dxdnd-primary);
+}
+
+/* Adjacent item glow: item ABOVE group gets bottom glow */
+[data-dnd-item]:has(+ [data-dnd-group-wrapper][data-drop-position="before"]) > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-light);
+}
+
+/* Adjacent item glow: item BELOW group gets top glow */
+[data-dnd-group-wrapper][data-drop-position="after"] + [data-dnd-item] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-light);
+}
+
+/* Suppress edge glow on last group member when wrapper shows bottom indicator */
+[data-dnd-group-wrapper][data-drop-position="after"] [data-dnd-item][data-drop-position="after"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: none !important;
+}
+
+/* ==========================================================================
+   Group Boundary Drop Indicators — Internal (into top/bottom of group)
+   ========================================================================== */
+
+/* Edge highlight: colored border on the entry side of the group container */
+[data-dnd-group-wrapper][data-drop-position="into-top"] > [data-dnd-group] {
+    border-top: 2px solid var(--dxdnd-primary);
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-lighter);
+}
+[data-dnd-group-wrapper][data-drop-position="into-bottom"] > [data-dnd-group] {
+    border-bottom: 2px solid var(--dxdnd-primary);
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-lighter);
+}

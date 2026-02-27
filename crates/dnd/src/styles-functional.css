@@ -1,0 +1,227 @@
+/* ==========================================================================
+   dx-dnd Functional CSS — Required for drag-and-drop mechanics
+   ==========================================================================
+   These styles are REQUIRED for dx-dnd to function correctly. They handle
+   layout, positioning, visibility states, pointer behavior, and displacement
+   animations. Without these, drag-and-drop will not work.
+
+   Visual/theme styles (colors, shadows, cursors, decorative elements) are
+   in styles-theme.css and are OPTIONAL.
+   ========================================================================== */
+
+/* Functional variables only — used by rules below */
+:root {
+    --dxdnd-item-gap: 8px;
+    --dxdnd-z-moving: 1000;
+    --dxdnd-z-overlay: 9999;
+    --dxdnd-transition-displacement-duration: 250ms;
+    --dxdnd-transition-displacement-easing: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --dxdnd-transition-displacement: var(--dxdnd-transition-displacement-duration) var(--dxdnd-transition-displacement-easing);
+}
+
+/* ==========================================================================
+   Draggable Items
+   ========================================================================== */
+
+[data-dnd-draggable] {
+    user-select: none;
+    touch-action: none;
+    -webkit-touch-callout: none;
+}
+
+[data-dnd-draggable][data-state="dragging"] {
+    opacity: 0;
+    /* Default to hidden for cleaner sortable UX, overrides below if needed */
+}
+
+/* ==========================================================================
+   Drop Zones — Sortable container reset
+   ========================================================================== */
+
+/* Sortable containers use per-item indicators, not container borders */
+[data-dnd-dropzone][data-dnd-container][data-can-drop="true"],
+[data-dnd-dropzone][data-dnd-container][data-can-drop="false"] {
+    border: none;
+    background-color: transparent;
+}
+
+
+/* ==========================================================================
+   Drag Overlay
+   ========================================================================== */
+
+[data-dnd-overlay] {
+    position: fixed;
+    pointer-events: none;
+    z-index: var(--dxdnd-z-overlay);
+}
+
+/* ==========================================================================
+   Sortable List Items
+   ========================================================================== */
+
+/* ==========================================================================
+   Sortable Item Wrapper
+   ========================================================================== */
+
+[data-dnd-item] {
+    position: relative;
+    /* Displacement animation with per-item duration override */
+    transition-property: transform;
+    transition-duration: var(--dxdnd-displacement-duration, var(--dxdnd-transition-displacement-duration));
+    transition-timing-function: var(--dxdnd-transition-displacement-easing);
+    /* Optimize performance */
+    will-change: transform;
+    /* Prevent text selection during drag */
+    user-select: none;
+    -webkit-user-select: none;
+    /* Crucial for touch dragging */
+    touch-action: none;
+}
+
+/* Hide user content while dragging (the "Ghost") — indicators/previews stay visible */
+[data-dnd-item][data-state="dragging"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+/* Source placeholder: visible as ghost until drop target resolves */
+[data-dnd-item][data-state="placeholder"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    opacity: 0.3 !important;
+    pointer-events: none;
+}
+
+/* ==========================================================================
+   Group Wrapper (external indicator host for nested containers)
+   ========================================================================== */
+
+[data-dnd-group-wrapper] {
+    position: relative;
+    transition-property: transform;
+    transition-duration: var(--dxdnd-displacement-duration, var(--dxdnd-transition-displacement-duration));
+    transition-timing-function: var(--dxdnd-transition-displacement-easing);
+    will-change: transform;
+}
+
+/* ==========================================================================
+   Drop Indicators
+   ========================================================================== */
+
+[data-dnd-indicator] {
+    position: absolute;
+    pointer-events: none;
+    z-index: 2000;
+    /* Ensure it's above everything including dragging items */
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+[data-dnd-indicator][data-orientation="horizontal"] {
+    height: 2px;
+    left: 0;
+    right: 0;
+}
+
+[data-dnd-indicator][data-orientation="vertical"] {
+    width: 2px;
+    top: 0;
+    bottom: 0;
+}
+
+[data-dnd-indicator][data-indicator-position="before"] {
+    /* Center in the gap (gap/2 above item) */
+    top: calc(var(--dxdnd-item-gap, 8px) * -0.5);
+    transform: translateY(-50%);
+}
+
+[data-dnd-indicator][data-indicator-position="after"] {
+    /* Center in the gap (gap/2 below item) */
+    bottom: calc(var(--dxdnd-item-gap, 8px) * -0.5);
+    transform: translateY(50%);
+}
+
+/* Horizontal container: indicators positioned left/right instead of top/bottom */
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-indicator][data-indicator-position="before"] {
+    top: auto;
+    left: calc(var(--dxdnd-item-gap, 8px) * -0.5);
+    transform: translateX(-50%);
+}
+
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-indicator][data-indicator-position="after"] {
+    bottom: auto;
+    right: calc(var(--dxdnd-item-gap, 8px) * -0.5);
+    transform: translateX(50%);
+}
+
+/* --------------------------------------------------------------------------
+   Drop Indicator Preview (ghost preview card)
+   -------------------------------------------------------------------------- */
+
+[data-dnd-preview] {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+    z-index: 2000;
+    box-sizing: border-box;
+    /* When min-height is set via inline style, center content vertically */
+    display: flex;
+    align-items: center;
+}
+
+[data-dnd-preview][data-indicator-position="before"] {
+    bottom: 100%;
+}
+
+[data-dnd-preview][data-indicator-position="after"] {
+    top: 100%;
+}
+
+/* Horizontal container: preview positioned left/right */
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-preview] {
+    left: auto;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    /* Switch min-height to min-width for horizontal gap sizing */
+    min-height: unset;
+}
+
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-preview][data-indicator-position="before"] {
+    bottom: auto;
+    right: 100%;
+}
+
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-preview][data-indicator-position="after"] {
+    top: auto;
+    left: 100%;
+}
+
+/* ==========================================================================
+   Indicator Mode (no gap displacement)
+   ========================================================================== */
+
+/* Source item: dimmed instead of invisible */
+[data-dnd-item][data-displacement-mode="indicator"][data-state="dragging"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    opacity: 0.3 !important;
+    pointer-events: none;
+}
+
+/* ==========================================================================
+   Accessibility — Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+    [data-dnd-draggable],
+    [data-dnd-dropzone],
+    [data-dnd-item],
+    [data-dnd-indicator],
+    [data-dnd-preview] {
+        transition: none;
+    }
+
+    [data-dnd-overlay] {
+        transform: none;
+    }
+}

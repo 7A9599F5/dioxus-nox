@@ -1,0 +1,12 @@
+[package]
+name = "dioxus-nox-extensions"
+version = "0.1.0"
+edition.workspace = true
+description = "Runtime plugin system for Dioxus applications"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "plugins", "extensions", "runtime", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+
+[dependencies]
+dioxus = { workspace = true }

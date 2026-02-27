@@ -1,0 +1,40 @@
+[workspace]
+members = [
+    "crates/cmdk",
+    "crates/virtualize",
+    "crates/dnd",
+    "crates/extensions",
+    "crates/gestures",
+    "crates/preview",
+    "crates/shell",
+    "crates/tag-input",
+    "crates/markdown",
+    "crates/cmdk/examples/command_palette",
+    "crates/cmdk/examples/command_palette_adaptive",
+    "crates/cmdk/examples/command_palette_floating",
+    "crates/cmdk/examples/command_palette_mobile",
+    "crates/cmdk/examples/command_palette_pages",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/7A9599F5/dioxus-nox"
+
+[workspace.dependencies]
+dioxus = "=0.7.3"
+dioxus-router = "=0.7.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = "0.3"
+uuid = "1.11"
+nucleo-matcher = "0.3"
+keyboard-types = "0.7"
+comrak = { version = "0.50", default-features = false }
+getrandom = "0.3"
+tracing = "0.1"
+dioxus-nox-virtualize = { path = "crates/virtualize" }
+dioxus-nox-dnd = { path = "crates/dnd" }
+dioxus-nox-cmdk = { path = "crates/cmdk", default-features = false }

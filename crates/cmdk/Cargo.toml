@@ -1,0 +1,51 @@
+[package]
+name = "dioxus-nox-cmdk"
+version = "0.13.0"
+edition.workspace = true
+description = "A headless Command Palette primitive for Dioxus"
+license.workspace = true
+readme = "../../README.md"
+repository.workspace = true
+keywords = ["command-palette", "dioxus", "cmdk", "search", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+
+[dependencies]
+dioxus = { workspace = true }
+dioxus-router = { workspace = true, optional = true }
+dioxus-nox-virtualize = { workspace = true, optional = true }
+keyboard-types = { workspace = true }
+nucleo-matcher = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+gloo-timers = { workspace = true }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlBodyElement",
+    "HtmlCollection",
+    "HtmlElement",
+    "HtmlInputElement",
+    "NodeList",
+    "ScrollIntoViewOptions",
+    "ScrollLogicalPosition",
+    "KeyboardEvent",
+    "EventTarget",
+    "CssStyleDeclaration",
+    "Performance",
+    "PointerEvent",
+    "MediaQueryList",
+    "MediaQueryListEvent",
+    "ResizeObserver",
+    "ResizeObserverEntry",
+    "ResizeObserverSize",
+] }
+
+[features]
+default = ["web"]
+web = ["dioxus/web"]
+desktop = ["dioxus/desktop"]
+mobile = ["dioxus/mobile"]
+router = ["dep:dioxus-router"]
+virtualize = ["dep:dioxus-nox-virtualize"]

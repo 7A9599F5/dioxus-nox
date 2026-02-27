@@ -1,0 +1,28 @@
+/* ==========================================================================
+   dx-dnd Grouped List Functional CSS — Required for grouped drag mechanics
+   ==========================================================================
+   These styles are REQUIRED for grouped/nested container drag-and-drop to
+   function correctly. They handle visibility states during drag-out and
+   indicator suppression for boundary indicators.
+
+   Visual/theme styles (colors, borders, shadows, header/member styling) are
+   in grouped-theme.css and are OPTIONAL.
+   ========================================================================== */
+
+/* Hide nested container when a rejected item is dragged out (e.g., group header leaving) */
+[data-dnd-container][data-dnd-group][data-state="dragging-out"] {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Suppress internal indicators when external boundary indicator is shown */
+[data-dnd-group-wrapper][data-drop-position="before"] > [data-dnd-group] [data-dnd-indicator],
+[data-dnd-group-wrapper][data-drop-position="after"] > [data-dnd-group] [data-dnd-indicator] {
+    display: none;
+}
+
+/* Suppress internal indicators for entry indicators (into top/bottom of group) */
+[data-dnd-group-wrapper][data-drop-position="into-top"] > [data-dnd-group] [data-dnd-indicator],
+[data-dnd-group-wrapper][data-drop-position="into-bottom"] > [data-dnd-group] [data-dnd-indicator] {
+    display: none;
+}

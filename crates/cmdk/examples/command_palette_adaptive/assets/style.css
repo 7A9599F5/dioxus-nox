@@ -1,0 +1,246 @@
+/* dioxus-cmdk adaptive example — dark theme
+   Styles both dialog (desktop) and sheet (mobile) variants. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background: #111113;
+  color: #e8e8e8;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Page ───────────────────────────────────────────── */
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.page h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.page p {
+  color: #888;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #e8e8e8;
+  background: #1c1c1f;
+  border: 1px solid #2e2e32;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.trigger-btn:hover {
+  background: #26262a;
+  border-color: #3e3e44;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: #999;
+  background: #1c1c1f;
+  border: 1px solid #2e2e32;
+  border-radius: 4px;
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.last-selected {
+  margin-top: 1.5rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.mode-indicator {
+  margin-top: 1rem;
+  color: #555;
+  font-size: 0.8rem;
+}
+
+.mode-indicator strong {
+  color: #999;
+}
+
+/* ── Dialog overlay (desktop) ──────────────────────── */
+
+[data-cmdk-overlay] {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+}
+
+/* ── Dialog (desktop) ──────────────────────────────── */
+
+[data-cmdk-dialog] {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90vw, 520px);
+  background: #1c1c1f;
+  border: 1px solid #2e2e32;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  z-index: 1000;
+}
+
+/* ── Sheet overlay (mobile) ────────────────────────── */
+
+[data-cmdk-sheet-overlay] {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+/* ── Sheet (mobile) ────────────────────────────────── */
+
+[data-cmdk-sheet] {
+  background: #1c1c1f;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+[data-cmdk-sheet-handle] {
+  padding: 12px 0 8px;
+}
+
+/* ── Input ──────────────────────────────────────────── */
+
+[data-cmdk-input] {
+  display: block;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: #e8e8e8;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #2e2e32;
+  outline: none;
+}
+
+[data-cmdk-input]::placeholder {
+  color: #555;
+}
+
+/* ── List ───────────────────────────────────────────── */
+
+[data-cmdk-list] {
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.4rem 0;
+}
+
+[data-cmdk-list]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-cmdk-list]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-cmdk-list]::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+/* ── Group heading ──────────────────────────────────── */
+
+[data-cmdk-group-heading] {
+  padding: 0.5rem 1rem 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #666;
+  user-select: none;
+}
+
+/* ── Item ───────────────────────────────────────────── */
+
+[data-cmdk-item] {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  color: #ccc;
+  border-radius: 6px;
+  margin: 0 0.4rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+[data-cmdk-item][aria-selected="true"] {
+  background: #26262a;
+  color: #fff;
+}
+
+[data-cmdk-item]:hover {
+  background: #222225;
+}
+
+[data-cmdk-item]:active {
+  background: #2a2a2f;
+}
+
+[data-cmdk-item][aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Separator ──────────────────────────────────────── */
+
+[data-cmdk-separator] {
+  height: 1px;
+  background: #2e2e32;
+  margin: 0.3rem 1rem;
+  border: none;
+}
+
+/* ── Empty state ────────────────────────────────────── */
+
+[data-cmdk-empty] {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #555;
+  font-size: 0.9rem;
+}

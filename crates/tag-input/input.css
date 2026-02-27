@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@source "./src/**/*.rs";
+@source "./examples/**/*.rs";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

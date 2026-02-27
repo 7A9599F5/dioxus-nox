@@ -1,0 +1,152 @@
+/* ── Page ────────────────────────────────────────────── */
+body {
+  margin: 0;
+  background: #111113;
+  color: #e8e8e8;
+  font-family: system-ui, sans-serif;
+}
+
+.page {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+p {
+  color: #888;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Controls ────────────────────────────────────────── */
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.controls button {
+  padding: 0.5rem 1rem;
+  background: #1c1c1f;
+  color: #888;
+  border: 1px solid #2e2e32;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.controls button.active {
+  color: #e8e8e8;
+  border-color: #7dd3fc;
+}
+
+.selected-log {
+  color: #7dd3fc;
+  font-size: 0.875rem;
+}
+
+/* ── Anchor positions ────────────────────────────────── */
+.anchor {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 420px;
+}
+
+.anchor--bottom {
+  bottom: 1.5rem;
+}
+
+.anchor--top {
+  top: 1.5rem;
+}
+
+.anchor--middle {
+  top: 45vh;
+}
+
+/* ── CommandInput ────────────────────────────────────── */
+[data-cmdk-input] {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  background: #1c1c1f;
+  color: #e8e8e8;
+  border: 1px solid #3e3e44;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+[data-cmdk-input]:focus {
+  border-color: #7dd3fc;
+}
+
+/* ── CommandList — floating ──────────────────────────── */
+[data-cmdk-list] {
+  background: #1c1c1f;
+  border: 1px solid #2e2e32;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  /* width/top/left/bottom set by inline style when floating=true */
+}
+
+/* When list is above the input, reverse item order so item #1 is closest to input */
+[data-cmdk-list][data-side="top"] {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* ── Items / Groups ──────────────────────────────────── */
+[data-cmdk-item] {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+[data-cmdk-item][data-focused="true"] {
+  background: #26262a;
+}
+
+[data-cmdk-item][data-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+[data-cmdk-group-heading] {
+  padding: 0.4rem 1rem 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+[data-cmdk-empty] {
+  padding: 1rem;
+  text-align: center;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+/* ── data-side transition hints ──────────────────────── */
+/* Consumers can animate based on which side the list opened */
+[data-cmdk-list][data-side="bottom"] {
+  transform-origin: top center;
+}
+
+[data-cmdk-list][data-side="top"] {
+  transform-origin: bottom center;
+}

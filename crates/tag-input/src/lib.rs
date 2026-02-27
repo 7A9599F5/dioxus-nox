@@ -1,0 +1,48 @@
+//! Headless tag input for [Dioxus](https://dioxuslabs.com) 0.7.
+//!
+//! Provides reactive state management and keyboard logic for multi-tag inputs.
+//! You bring your own markup and styling — the library handles selection, filtering,
+//! ARIA attributes, and keyboard interaction.
+//!
+//! # Usage modes
+//!
+//! **Hook API** — maximum control. Call [`use_tag_input`] and wire signals into your RSX:
+//!
+//! ```ignore
+//! let state = use_tag_input(available_tags, initial_selected);
+//! // use state.selected_tags, state.filtered_suggestions, state.handle_keydown, etc.
+//! ```
+//!
+//! **Compound components** — less boilerplate. Radix-style components with built-in ARIA
+//! and `data-*` attributes for CSS targeting:
+//!
+//! ```ignore
+//! use dioxus_nox_tag_input::components as tag_input;
+//!
+//! tag_input::Root::<MyTag> {
+//!     available_tags: tags,
+//!     tag_input::Control::<MyTag> {
+//!         // Tag pills + Input here
+//!     }
+//!     tag_input::Dropdown::<MyTag> {
+//!         // Option items here
+//!     }
+//! }
+//! ```
+//!
+//! See the [`components`] module for the full compound API, or [`TagInputState`] for
+//! the hook-level API.
+
+mod breakpoint;
+pub mod components;
+mod hook;
+mod tag;
+#[cfg(test)]
+mod tests;
+
+pub use breakpoint::{use_breakpoint, Breakpoint};
+pub use hook::{
+    extract_clipboard_text, find_match_ranges, use_tag_input, use_tag_input_grouped,
+    use_tag_input_with, SuggestionGroup, TagInputConfig, TagInputGroupConfig, TagInputState,
+};
+pub use tag::{Tag, TagLike};

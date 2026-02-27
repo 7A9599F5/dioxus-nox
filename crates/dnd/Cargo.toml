@@ -1,0 +1,67 @@
+[package]
+name = "dioxus-nox-dnd"
+version = "0.2.0"
+edition.workspace = true
+description = "A composable drag-and-drop component library for Dioxus"
+license.workspace = true
+readme = "../../README.md"
+repository.workspace = true
+keywords = ["dioxus", "drag-and-drop", "wasm", "sortable", "dnd"]
+categories = ["gui", "wasm", "web-programming"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["web", "styles"]
+web = ["dioxus/web"]
+desktop = ["dioxus/desktop"]
+mobile = ["dioxus/mobile"]
+styles = []
+
+[dependencies]
+dioxus = { workspace = true }
+web-sys = { workspace = true, features = ["Element", "HtmlElement", "DomRect", "PointerEvent", "Window", "Document", "Performance"] }
+wasm-bindgen = { workspace = true }
+tracing = { workspace = true }
+uuid = { version = "1.11", features = ["v4", "v7"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { workspace = true }
+js-sys = { workspace = true }
+uuid = { version = "1.11", features = ["js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[[example]]
+name = "todo_list"
+path = "examples/todo_list.rs"
+
+[[example]]
+name = "kanban"
+path = "examples/kanban.rs"
+
+[[example]]
+name = "multi_list"
+path = "examples/multi_list.rs"
+
+[[example]]
+name = "allow_deny"
+path = "examples/allow_deny.rs"
+
+[[example]]
+name = "drag_type_filter"
+path = "examples/drag_type_filter.rs"
+
+[[example]]
+name = "workout_tracker"
+path = "examples/workout_tracker.rs"
+
+[[example]]
+name = "workout_tracker_tailwind"
+path = "examples/workout_tracker_tailwind.rs"
+
+[[example]]
+name = "horizontal_pills"
+path = "examples/horizontal_pills.rs"

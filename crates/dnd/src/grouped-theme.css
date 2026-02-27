@@ -1,0 +1,150 @@
+/* ==========================================================================
+   dx-dnd Grouped List Theme CSS — Visual opinions (OPTIONAL)
+   ==========================================================================
+   These styles provide beautiful defaults for grouped/nested container
+   components: colors, borders, shadows, header/member styling, and
+   boundary indicators.
+
+   These are OPTIONAL — you can omit this file entirely and use your own
+   design system. Only grouped-functional.css is required for grouped
+   drag-and-drop mechanics.
+   ========================================================================== */
+
+:root {
+    --dxdnd-grouped-header-bg: var(--dxdnd-primary);
+    --dxdnd-grouped-header-color: #ffffff;
+    --dxdnd-grouped-member-bg: var(--dxdnd-bg);
+    --dxdnd-grouped-border: #e2e8f0;
+    --dxdnd-grouped-radius: 12px;
+    --dxdnd-grouped-merge-color: var(--dxdnd-primary);
+    --dxdnd-grouped-merge-bg: var(--dxdnd-primary-light);
+    --dxdnd-grouped-collapse-duration: 200ms;
+    --dxdnd-grouped-collapse-ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --dxdnd-group-gap: 0px;
+    --dxdnd-group-padding: 0px;
+}
+
+[data-dnd-container][data-dnd-group] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dxdnd-group-gap);
+    padding: var(--dxdnd-group-padding);
+    background: var(--dxdnd-grouped-member-bg);
+    border: 1px solid var(--dxdnd-grouped-border);
+    border-radius: var(--dxdnd-grouped-radius);
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    transition: padding-bottom var(--dxdnd-transition-displacement),
+                opacity 0.15s ease,
+                box-shadow 0.2s ease,
+                border-color 0.15s ease;
+}
+
+[data-dnd-container][data-dnd-group]:hover {
+    border-color: var(--dxdnd-primary);
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+}
+
+/* Preserve tray border during drag states (override sortable-container reset) */
+[data-dnd-dropzone][data-dnd-container][data-dnd-group][data-can-drop="true"],
+[data-dnd-dropzone][data-dnd-container][data-dnd-group][data-can-drop="false"] {
+    border: 1px solid var(--dxdnd-grouped-border);
+    background: var(--dxdnd-grouped-member-bg);
+}
+
+[data-dnd-item] [data-group-role="header"],
+[data-dnd-item] [data-group-role="member"] {
+    border: 1px solid var(--dxdnd-grouped-border);
+    color: var(--dxdnd-text);
+}
+
+[data-dnd-container][data-dnd-group] [data-dnd-item] [data-group-role="member"] {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    border-bottom: 1px solid var(--dxdnd-grouped-border);
+}
+
+[data-dnd-container][data-dnd-group] [data-dnd-item]:last-child [data-group-role="member"] {
+    border-bottom: none;
+}
+
+[data-dnd-item] [data-group-role="header"] {
+    background: var(--dxdnd-grouped-header-bg);
+    color: var(--dxdnd-grouped-header-color);
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+[data-dnd-item] [data-group-role="member"] {
+    background: var(--dxdnd-grouped-member-bg);
+    padding: 0.75rem 1rem;
+    transition: max-height var(--dxdnd-grouped-collapse-duration) var(--dxdnd-grouped-collapse-ease),
+        margin var(--dxdnd-grouped-collapse-duration) var(--dxdnd-grouped-collapse-ease),
+        padding var(--dxdnd-grouped-collapse-duration) var(--dxdnd-grouped-collapse-ease),
+        opacity var(--dxdnd-grouped-collapse-duration) var(--dxdnd-grouped-collapse-ease),
+        transform var(--dxdnd-grouped-collapse-duration) var(--dxdnd-grouped-collapse-ease);
+}
+
+[data-dnd-item][data-merge-target] [data-group-role="header"],
+[data-dnd-item][data-merge-target] [data-group-role="member"] {
+    outline: 2px solid var(--dxdnd-grouped-merge-color);
+    outline-offset: -2px;
+    background: var(--dxdnd-grouped-merge-bg);
+    position: relative;
+    z-index: 10;
+}
+
+[data-dnd-item][data-drop-disabled] [data-group-role="header"],
+[data-dnd-item][data-drop-disabled] [data-group-role="member"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Group Boundary Drop Indicators — External (between group and neighbor)
+   ========================================================================== */
+
+/* Group container edge highlights for external (between-items) indicators */
+[data-dnd-group-wrapper][data-drop-position="before"] > [data-dnd-group] {
+    border-top: 2px solid var(--dxdnd-primary);
+}
+[data-dnd-group-wrapper][data-drop-position="after"] > [data-dnd-group] {
+    border-bottom: 2px solid var(--dxdnd-primary);
+}
+
+/* Adjacent item glow: item ABOVE group gets bottom glow */
+[data-dnd-item]:has(+ [data-dnd-group-wrapper][data-drop-position="before"]) > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-light);
+}
+
+/* Adjacent item glow: item BELOW group gets top glow */
+[data-dnd-group-wrapper][data-drop-position="after"] + [data-dnd-item] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-light);
+}
+
+/* Suppress edge glow on last group member when wrapper shows bottom indicator */
+[data-dnd-group-wrapper][data-drop-position="after"] [data-dnd-item][data-drop-position="after"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: none !important;
+}
+
+/* ==========================================================================
+   Group Boundary Drop Indicators — Internal (into top/bottom of group)
+   ========================================================================== */
+
+/* Edge highlight: colored border on the entry side of the group container */
+[data-dnd-group-wrapper][data-drop-position="into-top"] > [data-dnd-group] {
+    border-top: 2px solid var(--dxdnd-primary);
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-lighter);
+}
+[data-dnd-group-wrapper][data-drop-position="into-bottom"] > [data-dnd-group] {
+    border-bottom: 2px solid var(--dxdnd-primary);
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-lighter);
+}
+
+/* No adjacent item glow for internal drops — these are NOT "between" positions */

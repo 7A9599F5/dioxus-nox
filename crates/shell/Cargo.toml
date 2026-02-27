@@ -1,0 +1,24 @@
+[package]
+name = "dioxus-nox-shell"
+version = "0.2.0"
+edition.workspace = true
+description = "Application shell layout primitive for Dioxus"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "layout", "shell", "sidebar", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+
+[dependencies]
+dioxus = { workspace = true }
+
+# getrandom 0.3.x requires explicit opt-in to the wasm_js backend on wasm32.
+# This is a transitive dep through dioxus; we must declare it here to set the feature.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+dioxus = { workspace = true, features = ["desktop"] }
+dioxus-nox-cmdk = { workspace = true, default-features = false, features = ["desktop"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+dioxus-nox-cmdk = { workspace = true, default-features = false, features = ["web"] }

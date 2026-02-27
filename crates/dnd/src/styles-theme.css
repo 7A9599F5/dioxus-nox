@@ -1,0 +1,347 @@
+/* ==========================================================================
+   dx-dnd Theme CSS — Visual opinions (OPTIONAL)
+   ==========================================================================
+   These styles provide beautiful defaults for dx-dnd components: colors,
+   shadows, cursors, hover effects, borders, and decorative elements.
+
+   These are OPTIONAL — you can omit this file entirely and use your own
+   design system (e.g., Tailwind). Only styles-functional.css is required
+   for drag-and-drop mechanics to work.
+   ========================================================================== */
+
+/* ==========================================================================
+   CSS Custom Properties (Variables) for Theming
+   ========================================================================== */
+
+:root {
+    /* Colors */
+    --dxdnd-primary: #3b82f6;
+    --dxdnd-primary-light: rgba(59, 130, 246, 0.1);
+    --dxdnd-primary-lighter: rgba(59, 130, 246, 0.05);
+    --dxdnd-danger: #ef4444;
+    --dxdnd-danger-light: rgba(239, 68, 68, 0.05);
+    --dxdnd-text: #1f2937;
+    --dxdnd-text-muted: #6b7280;
+    --dxdnd-bg: #ffffff;
+    --dxdnd-bg-subtle: #f9fafb;
+    --dxdnd-border: #e5e7eb;
+    --dxdnd-placeholder: #94a3b8;
+    --dxdnd-hover-bg: rgba(0, 0, 0, 0.05);
+
+    /* Spacing */
+    --dxdnd-item-padding: 12px 16px;
+    --dxdnd-item-radius: 6px;
+    --dxdnd-group-padding: 8px;
+    --dxdnd-group-gap: 6px;
+    /* Must match the visual gap between items */
+    --dxdnd-indicator-size: 8px;
+
+    /* Shadows */
+    --dxdnd-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --dxdnd-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --dxdnd-shadow-drag: 0 10px 25px rgba(0, 0, 0, 0.2);
+
+    /* Transitions */
+    --dxdnd-transition-fast: 0.15s ease;
+    --dxdnd-transition-normal: 0.2s ease;
+}
+
+/* Dark mode color overrides */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --dxdnd-primary: #60a5fa;
+        --dxdnd-primary-light: rgba(96, 165, 250, 0.15);
+        --dxdnd-primary-lighter: rgba(96, 165, 250, 0.08);
+        --dxdnd-danger: #f87171;
+        --dxdnd-danger-light: rgba(248, 113, 113, 0.1);
+        --dxdnd-text: #f9fafb;
+        --dxdnd-text-muted: #9ca3af;
+        --dxdnd-bg: #1f2937;
+        --dxdnd-bg-subtle: #111827;
+        --dxdnd-border: #374151;
+        --dxdnd-placeholder: #64748b;
+        --dxdnd-hover-bg: rgba(255, 255, 255, 0.08);
+        --dxdnd-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        --dxdnd-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.4);
+        --dxdnd-shadow-drag: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+}
+
+/* ==========================================================================
+   Draggable Items — Visual
+   ========================================================================== */
+
+[data-dnd-draggable] {
+    cursor: grab;
+}
+
+[data-dnd-draggable]:active {
+    cursor: grabbing;
+}
+
+[data-dnd-draggable][data-state="dragging"] {
+    cursor: grabbing;
+}
+
+/* ==========================================================================
+   Drop Zones — Visual
+   ========================================================================== */
+
+[data-dnd-dropzone] {
+    transition: background-color var(--dxdnd-transition-normal),
+        border-color var(--dxdnd-transition-normal);
+}
+
+[data-dnd-dropzone][data-state="over"] {
+    background-color: var(--dxdnd-primary-light);
+    border-color: var(--dxdnd-primary);
+}
+
+[data-dnd-dropzone][data-state="over"][data-can-drop="true"] {
+    border: 2px dashed var(--dxdnd-primary);
+    background-color: var(--dxdnd-primary-lighter);
+}
+
+[data-dnd-dropzone][data-state="over"][data-can-drop="false"] {
+    border: 2px dashed var(--dxdnd-danger);
+    background-color: var(--dxdnd-danger-light);
+    cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Drag Overlay — Visual
+   ========================================================================== */
+
+[data-dnd-overlay] {
+    opacity: 0.9;
+    transform: rotate(2deg) scale(1.02);
+    box-shadow: var(--dxdnd-shadow-drag);
+}
+
+/* ==========================================================================
+   Sortable List Items — Visual
+   ========================================================================== */
+
+/* Beautiful defaults for sortable items */
+[data-dnd-item] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    background: var(--dxdnd-bg);
+    border: 1px solid var(--dxdnd-border);
+    border-radius: var(--dxdnd-item-radius);
+    padding: var(--dxdnd-item-padding);
+    box-shadow: var(--dxdnd-shadow);
+    transition: box-shadow var(--dxdnd-transition-fast);
+    color: var(--dxdnd-text);
+}
+
+[data-dnd-item] > *:not([data-dnd-indicator]):not([data-dnd-preview]):hover {
+    box-shadow: var(--dxdnd-shadow-hover);
+}
+
+[data-dnd-item][data-state="dragging"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    background: var(--dxdnd-primary-light);
+    border-color: var(--dxdnd-primary);
+    box-shadow: var(--dxdnd-shadow-drag);
+}
+
+/* ==========================================================================
+   Merge Target (IntoItem collision) — Visual
+   ========================================================================== */
+
+[data-dnd-item][data-merge-target] {
+    outline: 2px solid var(--dxdnd-merge-color, #4f46e5);
+    background: var(--dxdnd-merge-bg, rgba(79, 70, 229, 0.1));
+    border-radius: var(--dxdnd-item-radius);
+    transition: outline var(--dxdnd-transition-fast),
+        background var(--dxdnd-transition-fast);
+}
+
+/* Dark mode merge target */
+@media (prefers-color-scheme: dark) {
+    [data-dnd-item][data-merge-target] {
+        --dxdnd-merge-color: #818cf8;
+        --dxdnd-merge-bg: rgba(129, 140, 248, 0.15);
+    }
+}
+
+/* ==========================================================================
+   Drop Disabled — Visual
+   ========================================================================== */
+
+[data-dnd-item][data-drop-disabled] {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+[data-dnd-item][data-drop-disabled]>* {
+    cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Placeholder Child Styling — Visual
+   ========================================================================== */
+
+/* Override child styles for placeholder state */
+[data-dnd-item][data-state="placeholder"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    border-style: dashed;
+    border-color: var(--dxdnd-primary);
+    box-shadow: none;
+}
+
+/* ==========================================================================
+   Drop Indicators — Visual
+   ========================================================================== */
+
+[data-dnd-indicator] {
+    background-color: var(--dxdnd-primary);
+    border-radius: 2px;
+}
+
+[data-dnd-indicator][data-orientation="horizontal"] {
+    box-shadow: 0 0 10px 2px var(--dxdnd-primary-light);
+}
+
+[data-dnd-indicator][data-orientation="horizontal"]::before,
+[data-dnd-indicator][data-orientation="horizontal"]::after {
+    content: '';
+    position: absolute;
+    width: var(--dxdnd-indicator-size);
+    height: var(--dxdnd-indicator-size);
+    background-color: var(--dxdnd-primary);
+    border-radius: 50%;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+[data-dnd-indicator][data-orientation="horizontal"]::before {
+    left: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+[data-dnd-indicator][data-orientation="horizontal"]::after {
+    right: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+[data-dnd-indicator][data-orientation="vertical"]::before,
+[data-dnd-indicator][data-orientation="vertical"]::after {
+    content: '';
+    position: absolute;
+    width: var(--dxdnd-indicator-size);
+    height: var(--dxdnd-indicator-size);
+    background-color: var(--dxdnd-primary);
+    border-radius: 50%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+[data-dnd-indicator][data-orientation="vertical"]::before {
+    top: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+[data-dnd-indicator][data-orientation="vertical"]::after {
+    bottom: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+/* --------------------------------------------------------------------------
+   Drop Indicator Preview — Visual
+   -------------------------------------------------------------------------- */
+
+[data-dnd-preview] {
+    border: 2px dashed var(--dxdnd-primary);
+    border-radius: var(--dxdnd-item-radius);
+    background: var(--dxdnd-primary-lighter);
+    opacity: 0.7;
+    padding: var(--dxdnd-item-padding);
+    transition: min-height var(--dxdnd-transition-displacement);
+}
+
+/* ==========================================================================
+   Edge Glow (items adjacent to drop line)
+   ========================================================================== */
+
+/* Item owning the indicator — its inner edge facing the line */
+[data-dnd-item][data-drop-position="before"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-light);
+}
+[data-dnd-item][data-drop-position="after"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-light);
+}
+
+/* Neighboring item — its edge facing the line from the other side */
+[data-dnd-item][data-drop-adjacent="top"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-light);
+}
+[data-dnd-item][data-drop-adjacent="bottom"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-light);
+}
+
+/* Horizontal edge glow: left/right instead of top/bottom */
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-position="before"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 3px 0 8px var(--dxdnd-primary-light);
+}
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-position="after"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset -3px 0 8px var(--dxdnd-primary-light);
+}
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-adjacent="top"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 3px 0 8px var(--dxdnd-primary-light);
+}
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-adjacent="bottom"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset -3px 0 8px var(--dxdnd-primary-light);
+}
+
+/* ==========================================================================
+   Indicator Mode — Visual
+   ========================================================================== */
+
+[data-dnd-item][data-displacement-mode="indicator"][data-state="dragging"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    border-style: dashed;
+    border-color: var(--dxdnd-primary);
+    box-shadow: none;
+}
+
+/* ==========================================================================
+   Accessibility — Visual
+   ========================================================================== */
+
+[data-dnd-draggable]:focus-visible {
+    outline: 2px solid var(--dxdnd-primary);
+    outline-offset: 2px;
+}
+
+[data-dnd-dropzone]:focus-visible {
+    outline: 2px solid var(--dxdnd-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-contrast: high) {
+    [data-dnd-dropzone][data-can-drop="true"] {
+        border-width: 3px;
+    }
+
+    [data-dnd-dropzone][data-can-drop="false"] {
+        border-width: 3px;
+    }
+
+    [data-dnd-indicator] {
+        background-color: var(--dxdnd-text);
+    }
+
+    [data-dnd-indicator]::before,
+    [data-dnd-indicator]::after {
+        background-color: var(--dxdnd-text);
+    }
+}
+
+/* ==========================================================================
+   Container Layout (opt-in via theme)
+   ========================================================================== */
+
+/* Sortable container layout: flex column with gap between items */
+[data-dnd-container] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dxdnd-item-gap);
+}
+
+/* Horizontal orientation: flex row instead of column */
+[data-dnd-container][data-orientation="horizontal"] {
+    flex-direction: row;
+}

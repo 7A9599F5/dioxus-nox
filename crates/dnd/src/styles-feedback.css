@@ -1,0 +1,191 @@
+/* ==========================================================================
+   dx-dnd Feedback CSS — Essential DnD visual indicators (RECOMMENDED)
+   ==========================================================================
+   These styles provide the minimum visual feedback needed for drag-and-drop
+   to be *perceptible* to users:
+
+   - Drop indicator line + endpoint dots (where am I dropping?)
+   - Merge target highlighting (what accepts a merge?)
+   - Edge glow on adjacent items (which items border the drop zone?)
+   - Container flex layout with gap
+   - Accessibility: focus outlines, high-contrast mode
+
+   This is the RECOMMENDED layer for consumers using custom design systems
+   (e.g., Tailwind). Override --dxdnd-* variables to match your design tokens.
+
+   For full opinionated defaults (card backgrounds, borders, shadows, cursors,
+   hover effects), load styles-theme.css instead — it is a superset of this
+   file.
+   ========================================================================== */
+
+/* ==========================================================================
+   CSS Custom Properties — Feedback layer defaults
+   ========================================================================== */
+
+:root {
+    --dxdnd-primary: #3b82f6;
+    --dxdnd-primary-light: rgba(59, 130, 246, 0.1);
+    --dxdnd-primary-lighter: rgba(59, 130, 246, 0.05);
+    --dxdnd-indicator-size: 8px;
+    --dxdnd-transition-fast: 0.15s ease;
+    --dxdnd-item-radius: 6px;
+    --dxdnd-text: #1f2937;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --dxdnd-primary: #60a5fa;
+        --dxdnd-primary-light: rgba(96, 165, 250, 0.15);
+        --dxdnd-primary-lighter: rgba(96, 165, 250, 0.08);
+        --dxdnd-text: #f9fafb;
+    }
+}
+
+/* ==========================================================================
+   Drop Indicators — Visibility
+   ========================================================================== */
+
+[data-dnd-indicator] {
+    background-color: var(--dxdnd-primary);
+    border-radius: 2px;
+}
+
+[data-dnd-indicator][data-orientation="horizontal"] {
+    box-shadow: 0 0 10px 2px var(--dxdnd-primary-light);
+}
+
+[data-dnd-indicator][data-orientation="horizontal"]::before,
+[data-dnd-indicator][data-orientation="horizontal"]::after {
+    content: '';
+    position: absolute;
+    width: var(--dxdnd-indicator-size);
+    height: var(--dxdnd-indicator-size);
+    background-color: var(--dxdnd-primary);
+    border-radius: 50%;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+[data-dnd-indicator][data-orientation="horizontal"]::before {
+    left: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+[data-dnd-indicator][data-orientation="horizontal"]::after {
+    right: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+[data-dnd-indicator][data-orientation="vertical"]::before,
+[data-dnd-indicator][data-orientation="vertical"]::after {
+    content: '';
+    position: absolute;
+    width: var(--dxdnd-indicator-size);
+    height: var(--dxdnd-indicator-size);
+    background-color: var(--dxdnd-primary);
+    border-radius: 50%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+[data-dnd-indicator][data-orientation="vertical"]::before {
+    top: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+[data-dnd-indicator][data-orientation="vertical"]::after {
+    bottom: calc(var(--dxdnd-indicator-size) / -2);
+}
+
+/* ==========================================================================
+   Merge Target (IntoItem collision) — Visual
+   ========================================================================== */
+
+[data-dnd-item][data-merge-target] {
+    outline: 2px solid var(--dxdnd-merge-color, #4f46e5);
+    background: var(--dxdnd-merge-bg, rgba(79, 70, 229, 0.1));
+    border-radius: var(--dxdnd-item-radius);
+    transition: outline var(--dxdnd-transition-fast),
+        background var(--dxdnd-transition-fast);
+}
+
+@media (prefers-color-scheme: dark) {
+    [data-dnd-item][data-merge-target] {
+        --dxdnd-merge-color: #818cf8;
+        --dxdnd-merge-bg: rgba(129, 140, 248, 0.15);
+    }
+}
+
+/* ==========================================================================
+   Edge Glow (items adjacent to drop line)
+   ========================================================================== */
+
+/* Item owning the indicator — its inner edge facing the line */
+[data-dnd-item][data-drop-position="before"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-light);
+}
+[data-dnd-item][data-drop-position="after"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-light);
+}
+
+/* Neighboring item — its edge facing the line from the other side */
+[data-dnd-item][data-drop-adjacent="top"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 3px 8px var(--dxdnd-primary-light);
+}
+[data-dnd-item][data-drop-adjacent="bottom"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 0 -3px 8px var(--dxdnd-primary-light);
+}
+
+/* Horizontal edge glow: left/right instead of top/bottom */
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-position="before"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 3px 0 8px var(--dxdnd-primary-light);
+}
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-position="after"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset -3px 0 8px var(--dxdnd-primary-light);
+}
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-adjacent="top"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset 3px 0 8px var(--dxdnd-primary-light);
+}
+[data-dnd-container][data-orientation="horizontal"] [data-dnd-item][data-drop-adjacent="bottom"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    box-shadow: inset -3px 0 8px var(--dxdnd-primary-light);
+}
+
+/* ==========================================================================
+   Indicator Mode — Visual
+   ========================================================================== */
+
+[data-dnd-item][data-displacement-mode="indicator"][data-state="dragging"] > *:not([data-dnd-indicator]):not([data-dnd-preview]) {
+    border-style: dashed;
+    border-color: var(--dxdnd-primary);
+    box-shadow: none;
+}
+
+/* ==========================================================================
+   Accessibility
+   ========================================================================== */
+
+[data-dnd-draggable]:focus-visible {
+    outline: 2px solid var(--dxdnd-primary);
+    outline-offset: 2px;
+}
+
+[data-dnd-dropzone]:focus-visible {
+    outline: 2px solid var(--dxdnd-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-contrast: high) {
+    [data-dnd-dropzone][data-can-drop="true"] {
+        border-width: 3px;
+    }
+
+    [data-dnd-dropzone][data-can-drop="false"] {
+        border-width: 3px;
+    }
+
+    [data-dnd-indicator] {
+        background-color: var(--dxdnd-text);
+    }
+
+    [data-dnd-indicator]::before,
+    [data-dnd-indicator]::after {
+        background-color: var(--dxdnd-text);
+    }
+}
