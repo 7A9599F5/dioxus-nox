@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use dioxus::prelude::*;
 
-use crate::types::{CursorPosition, Mode, ParsedDoc, Selection};
+use crate::types::{CursorPosition, LivePreviewVariant, Mode, ParsedDoc, Selection};
 
 static NEXT_ROOT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -67,6 +67,12 @@ pub struct MarkdownContext {
     /// Trigger for the debounced parse pipeline.
     /// Editor calls this on every oninput event.
     pub trigger_parse: Callback<()>,
+
+    // ── Inline editor variant ────────────────────────────────────────
+    /// Controls `LivePreview` rendering style.
+    /// `SplitPane` (default) = existing split-pane behaviour.
+    /// `Inline` = Obsidian-style cursor-aware block switching.
+    pub live_preview_variant: Signal<LivePreviewVariant>,
 }
 
 impl MarkdownContext {
@@ -124,6 +130,11 @@ impl MarkdownContext {
     /// Returns the DOM ID for the read panel.
     pub fn read_panel_id(&self) -> String {
         format!("nox-md-{}-read", self.instance_n)
+    }
+
+    /// Returns the DOM ID for the inline editor `<div contenteditable>`.
+    pub fn inline_editor_id(&self) -> String {
+        format!("nox-md-{}-inline", self.instance_n)
     }
 }
 

@@ -200,6 +200,47 @@ pub struct HeadingEntry {
     pub line: usize,
 }
 
+/// Sub-variant for `Mode::LivePreview`.
+///
+/// Controls whether the live preview renders as a side-by-side split pane
+/// (existing behaviour) or as an inline Obsidian-style editor where all
+/// blocks render as formatted HTML except the one under the cursor.
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LivePreviewVariant {
+    /// Editor on one side, rendered preview on the other (default, backwards-compatible).
+    #[default]
+    SplitPane,
+    /// Single surface: every block is rendered HTML except the cursor block,
+    /// which reverts to raw markdown for editing.
+    Inline,
+}
+
+/// An entry in the block list extracted for the inline editor.
+///
+/// Each top-level AST block (paragraph, heading, code block, …) gets one
+/// `BlockEntry`.  Top-level lists are **split into per-item blocks** — each
+/// `Item` / `TaskItem` child becomes its own entry with `is_list_item: true`.
+/// Front matter is excluded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockEntry {
+    /// Zero-based index within the document's top-level block list (front matter excluded).
+    pub index: usize,
+    /// Raw markdown source text for this block, extracted via comrak `sourcepos`.
+    pub raw: String,
+    /// Pre-rendered HTML fragment for this block, wrapped in
+    /// `<div data-block-index="{index}">…</div>` for use with `innerHTML`
+    /// in the inline editor.
+    pub html: String,
+    /// First source line of this block (1-indexed, from comrak `sourcepos`).
+    pub start_line: u32,
+    /// Last source line of this block (1-indexed, from comrak `sourcepos`).
+    pub end_line: u32,
+    /// `true` when this entry represents a single list item (`Item` or `TaskItem`).
+    /// Consecutive list-item blocks are joined with `"\n"` during reconstruction;
+    /// all other block boundaries use `"\n\n"`.
+    pub is_list_item: bool,
+}
+
 /// The parsed document produced by `parse_document()`.
 /// Contains the pre-rendered Dioxus Element plus extracted metadata.
 ///
@@ -213,6 +254,8 @@ pub struct ParsedDoc {
     pub headings: Vec<HeadingEntry>,
     /// Raw front matter string (consumer parses YAML/TOML).
     pub front_matter: Option<String>,
+    /// Top-level blocks for the inline editor (cursor-aware block switching).
+    pub blocks: Vec<BlockEntry>,
 }
 
 impl PartialEq for ParsedDoc {

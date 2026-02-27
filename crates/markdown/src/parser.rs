@@ -2,7 +2,7 @@ use comrak::nodes::{ListType, NodeValue};
 use comrak::{Anchorizer, Arena, Options};
 use dioxus::prelude::*;
 
-use crate::types::{HeadingEntry, HtmlRenderPolicy, ParsedDoc};
+use crate::types::{BlockEntry, HeadingEntry, HtmlRenderPolicy, ParsedDoc};
 
 /// Build comrak options with GFM extensions enabled.
 pub(crate) fn build_comrak_options() -> Options<'static> {
@@ -20,6 +20,7 @@ pub(crate) fn build_comrak_options() -> Options<'static> {
 ///
 /// Extracts headings, front matter, and renders the AST to a Dioxus Element
 /// with `data-source-line` attributes on block-level elements for scroll sync.
+/// Also computes `blocks` for the inline editor.
 pub fn parse_document(input: &str) -> ParsedDoc {
     let arena = Arena::new();
     let opts = build_comrak_options();
@@ -28,13 +29,108 @@ pub fn parse_document(input: &str) -> ParsedDoc {
     let mut anchorizer = Anchorizer::new();
     let headings = extract_headings(root, &mut anchorizer);
     let front_matter = extract_front_matter(root);
+    let blocks = extract_blocks(root, input);
     let element = render_ast_to_element(root);
 
     ParsedDoc {
         element,
         headings,
         front_matter,
+        blocks,
     }
+}
+
+/// Render a markdown string to an HTML string using comrak's built-in HTML formatter.
+///
+/// Used by the inline editor to produce `BlockEntry.html` and to re-render
+/// an edited block on cursor departure.
+pub(crate) fn markdown_to_html(input: &str) -> String {
+    let opts = build_comrak_options();
+    comrak::markdown_to_html(input, &opts)
+}
+
+/// Render a single block's raw markdown to an HTML string, wrapped in a
+/// `<div data-block-index="{index}">` for use in the inline editor's `innerHTML`.
+pub(crate) fn render_block_to_html_string(raw: &str, index: usize) -> String {
+    let inner = markdown_to_html(raw);
+    format!("<div data-block-index=\"{index}\">{inner}</div>")
+}
+
+/// Extract the raw source text for a block using 1-based comrak `sourcepos` line numbers.
+fn extract_block_raw(input: &str, start_line: u32, end_line: u32) -> String {
+    let start = (start_line as usize).saturating_sub(1);
+    let end = end_line as usize;
+    input
+        .lines()
+        .skip(start)
+        .take(end.saturating_sub(start))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Walk the AST root's direct children and build `Vec<BlockEntry>`.
+///
+/// Front matter is skipped (it is already captured in `ParsedDoc.front_matter`).
+/// Top-level lists are split into **per-item** entries (`is_list_item: true`) so
+/// that the inline editor can switch individual bullet lines independently.
+/// Nested sublists remain inside their parent item's `raw` text.
+/// Block indices are 0-based and exclude front matter.
+fn extract_blocks<'a>(root: &'a comrak::nodes::AstNode<'a>, input: &str) -> Vec<BlockEntry> {
+    let mut blocks = Vec::new();
+    let mut index = 0usize;
+
+    for child in root.children() {
+        let data = child.data.borrow();
+        match &data.value {
+            NodeValue::FrontMatter(_) => {
+                drop(data);
+                continue;
+            }
+            NodeValue::List(_) => {
+                // Split each top-level list item into its own BlockEntry.
+                drop(data);
+                for item in child.children() {
+                    let idata = item.data.borrow();
+                    let sp = idata.sourcepos;
+                    let start_line = sp.start.line as u32;
+                    let end_line = sp.end.line as u32;
+                    drop(idata);
+
+                    let raw = extract_block_raw(input, start_line, end_line);
+                    let html = render_block_to_html_string(&raw, index);
+                    blocks.push(BlockEntry {
+                        index,
+                        raw,
+                        html,
+                        start_line,
+                        end_line,
+                        is_list_item: true,
+                    });
+                    index += 1;
+                }
+            }
+            _ => {
+                let sp = data.sourcepos;
+                let start_line = sp.start.line as u32;
+                let end_line = sp.end.line as u32;
+                drop(data);
+
+                let raw = extract_block_raw(input, start_line, end_line);
+                let html = render_block_to_html_string(&raw, index);
+                blocks.push(BlockEntry {
+                    index,
+                    raw,
+                    html,
+                    start_line,
+                    end_line,
+                    is_list_item: false,
+                });
+                index += 1;
+            }
+        }
+    }
+
+    blocks
 }
 
 /// Walk the AST and collect all headings with their metadata.

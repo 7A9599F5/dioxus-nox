@@ -10,7 +10,10 @@ use crate::context::{
 use crate::hooks::{
     sync_editor_to_preview, sync_preview_to_editor, tab_indent_js, wrap_selection_js,
 };
-use crate::types::{CursorPosition, Layout, Mode, Orientation, Selection, VimAction, VimState};
+use crate::inline_editor::InlineEditor;
+use crate::types::{
+    CursorPosition, Layout, LivePreviewVariant, Mode, Orientation, Selection, VimAction, VimState,
+};
 
 // ── Internal hook: use_root_state ─────────────────────────────────────
 
@@ -104,6 +107,11 @@ pub fn Root(
     /// Layout orientation for split-pane mode.
     /// Sets `data-md-layout` attribute on the root div. Omitted when None.
     layout: Option<Layout>,
+    /// Controls `LivePreview` rendering style.
+    /// `SplitPane` (default) = side-by-side split pane (backwards-compatible).
+    /// `Inline` = Obsidian-style cursor-aware single-surface editing.
+    #[props(default)]
+    live_preview_variant: LivePreviewVariant,
     class: Option<String>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
     children: Element,
@@ -121,6 +129,7 @@ pub fn Root(
     let cursor_position = use_signal(CursorPosition::default);
     let selection = use_signal(|| None::<Selection>);
     let editor_mount: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
+    let live_preview_variant_sig = use_signal(|| live_preview_variant);
 
     use_context_provider(|| MarkdownContext {
         mode: state.mode,
@@ -136,6 +145,7 @@ pub fn Root(
         editor_mount,
         disabled,
         trigger_parse: state.trigger_parse,
+        live_preview_variant: live_preview_variant_sig,
     });
 
     use_context_provider(|| CursorContext {
@@ -248,6 +258,26 @@ pub fn Editor(
 
     let source_id = ctx.source_panel_id();
     let editor_id = ctx.editor_id();
+
+    // In LivePreview + Inline mode, delegate to InlineEditor entirely.
+    // Early return so the complex textarea RSX below stays syntactically clean.
+    if (ctx.mode)() == Mode::LivePreview
+        && (ctx.live_preview_variant)() == LivePreviewVariant::Inline
+    {
+        return rsx! {
+            div {
+                id: "{source_id}",
+                class: class,
+                "data-md-editor": "",
+                "data-state": data_state,
+                "data-md-editor-focused": focused_attr,
+                "data-md-word-wrap": "true",
+                "data-disabled": disabled_attr,
+                ..additional_attributes,
+                InlineEditor {}
+            }
+        };
+    }
 
     rsx! {
         div {
@@ -444,9 +474,13 @@ pub fn Preview(
         });
     }
 
-    // data-state: active ONLY in LivePreview mode
+    // data-state: active in LivePreview (SplitPane only); inactive in Inline mode
     let data_state = match (ctx.mode)() {
-        Mode::LivePreview => "active",
+        Mode::LivePreview
+            if (ctx.live_preview_variant)() != LivePreviewVariant::Inline =>
+        {
+            "active"
+        }
         _ => "inactive",
     };
 
@@ -734,12 +768,21 @@ pub fn ModeTab(
 // ── 10. Divider ──────────────────────────────────────────────────────
 
 /// Visual separator between editor and preview panes.
+///
+/// Renders nothing in `LivePreviewVariant::Inline` mode (no split pane to separate).
 #[component]
 pub fn Divider(
     class: Option<String>,
     #[props(default)] orientation: Orientation,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
 ) -> Element {
+    let ctx = use_context::<MarkdownContext>();
+    if (ctx.mode)() == Mode::LivePreview
+        && (ctx.live_preview_variant)() == LivePreviewVariant::Inline
+    {
+        return rsx! {};
+    }
+
     rsx! {
         div {
             class: class,

@@ -1,6 +1,7 @@
 pub mod components;
 pub mod context;
 pub mod hooks;
+pub mod inline_editor;
 pub mod parser;
 pub mod types;
 
@@ -15,10 +16,12 @@ pub mod prelude {
         use_markdown_handle,
     };
     pub use crate::hooks::{use_debounced_parse, use_heading_index, use_viewport_height};
+    pub use crate::inline_editor::InlineEditor;
     pub use crate::parser::{index_to_line_col, parse_document};
     pub use crate::types::{
-        CursorPosition, HeadingEntry, HtmlRenderPolicy, Layout, Mode, Orientation, ParseOptions,
-        ParseState, ParsedDoc, Selection, SourceMap, SourceMapEntry, VimAction, VimMode, VimState,
+        BlockEntry, CursorPosition, HeadingEntry, HtmlRenderPolicy, Layout, LivePreviewVariant,
+        Mode, Orientation, ParseOptions, ParseState, ParsedDoc, Selection, SourceMap,
+        SourceMapEntry, VimAction, VimMode, VimState,
     };
 }
 
@@ -28,4 +31,5 @@ pub mod markdown {
         Content, Divider, Editor, ModeBar, ModeTab, Preview, Root, Toolbar, ToolbarButton,
         ToolbarSeparator,
     };
+    pub use crate::inline_editor::InlineEditor;
 }

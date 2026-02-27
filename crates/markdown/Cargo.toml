@@ -35,3 +35,7 @@ path = "examples/live_preview.rs"
 [[example]]
 name = "tailwind_styled"
 path = "examples/tailwind_styled.rs"
+
+[[example]]
+name = "inline_preview"
+path = "examples/inline_preview.rs"

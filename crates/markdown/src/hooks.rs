@@ -204,6 +204,7 @@ pub fn use_debounced_parse(
             element: rsx! {},
             headings: vec![],
             front_matter: None,
+            blocks: vec![],
         })
     });
 

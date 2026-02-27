@@ -1,4 +1,7 @@
-use crate::types::{CursorPosition, HeadingEntry, Mode, ParseOptions, ParseState, Selection};
+use crate::types::{
+    BlockEntry, CursorPosition, HeadingEntry, LivePreviewVariant, Mode, ParseOptions, ParseState,
+    Selection,
+};
 
 // ── Mode enum tests ──────────────────────────────────────────────────
 
@@ -332,6 +335,7 @@ mod context_tests {
                 element: rsx! {},
                 headings: vec![],
                 front_matter: None,
+                blocks: vec![],
             })
         });
         MarkdownContext {
@@ -348,6 +352,7 @@ mod context_tests {
             editor_mount: Signal::new(None),
             disabled: false,
             trigger_parse: Callback::new(|_| {}),
+            live_preview_variant: Signal::new(crate::types::LivePreviewVariant::SplitPane),
         }
     }
 
@@ -2174,4 +2179,287 @@ mod int_002_tests {
         let _future = read_cursor_and_selection("test-editor", "hello world");
         // Drop without awaiting — no runtime needed. This proves the signature is correct.
     }
+}
+
+// ── LivePreviewVariant tests ─────────────────────────────────────────
+
+#[test]
+fn live_preview_variant_default_is_split_pane() {
+    assert_eq!(LivePreviewVariant::default(), LivePreviewVariant::SplitPane);
+}
+
+#[test]
+fn live_preview_variant_equality() {
+    assert_eq!(LivePreviewVariant::SplitPane, LivePreviewVariant::SplitPane);
+    assert_eq!(LivePreviewVariant::Inline, LivePreviewVariant::Inline);
+    assert_ne!(LivePreviewVariant::SplitPane, LivePreviewVariant::Inline);
+}
+
+#[test]
+fn live_preview_variant_copy() {
+    let v = LivePreviewVariant::Inline;
+    let v2 = v;
+    let v3 = v;
+    assert_eq!(v2, v3);
+}
+
+// ── BlockEntry tests ─────────────────────────────────────────────────
+
+#[test]
+fn block_entry_fields() {
+    let b = BlockEntry {
+        index: 3,
+        raw: "# Title".to_string(),
+        html: "<div data-block-index=\"3\"><h1>Title</h1></div>".to_string(),
+        start_line: 5,
+        end_line: 5,
+        is_list_item: false,
+    };
+    assert_eq!(b.index, 3);
+    assert_eq!(b.raw, "# Title");
+    assert_eq!(b.start_line, 5);
+    assert_eq!(b.end_line, 5);
+    assert!(b.html.contains("data-block-index=\"3\""));
+}
+
+#[test]
+fn block_entry_equality() {
+    let a = BlockEntry {
+        index: 0,
+        raw: "hello".to_string(),
+        html: "<div>hello</div>".to_string(),
+        start_line: 1,
+        end_line: 1,
+        is_list_item: false,
+    };
+    let b = a.clone();
+    assert_eq!(a, b);
+}
+
+// ── parse_document block extraction tests ────────────────────────────
+
+#[test]
+fn parse_document_extracts_blocks() {
+    use crate::parser::parse_document;
+    let md = "# Heading\n\nParagraph text.";
+    let doc = parse_document(md);
+    assert_eq!(doc.blocks.len(), 2, "should extract 2 top-level blocks");
+}
+
+#[test]
+fn parse_document_block_indices_are_zero_based() {
+    use crate::parser::parse_document;
+    let md = "# A\n\n## B\n\nC";
+    let doc = parse_document(md);
+    for (i, block) in doc.blocks.iter().enumerate() {
+        assert_eq!(block.index, i, "block index should match position");
+    }
+}
+
+#[test]
+fn parse_document_block_raw_text_non_empty() {
+    use crate::parser::parse_document;
+    let md = "Hello world\n\nSecond paragraph.";
+    let doc = parse_document(md);
+    assert!(!doc.blocks.is_empty());
+    for block in &doc.blocks {
+        assert!(!block.raw.is_empty(), "block raw text should not be empty");
+    }
+}
+
+#[test]
+fn parse_document_block_html_contains_data_block_index() {
+    use crate::parser::parse_document;
+    let md = "First\n\nSecond";
+    let doc = parse_document(md);
+    for block in &doc.blocks {
+        assert!(
+            block.html.contains(&format!("data-block-index=\"{}\"", block.index)),
+            "block HTML should contain data-block-index attribute"
+        );
+    }
+}
+
+#[test]
+fn parse_document_skips_front_matter_in_blocks() {
+    use crate::parser::parse_document;
+    let md = "---\ntitle: Test\n---\n\n# Title\n\nParagraph";
+    let doc = parse_document(md);
+    // Front matter should be extracted separately, not as a block
+    assert!(
+        doc.blocks
+            .iter()
+            .all(|b| !b.raw.contains("title: Test")),
+        "front matter should not appear in blocks"
+    );
+}
+
+#[test]
+fn parse_document_splits_list_into_per_item_blocks() {
+    use crate::parser::parse_document;
+    let md = "# Heading\n\n- item 1\n- item 2\n- item 3\n\nParagraph.";
+    let doc = parse_document(md);
+    // heading + 3 items + paragraph = 5 blocks
+    assert_eq!(doc.blocks.len(), 5, "list should be split into per-item blocks");
+}
+
+#[test]
+fn parse_document_list_items_flagged_correctly() {
+    use crate::parser::parse_document;
+    let md = "Intro.\n\n- item a\n- item b\n\nOutro.";
+    let doc = parse_document(md);
+    assert!(!doc.blocks[0].is_list_item, "paragraph should not be list item");
+    assert!(doc.blocks[1].is_list_item, "first list item should be flagged");
+    assert!(doc.blocks[2].is_list_item, "second list item should be flagged");
+    assert!(!doc.blocks[3].is_list_item, "closing paragraph should not be list item");
+}
+
+#[test]
+fn parse_document_task_items_are_list_items() {
+    use crate::parser::parse_document;
+    let md = "- [ ] unchecked\n- [x] checked";
+    let doc = parse_document(md);
+    assert_eq!(doc.blocks.len(), 2);
+    assert!(doc.blocks[0].is_list_item);
+    assert!(doc.blocks[1].is_list_item);
+}
+
+#[test]
+fn reconstruct_markdown_joins_list_items_with_newline() {
+    use crate::inline_editor::reconstruct_markdown;
+    let raws = vec!["- a".to_string(), "- b".to_string(), "- c".to_string()];
+    let metas = vec![true, true, true];
+    let out = reconstruct_markdown(&raws, &metas);
+    assert_eq!(out, "- a\n- b\n- c");
+}
+
+#[test]
+fn reconstruct_markdown_joins_non_list_with_double_newline() {
+    use crate::inline_editor::reconstruct_markdown;
+    let raws = vec!["Para one.".to_string(), "Para two.".to_string()];
+    let metas = vec![false, false];
+    let out = reconstruct_markdown(&raws, &metas);
+    assert_eq!(out, "Para one.\n\nPara two.");
+}
+
+#[test]
+fn reconstruct_markdown_mixed_blocks() {
+    use crate::inline_editor::reconstruct_markdown;
+    let raws = vec![
+        "Intro.".to_string(),
+        "- a".to_string(),
+        "- b".to_string(),
+        "Outro.".to_string(),
+    ];
+    let metas = vec![false, true, true, false];
+    let out = reconstruct_markdown(&raws, &metas);
+    assert_eq!(out, "Intro.\n\n- a\n- b\n\nOutro.");
+}
+
+#[test]
+fn render_block_to_html_string_wraps_with_data_block_index() {
+    use crate::parser::render_block_to_html_string;
+    let html = render_block_to_html_string("Hello", 7);
+    assert!(
+        html.contains("data-block-index=\"7\""),
+        "output should contain data-block-index attribute"
+    );
+    assert!(html.starts_with("<div data-block-index=\"7\">"));
+}
+
+// ── JS generator output tests ────────────────────────────────────────
+
+#[test]
+fn inline_editor_init_js_contains_editor_id() {
+    use crate::inline_editor::inline_editor_init_js;
+    let js = inline_editor_init_js("my-editor-1", "<p>Hello</p>");
+    assert!(js.contains("my-editor-1"), "JS should reference the editor ID");
+}
+
+#[test]
+fn inline_editor_init_js_sets_inner_html() {
+    use crate::inline_editor::inline_editor_init_js;
+    let js = inline_editor_init_js("ed", "<p>Hi</p>");
+    assert!(js.contains("innerHTML"), "JS should set innerHTML");
+}
+
+#[test]
+fn inline_editor_init_js_attaches_selectionchange() {
+    use crate::inline_editor::inline_editor_init_js;
+    let js = inline_editor_init_js("ed", "");
+    assert!(
+        js.contains("selectionchange"),
+        "JS should attach selectionchange listener"
+    );
+}
+
+#[test]
+fn inline_editor_switch_block_js_contains_block_index() {
+    use crate::inline_editor::inline_editor_switch_block_js;
+    let js = inline_editor_switch_block_js("ed", 3, "raw text", 10);
+    assert!(js.contains("3"), "JS should reference block index 3");
+    assert!(js.contains("ed"), "JS should reference editor ID");
+}
+
+#[test]
+fn inline_editor_switch_block_js_uses_text_content() {
+    use crate::inline_editor::inline_editor_switch_block_js;
+    let js = inline_editor_switch_block_js("ed", 0, "raw text", 0);
+    assert!(
+        js.contains("textContent"),
+        "JS should set textContent for raw display"
+    );
+}
+
+#[test]
+fn inline_editor_restore_block_js_contains_block_index() {
+    use crate::inline_editor::inline_editor_restore_block_js;
+    let js = inline_editor_restore_block_js("ed", 2, "<p>Hello</p>");
+    assert!(js.contains("2"), "JS should reference block index 2");
+    assert!(js.contains("ed"), "JS should reference editor ID");
+}
+
+#[test]
+fn inline_editor_restore_block_js_sets_inner_html() {
+    use crate::inline_editor::inline_editor_restore_block_js;
+    let js = inline_editor_restore_block_js("ed", 0, "<p>content</p>");
+    assert!(
+        js.contains("innerHTML"),
+        "JS should set innerHTML for rendered block"
+    );
+}
+
+#[test]
+fn render_blocks_html_concatenates_all() {
+    use crate::inline_editor::render_blocks_html;
+    let blocks = vec![
+        BlockEntry {
+            index: 0,
+            raw: "a".to_string(),
+            html: "<div data-block-index=\"0\"><p>a</p></div>".to_string(),
+            start_line: 1,
+            end_line: 1,
+            is_list_item: false,
+        },
+        BlockEntry {
+            index: 1,
+            raw: "b".to_string(),
+            html: "<div data-block-index=\"1\"><p>b</p></div>".to_string(),
+            start_line: 3,
+            end_line: 3,
+            is_list_item: false,
+        },
+    ];
+    let combined = render_blocks_html(&blocks);
+    assert!(combined.contains("data-block-index=\"0\""));
+    assert!(combined.contains("data-block-index=\"1\""));
+}
+
+#[test]
+fn inline_editor_js_escapes_single_quotes_in_content() {
+    use crate::inline_editor::inline_editor_init_js;
+    // Ensure JS is syntactically safe even when HTML contains single quotes
+    let js = inline_editor_init_js("ed", "it's a test");
+    // Single quote in HTML should be escaped so the JS string literal is valid
+    assert!(!js.contains("innerHTML = 'it's"), "raw single quote must not appear in JS string");
 }
