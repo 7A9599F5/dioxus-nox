@@ -98,7 +98,7 @@ test('loads without DragContext panic', async ({ page }) => {
   expect(dragContextPanic, `Runtime errors: ${allErrors.join('\n')}`).toBeUndefined();
 });
 
-test('inline active textarea fills block width', async ({ page }) => {
+test('inline active editor fills block width', async ({ page }) => {
   const { consoleErrors, pageErrors } = attachErrorCollectors(page);
 
   await page.goto('/');
@@ -108,26 +108,26 @@ test('inline active textarea fills block width', async ({ page }) => {
   await expect(paragraph).toBeVisible();
   await paragraph.click();
 
-  const activeTextarea = page.locator('textarea[data-md-active-block-editor="true"]');
-  await expect(activeTextarea).toBeVisible();
-  await expect(activeTextarea).toHaveAttribute('rows', '1');
+  // Plain paragraphs now use TokenAwareBlockEditor (contenteditable div).
+  const tokenEditor = page.locator('[data-md-token-editor="true"]').first();
+  await expect(tokenEditor).toBeVisible();
 
   const metrics = await page.evaluate(() => {
-    const textarea = document.querySelector(
-      'textarea[data-md-active-block-editor="true"]',
-    ) as HTMLTextAreaElement | null;
-    if (!textarea || !textarea.parentElement) {
+    const editor = document.querySelector(
+      '[data-md-token-editor="true"]',
+    ) as HTMLElement | null;
+    if (!editor || !editor.parentElement) {
       return null;
     }
 
-    const parentRect = textarea.parentElement.getBoundingClientRect();
-    const textareaRect = textarea.getBoundingClientRect();
+    const parentRect = editor.parentElement.getBoundingClientRect();
+    const editorRect = editor.getBoundingClientRect();
 
     return {
       parentWidth: parentRect.width,
-      textareaWidth: textareaRect.width,
+      editorWidth: editorRect.width,
       widthRatio:
-        parentRect.width > 0 ? textareaRect.width / parentRect.width : 0,
+        parentRect.width > 0 ? editorRect.width / parentRect.width : 0,
     };
   });
 
@@ -446,4 +446,124 @@ test('typing second closing star keeps caret after ** marker', async ({ page }) 
 
   expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
   expect(dragContextPanic, `Runtime errors: ${allErrors.join('\n')}`).toBeUndefined();
+});
+
+test('closing ** via mouseup-then-type does not land caret inside delimiter', async ({
+  page,
+}) => {
+  // Regression test for the async restore-generation race:
+  // onmouseup queues Spawn A (caret restore); oninput bumps restore_generation
+  // so Spawn A self-cancels instead of overriding the correct caret position.
+  const { consoleErrors, pageErrors } = attachErrorCollectors(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Source' }).click();
+
+  const sourceEditor = page.locator('textarea[id^="nox-md-"][id$="-editor"]');
+  await expect(sourceEditor).toBeVisible();
+  await sourceEditor.fill(
+    'Borrowing lets you ref**er**ence data without taking own**er*ship.',
+  );
+
+  await page.getByRole('button', { name: 'Inline' }).click();
+  const paragraph = page.locator('[data-md-inline-editor="true"] p').first();
+  await expect(paragraph).toBeVisible();
+  await paragraph.click({ position: { x: 120, y: 12 } });
+  const tokenEditor = page.locator('[data-md-token-editor="true"]').first();
+  await expect(tokenEditor).toBeVisible();
+
+  // Set cursor to position 8 within 'own**er*ship' via DOM API (no onmouseup).
+  await placeCaretByTextOffset(
+    page,
+    '[data-md-token-editor="true"]',
+    'own**er*ship',
+    8,
+  );
+
+  // Dispatch a synthetic mouseup to simulate the browser event after a real
+  // click. Dioxus onmouseup reads the cursor (pos 8) and queues a caret-restore
+  // spawn (Spawn A). We type immediately without waiting so that oninput races
+  // against Spawn A — the restore_generation guard must cancel Spawn A.
+  await page.evaluate(() => {
+    document
+      .querySelector('[data-md-token-editor="true"]')
+      ?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+  await page.keyboard.type('*');
+
+  const rendered = await tokenEditor.innerText();
+  expect(rendered).toContain('own**er**ship.');
+  const base = rendered.indexOf('own**er**ship');
+  expect(base).toBeGreaterThanOrEqual(0);
+  const caretOffset = await readCaretOffset(page, '[data-md-token-editor="true"]');
+  // own**er**#ship — caret must land after '**', not inside it
+  expect(caretOffset).toBe(base + 9);
+
+  const allErrors = [...consoleErrors, ...pageErrors];
+  const dragContextPanic2 = allErrors.find((err) =>
+    err.includes('Could not find context dioxus_nox_dnd::context::DragContext'),
+  );
+
+  expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
+  expect(dragContextPanic2, `Runtime errors: ${allErrors.join('\n')}`).toBeUndefined();
+});
+
+test('typing ** bold from scratch keeps caret after closing **', async ({ page }) => {
+  // Regression: when NO pre-existing ** pair exists on the block, completing the
+  // closing ** left the cursor between the two * chars (*#*) instead of after (**#).
+  const { consoleErrors, pageErrors } = attachErrorCollectors(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Source' }).click();
+
+  const sourceEditor = page.locator('textarea[id^="nox-md-"][id$="-editor"]');
+  await expect(sourceEditor).toBeVisible();
+  // Use plain list items — no ** markup so this is the "no pre-existing pair" scenario.
+  // List items always use TokenAwareBlockEditor (has_block_prefix_marker).
+  await sourceEditor.fill('- reference\n- ownership\n- borrowing\n- lifetime');
+
+  await page.getByRole('button', { name: 'Inline' }).click();
+  const listItems = page.locator('[data-md-inline-editor="true"] li');
+  await expect(listItems).toHaveCount(4);
+
+  // Click the first list item to activate its token editor.
+  await listItems.first().click({ position: { x: 20, y: 8 } });
+  const tokenEditor = page.locator('[data-md-token-editor="true"]').first();
+  await expect(tokenEditor).toBeVisible();
+
+  // Place caret after "ref" (position 3 in "reference").
+  await placeCaretByTextOffset(page, '[data-md-token-editor="true"]', 'reference', 3);
+  await page.waitForTimeout(30);
+
+  // Type the opening **.
+  await page.keyboard.type('**');
+  await page.waitForTimeout(50);
+
+  // Arrow right twice to skip over "er" so caret is before "ence".
+  await tokenEditor.press('ArrowRight');
+  await page.waitForTimeout(30);
+  await tokenEditor.press('ArrowRight');
+  await page.waitForTimeout(30);
+
+  // Type the closing ** — cursor must land AFTER both asterisks, not between them.
+  await page.keyboard.type('**');
+  await page.waitForTimeout(100);
+
+  const rendered = await tokenEditor.innerText();
+  // Visible text with markers shown: "ref**er**ence"
+  expect(rendered).toContain('ref**er**');
+  const base = rendered.indexOf('ref**er**');
+  expect(base).toBeGreaterThanOrEqual(0);
+
+  const caretOffset = await readCaretOffset(page, '[data-md-token-editor="true"]');
+  // Expected: ref**er**#ence — caret at base + 9 (after the closing **)
+  expect(caretOffset).toBe(base + 9);
+
+  const allErrors = [...consoleErrors, ...pageErrors];
+  const dragContextPanic3 = allErrors.find((err) =>
+    err.includes('Could not find context dioxus_nox_dnd::context::DragContext'),
+  );
+
+  expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
+  expect(dragContextPanic3, `Runtime errors: ${allErrors.join('\n')}`).toBeUndefined();
 });

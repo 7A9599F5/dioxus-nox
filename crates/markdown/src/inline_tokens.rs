@@ -241,29 +241,30 @@ fn collect_inline_markers_recursive(
     block_start: usize,
     out: &mut Vec<MarkerToken>,
 ) {
-    if is_inline_markup_node(&node.node_type) && !node.children.is_empty() {
-        if let (Some(first), Some(last)) = (node.children.first(), node.children.last()) {
-            let left_start = node.range.start.saturating_sub(block_start);
-            let left_end = first.range.start.saturating_sub(block_start);
-            let right_start = last.range.end.saturating_sub(block_start);
-            let right_end = node.range.end.saturating_sub(block_start);
-            let token_start = node.range.start.saturating_sub(block_start);
-            let token_end = node.range.end.saturating_sub(block_start);
+    if is_inline_markup_node(&node.node_type)
+        && !node.children.is_empty()
+        && let (Some(first), Some(last)) = (node.children.first(), node.children.last())
+    {
+        let left_start = node.range.start.saturating_sub(block_start);
+        let left_end = first.range.start.saturating_sub(block_start);
+        let right_start = last.range.end.saturating_sub(block_start);
+        let right_end = node.range.end.saturating_sub(block_start);
+        let token_start = node.range.start.saturating_sub(block_start);
+        let token_end = node.range.end.saturating_sub(block_start);
 
-            if left_end > left_start {
-                out.push(MarkerToken {
-                    raw_range: left_start..left_end,
-                    token_range: token_start..token_end,
-                    kind: MarkerKind::Inline,
-                });
-            }
-            if right_end > right_start {
-                out.push(MarkerToken {
-                    raw_range: right_start..right_end,
-                    token_range: token_start..token_end,
-                    kind: MarkerKind::Inline,
-                });
-            }
+        if left_end > left_start {
+            out.push(MarkerToken {
+                raw_range: left_start..left_end,
+                token_range: token_start..token_end,
+                kind: MarkerKind::Inline,
+            });
+        }
+        if right_end > right_start {
+            out.push(MarkerToken {
+                raw_range: right_start..right_end,
+                token_range: token_start..token_end,
+                kind: MarkerKind::Inline,
+            });
         }
     }
 

@@ -79,10 +79,7 @@ fn active_inline_token(markers: &[MarkerToken], ctx: RevealContext) -> Option<Ra
         if !hit {
             continue;
         }
-        if !candidates
-            .iter()
-            .any(|existing| *existing == marker.token_range)
-        {
+        if !candidates.contains(&marker.token_range) {
             candidates.push(marker.token_range.clone());
         }
     }

@@ -26,6 +26,14 @@ pub trait CaretAdapter: Send + Sync {
     fn read_contenteditable_text_js(&self, block_id: &str) -> String;
     /// JS to place caret in a contenteditable block by UTF-16 code-unit index.
     fn set_contenteditable_selection_js(&self, block_id: &str, raw_utf16: usize) -> String;
+    /// JS to restore a non-collapsed selection in a contenteditable block by
+    /// visible UTF-16 offsets `[start, end]`.
+    fn set_contenteditable_selection_range_js(
+        &self,
+        block_id: &str,
+        start_utf16: usize,
+        end_utf16: usize,
+    ) -> String;
     /// JS hook for contenteditable input/traversal behavior.
     fn bind_contenteditable_input_js(&self, block_id: &str) -> String;
 }
@@ -205,6 +213,43 @@ impl CaretAdapter for WebviewCaretAdapter {
         )
     }
 
+    fn set_contenteditable_selection_range_js(
+        &self,
+        block_id: &str,
+        start_utf16: usize,
+        end_utf16: usize,
+    ) -> String {
+        format!(
+            r#"(function() {{
+    var root = document.getElementById('{block_id}');
+    if (!root) return;
+    root.focus();
+    function findPos(target) {{
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        var remaining = target;
+        var node = null;
+        while ((node = walker.nextNode())) {{
+            var len = (node.nodeValue || '').length;
+            if (remaining <= len) return {{ node: node, offset: remaining }};
+            remaining -= len;
+        }}
+        return null;
+    }}
+    var s = findPos({start_utf16});
+    var e = findPos({end_utf16});
+    if (!s || !e) return;
+    try {{
+        var range = document.createRange();
+        range.setStart(s.node, s.offset);
+        range.setEnd(e.node, e.offset);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }} catch (ex) {{}}
+}})();"#
+        )
+    }
+
     fn bind_contenteditable_input_js(&self, block_id: &str) -> String {
         format!(
             r#"(function() {{
@@ -295,6 +340,15 @@ impl CaretAdapter for NoopCaretAdapter {
 
     fn set_contenteditable_selection_js(&self, _block_id: &str, _raw_utf16: usize) -> String {
         "dioxus.send(\"noop\");".to_string()
+    }
+
+    fn set_contenteditable_selection_range_js(
+        &self,
+        _block_id: &str,
+        _start_utf16: usize,
+        _end_utf16: usize,
+    ) -> String {
+        String::new()
     }
 
     fn bind_contenteditable_input_js(&self, _block_id: &str) -> String {

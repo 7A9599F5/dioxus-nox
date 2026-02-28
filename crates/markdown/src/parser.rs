@@ -384,7 +384,7 @@ fn render_tag(
         }
         Tag::Item => {
             // TaskListMarker handling: check if the first child is a TaskListMarker.
-            let is_task = children.first().map_or(false, |c| {
+            let is_task = children.first().is_some_and(|c| {
                 matches!(c.event, CustomEvent::Standard(Event::TaskListMarker(_)))
             });
             if is_task {
@@ -504,16 +504,15 @@ fn second_pass_custom_extensions<'a>(nodes: &mut Vec<AstNode<'a>>, _text_source:
     // Pre-process: merge adjacent Text nodes because pulldown_cmark can fragment failed reference links like `[[`
     let mut merged: Vec<AstNode<'a>> = Vec::new();
     for node in nodes.drain(..) {
-        if let CustomEvent::Standard(Event::Text(ref t)) = node.event {
-            if let Some(last) = merged.last_mut() {
-                if let CustomEvent::Standard(Event::Text(ref mut last_t)) = last.event {
-                    let mut combined = last_t.to_string();
-                    combined.push_str(t);
-                    last.event = CustomEvent::Standard(Event::Text(combined.into()));
-                    last.range.end = node.range.end;
-                    continue;
-                }
-            }
+        if let CustomEvent::Standard(Event::Text(ref t)) = node.event
+            && let Some(last) = merged.last_mut()
+            && let CustomEvent::Standard(Event::Text(ref mut last_t)) = last.event
+        {
+            let mut combined = last_t.to_string();
+            combined.push_str(t);
+            last.event = CustomEvent::Standard(Event::Text(combined.into()));
+            last.range.end = node.range.end;
+            continue;
         }
         merged.push(node);
     }

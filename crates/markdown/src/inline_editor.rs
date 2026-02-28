@@ -17,6 +17,8 @@ use crate::viewport::{BlockOverride, EditorViewport, ViewportNode};
 enum PendingCaretRestore {
     Raw(usize),
     Visible(usize),
+    /// Visible UTF-16 offsets for a non-collapsed selection.
+    Selection { start: usize, end: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,7 +92,14 @@ fn InlineBlockNode(
         return rsx! { InactiveBlockView { node: node } };
     }
 
-    if uses_token_aware_surface(&node) {
+    if matches!(node.node_type, NodeType::CodeBlock(_)) {
+        rsx! {
+            ActiveBlockEditor {
+                node: node,
+                on_active_block_input: on_active_block_input
+            }
+        }
+    } else {
         rsx! {
             TokenAwareBlockEditor {
                 node: node,
@@ -98,16 +107,10 @@ fn InlineBlockNode(
                 on_active_block_input: on_active_block_input,
             }
         }
-    } else {
-        rsx! {
-            ActiveBlockEditor {
-                node: node,
-                on_active_block_input: on_active_block_input
-            }
-        }
     }
 }
 
+#[cfg(test)]
 fn uses_token_aware_surface(node: &OwnedAstNode) -> bool {
     match node.node_type {
         NodeType::CodeBlock(_) => false,
@@ -118,6 +121,7 @@ fn uses_token_aware_surface(node: &OwnedAstNode) -> bool {
     }
 }
 
+#[cfg(test)]
 fn has_block_prefix_marker(node: &OwnedAstNode) -> bool {
     matches!(
         node.node_type,
@@ -125,6 +129,7 @@ fn has_block_prefix_marker(node: &OwnedAstNode) -> bool {
     )
 }
 
+#[cfg(test)]
 fn block_has_inline_markup(node: &OwnedAstNode) -> bool {
     is_markup_inline_node_type(&node.node_type) || node.children.iter().any(block_has_inline_markup)
 }
@@ -144,6 +149,7 @@ fn cursor_within_inline_markup(node: &OwnedAstNode, cursor_offset: usize) -> boo
         .any(|child| cursor_within_inline_markup(child, cursor_offset))
 }
 
+#[cfg(test)]
 fn is_markup_inline_node_type(node_type: &NodeType) -> bool {
     matches!(
         node_type,
@@ -245,6 +251,7 @@ fn TokenAwareBlockEditor(
     let mut input_revision = use_signal(|| 0u64);
     let applied_revision = use_signal(|| 0u64);
     let mut caret_generation = use_signal(|| 0u64);
+    let restore_generation = use_signal(|| 0u64);
     let mut pending_restore_raw = use_signal(|| None::<PendingCaretRestore>);
     let block_id_input = block_id.clone();
     let block_id_comp_end = block_id.clone();
@@ -305,19 +312,30 @@ fn TokenAwareBlockEditor(
             return;
         };
 
-        let restore_visible = match pending {
+        let js = match pending {
             PendingCaretRestore::Raw(abs_raw) => {
                 let local_raw = abs_raw
                     .saturating_sub(safe_start)
                     .min(last_caret_offset(&(0..model_for_effect.raw_text.len())));
-                raw_offset_to_visible_utf16(&model_for_effect, local_raw)
+                let v = raw_offset_to_visible_utf16(&model_for_effect, local_raw);
+                interop::caret_adapter().set_contenteditable_selection_js(&block_id_effect, v)
             }
-            PendingCaretRestore::Visible(visible) => visible.min(utf16_len(&model_for_effect.visible_text)),
+            PendingCaretRestore::Visible(visible) => {
+                let v = visible.min(utf16_len(&model_for_effect.visible_text));
+                interop::caret_adapter().set_contenteditable_selection_js(&block_id_effect, v)
+            }
+            PendingCaretRestore::Selection { start, end } => interop::caret_adapter()
+                .set_contenteditable_selection_range_js(&block_id_effect, start, end),
         };
-        let js = interop::caret_adapter()
-            .set_contenteditable_selection_js(&block_id_effect, restore_visible);
         pending_restore_raw.set(None);
+        let restore_gen = restore_generation();
+        let restore_gen_sig = restore_generation;
         spawn(async move {
+            // If oninput/oncompositionend fired since this restore was queued,
+            // it is stale — skip to prevent overriding the correct cursor.
+            if *restore_gen_sig.read() != restore_gen {
+                return;
+            }
             interop::eval_void(&js).await;
         });
     });
@@ -390,7 +408,6 @@ fn TokenAwareBlockEditor(
                             pending_restore.set(Some(PendingCaretRestore::Raw(abs_raw)));
                         });
                     }
-                    return;
                 }
             },
             oninput: move |_| {
@@ -400,6 +417,9 @@ fn TokenAwareBlockEditor(
                 // Drop stale restore requests from earlier click/nav events.
                 // Text mutations own caret placement via the input pipeline.
                 pending_restore_raw.set(None);
+                // Bump restore_generation so any in-flight use_effect spawn that
+                // already captured the old generation will self-cancel.
+                { let mut rg = restore_generation; rg.set(rg().saturating_add(1)); }
                 let next_generation = caret_generation().saturating_add(1);
                 caret_generation.set(next_generation);
                 let next_revision = input_revision().saturating_add(1);
@@ -431,6 +451,9 @@ fn TokenAwareBlockEditor(
             oncompositionend: move |_| {
                 is_composing.set(false);
                 pending_restore_raw.set(None);
+                // Bump restore_generation so any in-flight use_effect spawn that
+                // already captured the old generation will self-cancel.
+                { let mut rg = restore_generation; rg.set(rg().saturating_add(1)); }
                 let next_generation = caret_generation().saturating_add(1);
                 caret_generation.set(next_generation);
                 let next_revision = input_revision().saturating_add(1);
@@ -507,18 +530,36 @@ fn TokenAwareBlockEditor(
                     let generation = caret_generation_for_mouseup();
                     let generation_sig = caret_generation_for_mouseup;
                     spawn(async move {
-                        let cursor_visible_utf16 = {
+                        let sel = {
                             let js = interop::caret_adapter()
-                                .read_contenteditable_selection_js(&block_id);
+                                .read_contenteditable_selection_detailed_js(&block_id);
                             let mut eval = interop::start_eval(&js);
                             interop::recv_string(&mut eval)
                                 .await
-                                .and_then(|s| s.parse::<usize>().ok())
-                                .unwrap_or(0)
+                                .and_then(|s| parse_selection_details(&s))
                         };
                         if !is_latest_revision(generation, *generation_sig.read()) {
                             return;
                         }
+                        let (cursor_visible_utf16, restore) = match sel {
+                            Some(ref d) if !d.collapsed => {
+                                // Non-collapsed: restore the full range; cursor context = end.
+                                (
+                                    d.end,
+                                    PendingCaretRestore::Selection {
+                                        start: d.start,
+                                        end: d.end,
+                                    },
+                                )
+                            }
+                            Some(ref d) => {
+                                let local_raw = visible_utf16_to_raw_offset(&model, d.end)
+                                    .min(last_caret_offset(&(0..model.raw_text.len())));
+                                let abs = safe_start.saturating_add(local_raw);
+                                (d.end, PendingCaretRestore::Raw(abs))
+                            }
+                            None => (0, PendingCaretRestore::Raw(safe_start)),
+                        };
                         let local_raw = visible_utf16_to_raw_offset(&model, cursor_visible_utf16)
                             .min(last_caret_offset(&(0..model.raw_text.len())));
                         let abs_raw = safe_start.saturating_add(local_raw);
@@ -527,7 +568,7 @@ fn TokenAwareBlockEditor(
                             line: 0,
                             column: 0,
                         });
-                        pending_restore.set(Some(PendingCaretRestore::Raw(abs_raw)));
+                        pending_restore.set(Some(restore));
                     });
                 }
             },
@@ -580,7 +621,7 @@ fn spawn_token_editor_sync(
     cursor_ctx_local: Option<CursorContext>,
     handler: Option<EventHandler<ActiveBlockInputEvent>>,
     captured_revision: u64,
-    _latest_revision: Signal<u64>,
+    latest_revision: Signal<u64>,
     mut applied_revision: Signal<u64>,
     mut pending_restore: Signal<Option<PendingCaretRestore>>,
 ) {
@@ -605,6 +646,12 @@ fn spawn_token_editor_sync(
                 .await
                 .and_then(|s| parse_before_input_meta(&s))
         };
+
+        // If a newer oninput has fired since this sync was spawned, bail out —
+        // we are stale and would stomp the correct cursor position.
+        if *latest_revision.read() != captured_revision {
+            return;
+        }
 
         let current_global = ctx.raw_value();
         let start = safe_start.min(current_global.len());
