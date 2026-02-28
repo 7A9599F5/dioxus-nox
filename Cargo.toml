@@ -7,6 +7,7 @@ members = [
     "crates/gestures",
     "crates/preview",
     "crates/shell",
+    "crates/suggest",
     "crates/tag-input",
     "crates/markdown",
     "crates/cmdk/examples/command_palette",
@@ -14,6 +15,7 @@ members = [
     "crates/cmdk/examples/command_palette_floating",
     "crates/cmdk/examples/command_palette_mobile",
     "crates/cmdk/examples/command_palette_pages",
+    "crates/suggest/examples/noxpad",
 ]
 resolver = "2"
 
@@ -29,12 +31,15 @@ gloo-timers = { version = "0.3", features = ["futures"] }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 web-sys = "0.3"
-uuid = "1.11"
 nucleo-matcher = "0.3"
 keyboard-types = "0.7"
-comrak = { version = "0.50", default-features = false }
 getrandom = "0.3"
 tracing = "0.1"
 dioxus-nox-virtualize = { path = "crates/virtualize" }
 dioxus-nox-dnd = { path = "crates/dnd" }
 dioxus-nox-cmdk = { path = "crates/cmdk", default-features = false }
+dioxus-nox-shell = { path = "crates/shell" }
+dioxus-nox-markdown = { path = "crates/markdown" }
+dioxus-nox-suggest = { path = "crates/suggest" }
+dioxus-nox-tag-input = { path = "crates/tag-input" }
+dioxus-nox-preview = { path = "crates/preview" }

@@ -1,7 +1,6 @@
 # dioxus-nox Workspace
 
-Headless component library for Dioxus 0.7 (Rust/WASM). 9 crates in `crates/`.
-Per-crate CLAUDE.md files exist in each `crates/*/CLAUDE.md` for crate-specific guidance.
+Headless component library for Dioxus 0.7 (Rust/WASM). 10 crates in `crates/`.
 
 ## Crate Inventory
 
@@ -14,8 +13,20 @@ Per-crate CLAUDE.md files exist in each `crates/*/CLAUDE.md` for crate-specific 
 | `dioxus-nox-gestures` | `crates/gestures` | 0.1.0 | Touch gesture primitives (swipe, long-press) |
 | `dioxus-nox-preview` | `crates/preview` | 0.1.0 | Debounced preview hook + LRU cache |
 | `dioxus-nox-shell` | `crates/shell` | 0.2.0 | Application shell layout primitive |
+| `dioxus-nox-suggest` | `crates/suggest` | 0.1.0 | Headless inline-trigger suggestion primitive (slash, @mentions, #hashtags) |
 | `dioxus-nox-tag-input` | `crates/tag-input` | 0.1.0 | Headless tag/multi-select input |
 | `dioxus-nox-markdown` | `crates/markdown` | 0.1.0 | Headless markdown editor/previewer/display |
+
+@crates/cmdk/CLAUDE.md
+@crates/virtualize/CLAUDE.md
+@crates/extensions/CLAUDE.md
+@crates/gestures/CLAUDE.md
+@crates/preview/CLAUDE.md
+@crates/shell/CLAUDE.md
+@crates/dnd/CLAUDE.md
+@crates/suggest/CLAUDE.md
+@crates/tag-input/CLAUDE.md
+@crates/markdown/CLAUDE.md
 
 ### Cross-Crate Relationships
 
@@ -63,6 +74,9 @@ Applies to every crate in this workspace.
 - **Edition 2024 let-chains:** `if a { if let Some(x) = b { ... } }` → `if a && let Some(x) = b { ... }` (satisfies clippy `collapsible_if`)
 - **`ReadOnlySignal` deprecated:** use `ReadSignal` instead
 - **Signal borrow gotcha:** `ctx.active_signal().read()` fails — the temporary signal is freed before the read guard. Bind first: `let sig = ctx.active_signal(); let val = sig.read();`
+- **Signal `.set()` in closures/effects:** `Signal<T>` is `Copy` but `.set()` requires `mut` — shadow inside the closure: `let mut s = my_sig; s.set(v);`
+- **AP-3 (signal write in render body):** bare `sig.set()` in the component body causes re-render loops — always wrap in `use_effect(move || { let mut s = sig; s.set(v); });`
+- **Boolean data attributes:** `"data-foo": if cond { "true" } else { "" }` — empty string is still *present* in DOM so `[data-foo]` CSS matches everything. Use `.then_some("true")` to make the attribute absent when false.
 
 ---
 
@@ -123,6 +137,7 @@ Before using them: search Dioxus 0.7 docs, dioxus-primitives source, Context7/Pe
 | Manual focus via DOM | `onmounted` + `MountedData::set_focus` |
 | Element dimensions | `onmounted` + `MountedData::get_client_rect` |
 | `setTimeout` / `setInterval` | `use_future`, `spawn`, `async_std::task::sleep` |
+| `gloo-timers` callback/timeout on non-WASM | Gate import `#[cfg(target_arch = "wasm32")]`; split timer type `Option<Timeout>` / `Option<()>`; fire immediately on native. Add `let _ = delay_ms;` in the non-WASM branch to suppress unused-variable lint. |
 
 If you must use `web_sys`/`js_sys`:
 - Gate behind `#[cfg(target_arch = "wasm32")]`

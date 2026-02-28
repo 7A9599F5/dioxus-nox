@@ -1,37 +1,35 @@
-# dioxus-nox-cmdk
+# dioxus-nox-cmdk — Headless command palette primitive
 
-Headless command palette library for Dioxus 0.7 (Rust WASM).
-See workspace `CLAUDE.md` for Dioxus 0.7 gotchas, Radix pattern, web_sys policy, and shared conventions.
+> See workspace `CLAUDE.md` for Dioxus 0.7 gotchas, Radix conventions, web_sys policy.
 
-## Architecture
+## Purpose
+Headless command palette for Dioxus 0.7 (Rust WASM). All public API re-exported from `lib.rs`. `ctx.is_open` is set by `CommandDialog`/`CommandSheet`; standalone `CommandList` manages it via `use_hook`/`use_drop`. Optional virtual scrolling via `"virtualize"` feature.
 
-- Core library: `src/`
-- All public API re-exported from `lib.rs` — update re-exports when adding items
-- `types.rs` → data types, `hook.rs` → hooks/handles, `components.rs` → components, `context.rs` → CommandContext
-- `scoring.rs`, `navigation.rs` → pure functions (testable without Dioxus runtime)
-- Tests in `tests.rs` — all unit tests, no component rendering tests
-- Examples in `examples/command_palette*/` (workspace members, each a separate crate)
-- `ctx.is_open` is only set by `CommandDialog`/`CommandSheet`; standalone `CommandList` manages it via `use_hook`/`use_drop`; consumers detect close via `CommandRoot.on_close`
-- `virtualize` feature enables virtual scrolling via `dioxus-nox-virtualize`
+## Module Structure
+- `lib.rs` — all public API re-exports; update when adding items
+- `types.rs` — data types
+- `hook.rs` — hooks and handles
+- `components.rs` — components
+- `context.rs` — `CommandContext`
+- `scoring.rs` — pure scoring functions (testable without Dioxus runtime)
+- `navigation.rs` — pure navigation functions
+- `tests.rs` — all unit tests (no component rendering tests)
 
-## Adding a New Feature Checklist
+## Key Design Decisions
+1. Self-registering pattern: `use_hook` on mount, `use_drop` on unmount, `use_effect` for prop sync
+2. Non-reactive hot-path state: `Rc<RefCell<T>>` (e.g., DragState in CommandSheet)
+3. Reactive derived state: `Memo<T>` with O(1) HashSet caching for visibility checks
 
-- New component: `components.rs` → `lib.rs` re-export → `tests.rs` → `README.md` table
-- New hook: `hook.rs` → `lib.rs` re-export → `tests.rs` → `README.md` hooks section
-- New type: `types.rs` → `lib.rs` re-export (if public) → `tests.rs`
-- New web-sys API: add feature string to `Cargo.toml` `[target.wasm32]` web-sys features list
+## Further Reading
+Detailed context in `.context/` — read on demand:
+- `architecture.md` — component tree, context/hook/types relationships, self-registering pattern
+- `scoring.md` — nucleo-matcher integration, CommandScore, post-scoring
+- `gotchas.md` — Rc<RefCell> hot-path patterns, virtualize feature integration
 
-## Crate-Specific Conventions
-
-- Self-registering pattern: `use_hook` on mount, `use_drop` on unmount, `use_effect` for prop sync
-- Non-reactive hot-path state: `Rc<RefCell<T>>` (e.g., DragState in CommandSheet)
-- Reactive derived state: `Memo<T>` with O(1) HashSet caching for visibility checks
-
-## CI Commands
-
+## CI
 ```bash
+cargo check -p dioxus-nox-cmdk
 cargo test -p dioxus-nox-cmdk
-cargo clippy -p dioxus-nox-cmdk -- -D warnings
 cargo clippy -p dioxus-nox-cmdk --target wasm32-unknown-unknown -- -D warnings
 cargo check -p dioxus-nox-cmdk --features desktop --no-default-features
 cargo check -p dioxus-nox-cmdk --features mobile --no-default-features

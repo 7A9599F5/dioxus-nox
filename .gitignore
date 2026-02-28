@@ -1,6 +1,11 @@
+target/
 /target
 dist/
 node_modules/
 *.orig
 lancedb/
 test-results/
+tmp/
+.claude/
+.context/
+**/.context/

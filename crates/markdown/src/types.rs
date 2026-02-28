@@ -1,5 +1,5 @@
 use std::fmt;
-
+use std::ops::Range;
 /// The three display modes of the markdown component.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mode {
@@ -241,6 +241,55 @@ pub struct BlockEntry {
     pub is_list_item: bool,
 }
 
+/// The type of an AST node, abstracting away from `pulldown_cmark::Event`
+/// to provide a `'static`, owned structure suitable for Dioxus `Props`
+/// and headless block component overrides.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeType {
+    // Blocks
+    Paragraph,
+    Heading(u8),
+    BlockQuote,
+    CodeBlock(String), // Language
+    List(Option<u64>), // Start index
+    Item,
+    Table,
+    TableHead,
+    TableRow,
+    TableCell,
+    Rule,
+    HtmlBlock,
+    DefinitionList,
+    DefinitionListTitle,
+    DefinitionListDefinition,
+    Superscript,
+    Subscript,
+    // Inlines
+    Text(String),
+    Code(String),
+    Html(String),
+    Emphasis,
+    Strong,
+    Strikethrough,
+    Link { url: String, title: String },
+    Image { url: String, title: String },
+    FootnoteReference(String),
+    SoftBreak,
+    HardBreak,
+    TaskListMarker(bool),
+    // Custom Extensions
+    Wikilink(String),
+    Tag(String),
+}
+
+/// A fully owned, `'static` AST node mapped from byte boundaries in the Rope.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedAstNode {
+    pub node_type: NodeType,
+    pub range: Range<usize>,
+    pub children: Vec<OwnedAstNode>,
+}
+
 /// The parsed document produced by `parse_document()`.
 /// Contains the pre-rendered Dioxus Element plus extracted metadata.
 ///
@@ -256,6 +305,8 @@ pub struct ParsedDoc {
     pub front_matter: Option<String>,
     /// Top-level blocks for the inline editor (cursor-aware block switching).
     pub blocks: Vec<BlockEntry>,
+    /// The owned, strictly-typed Abstract Syntax Tree representing the entire document.
+    pub ast: Vec<OwnedAstNode>,
 }
 
 impl PartialEq for ParsedDoc {
@@ -414,6 +465,25 @@ impl SourceMap {
             .iter()
             .find(|e| e.source_line_start <= line && line <= e.source_line_end)
     }
+}
+
+/// Fired by [`InlineEditor`] on every `oninput` with the active block's raw text
+/// and cursor offset within that block.  Used by consumers to wire inline-trigger
+/// suggestions (e.g. `dioxus-nox-suggest`) without coupling markdown to suggest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveBlockInputEvent {
+    /// Raw markdown text of the active block.
+    pub raw_text: String,
+    /// Visible text projection of the active block (markers may be concealed).
+    pub visible_text: String,
+    /// Cursor position as UTF-16 code-unit offset in `raw_text`.
+    pub cursor_raw_utf16: usize,
+    /// Cursor position as UTF-16 code-unit offset in `visible_text`.
+    pub cursor_visible_utf16: usize,
+    /// Absolute start byte offset of the active block in the full document.
+    pub block_start: usize,
+    /// Absolute end byte offset of the active block in the full document.
+    pub block_end: usize,
 }
 
 /// Generate JS for vim cursor movement via `eval()`.

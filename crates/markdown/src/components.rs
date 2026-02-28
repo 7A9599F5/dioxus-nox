@@ -11,16 +11,20 @@ use crate::hooks::{
     sync_editor_to_preview, sync_preview_to_editor, tab_indent_js, wrap_selection_js,
 };
 use crate::inline_editor::InlineEditor;
+use crate::interop;
 use crate::types::{
-    CursorPosition, Layout, LivePreviewVariant, Mode, Orientation, Selection, VimAction, VimState,
+    ActiveBlockInputEvent, CursorPosition, HtmlRenderPolicy, Layout, LivePreviewVariant, Mode,
+    Orientation, Selection, VimAction, VimState,
 };
 
 // ── Internal hook: use_root_state ─────────────────────────────────────
 
+use crop::Rope;
+
 /// Internal state bundle produced by `use_root_state`.
 struct RootState {
     mode: Signal<Mode>,
-    raw_content: Signal<Rc<RefCell<String>>>,
+    raw_content: Signal<Rc<RefCell<Rope>>>,
     parsed_doc: Memo<Rc<crate::types::ParsedDoc>>,
     trigger_parse: Callback<()>,
 }
@@ -45,20 +49,21 @@ fn use_root_state(
     controlled_mode: Option<Signal<Mode>>,
     default_value: Option<String>,
     controlled_value: Option<Signal<String>>,
+    html_render_policy: HtmlRenderPolicy,
 ) -> RootState {
     // Always allocate the internal mode signal unconditionally (rules of hooks).
     // If a controlled `mode` prop is provided, we use that instead.
     let internal_mode = use_signal(|| initial_mode.unwrap_or(Mode::Source));
     let mode = controlled_mode.unwrap_or(internal_mode);
 
-    // Raw content buffer (hot-path, not a Signal<String>)
-    let raw_content_ref: Rc<RefCell<String>> = use_hook(|| {
-        Rc::new(RefCell::new(
+    // Raw content buffer (hot-path, not a Signal<Rope>)
+    let raw_content_ref: Rc<RefCell<Rope>> = use_hook(|| {
+        Rc::new(RefCell::new(Rope::from(
             controlled_value
                 .map(|s| s.read().clone())
                 .or(default_value)
                 .unwrap_or_default(),
-        ))
+        )))
     });
     let raw_content = use_signal(|| raw_content_ref.clone());
 
@@ -71,8 +76,11 @@ fn use_root_state(
     let parsed_doc: Memo<Rc<crate::types::ParsedDoc>> = use_memo(move || {
         // Read parse_gen to subscribe to trigger_parse updates
         let _gen = (parse_gen)();
-        let content = raw_for_memo.read().borrow().clone();
-        Rc::new(crate::parser::parse_document(&content))
+        let content_rope = raw_for_memo.read().borrow().clone();
+        Rc::new(crate::parser::parse_document_with_policy(
+            &content_rope,
+            html_render_policy,
+        ))
     });
 
     // trigger_parse bumps the generation counter, causing parsed_doc to recompute.
@@ -112,11 +120,17 @@ pub fn Root(
     /// `Inline` = Obsidian-style cursor-aware single-surface editing.
     #[props(default)]
     live_preview_variant: LivePreviewVariant,
+    /// Controls raw HTML rendering behavior.
+    ///
+    /// Default is `Escape`, which renders HTML as text. Use `Trusted` only
+    /// for trusted markdown input.
+    #[props(default)]
+    html_render_policy: HtmlRenderPolicy,
     class: Option<String>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
-    let state = use_root_state(initial_mode, mode, default_value, value);
+    let state = use_root_state(initial_mode, mode, default_value, value, html_render_policy);
 
     // Generate unique per-instance number for DOM IDs.
     let instance_n = use_hook(make_instance_n);
@@ -128,6 +142,7 @@ pub fn Root(
     let is_preview_scrolling = use_signal(|| false);
     let cursor_position = use_signal(CursorPosition::default);
     let selection = use_signal(|| None::<Selection>);
+    let preedit = use_signal(|| None::<String>);
     let editor_mount: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
     let live_preview_variant_sig = use_signal(|| live_preview_variant);
 
@@ -151,6 +166,7 @@ pub fn Root(
     use_context_provider(|| CursorContext {
         cursor_position,
         selection,
+        preedit,
     });
 
     // Controlled value: when external `value` signal changes, sync textarea via eval().
@@ -167,14 +183,14 @@ pub fn Root(
         if let Some(cv) = value {
             let text = cv();
             // SEC-004: Skip eval if content hasn't actually changed
-            let current = raw_for_effect.read().borrow().clone();
+            let current = raw_for_effect.read().borrow().to_string();
             if current == text {
                 return;
             }
             let eid = format!("nox-md-{instance_n}-editor");
             spawn(async move {
                 let js = handle_set_content_js(&eid, &text);
-                let _ = document::eval(&js).await;
+                interop::eval_void(&js).await;
             });
         }
     });
@@ -225,6 +241,9 @@ pub fn Editor(
     /// Called on each keystroke while a slash command is active.
     /// Argument: the filter text typed after "/" (e.g., "hea" for "/hea").
     on_slash_filter: Option<EventHandler<String>>,
+    /// Fires on every `oninput` in inline mode with the active block's raw text + cursor.
+    /// Forwarded to [`InlineEditor`] when `LivePreviewVariant::Inline` is active.
+    on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
 ) -> Element {
     let ctx = use_context::<MarkdownContext>();
@@ -259,7 +278,7 @@ pub fn Editor(
     let source_id = ctx.source_panel_id();
     let editor_id = ctx.editor_id();
 
-    // In LivePreview + Inline mode, delegate to InlineEditor entirely.
+    // In LivePreview + Inline mode, delegate to InlineEditor surface.
     // Early return so the complex textarea RSX below stays syntactically clean.
     if (ctx.mode)() == Mode::LivePreview
         && (ctx.live_preview_variant)() == LivePreviewVariant::Inline
@@ -274,7 +293,7 @@ pub fn Editor(
                 "data-md-word-wrap": "true",
                 "data-disabled": disabled_attr,
                 ..additional_attributes,
-                InlineEditor {}
+                InlineEditor { on_active_block_input }
             }
         };
     }
@@ -313,7 +332,7 @@ pub fn Editor(
                             VimAction::PassThrough => {} // fall through to regular handling
                             VimAction::PreventAndEval(js) => {
                                 evt.prevent_default(); // SYNC
-                                spawn(async move { let _ = document::eval(&js).await; });
+                                spawn(async move { interop::eval_void(&js).await; });
                                 return;
                             }
                             VimAction::ModeChange(_) => return, // mode changed, swallow key
@@ -328,7 +347,7 @@ pub fn Editor(
                         let size = tab_size;
                         let eid = ctx.editor_id();
                         spawn(async move {
-                            let _ = document::eval(&tab_indent_js(&eid, size)).await;
+                            interop::eval_void(&tab_indent_js(&eid, size)).await;
                         });
                         return;
                     }
@@ -342,7 +361,7 @@ pub fn Editor(
                             _ => None,
                         };
                         if let Some(js) = maybe_js {
-                            spawn(async move { let _ = document::eval(&js).await; });
+                            spawn(async move { interop::eval_void(&js).await; });
                         }
                     }
                 },
@@ -366,10 +385,10 @@ pub fn Editor(
                                 let js = format!(
                                     "dioxus.send(document.getElementById('{eid}')?.selectionStart ?? 0);"
                                 );
-                                let mut ev = document::eval(&js);
-                                match ev.recv::<u64>().await {
-                                    Ok(pos) => pos as usize,
-                                    Err(_) => return,
+                                let mut ev = interop::start_eval(&js);
+                                match interop::recv_u64(&mut ev).await {
+                                    Some(pos) => pos as usize,
+                                    None => return,
                                 }
                             };
                             if let Some(handler) = on_slash_trigger
@@ -453,8 +472,8 @@ pub fn Preview(
     #[props(default = "Markdown preview".to_string())]
     #[props(into)]
     preview_aria_label: String,
-    /// Called when a block element with `data-source-line` is clicked.
-    /// The argument is the source line number (usize) of the clicked block.
+    /// Called when a block element with `data-source-start` is clicked.
+    /// The argument is the source byte offset (usize) of the clicked block.
     on_block_click: Option<EventHandler<usize>>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
 ) -> Element {
@@ -476,11 +495,7 @@ pub fn Preview(
 
     // data-state: active in LivePreview (SplitPane only); inactive in Inline mode
     let data_state = match (ctx.mode)() {
-        Mode::LivePreview
-            if (ctx.live_preview_variant)() != LivePreviewVariant::Inline =>
-        {
-            "active"
-        }
+        Mode::LivePreview if (ctx.live_preview_variant)() != LivePreviewVariant::Inline => "active",
         _ => "inactive",
     };
 
@@ -512,16 +527,16 @@ pub fn Preview(
 
             // ── Block click delegation via eval() ──
             // Attaches a click listener after mount that walks up the DOM
-            // from the clicked element looking for data-source-line, then
-            // sends the line number back via dioxus.send().
+            // from the clicked element looking for data-source-start, then
+            // sends the source offset back via dioxus.send().
             onmounted: {
                 let task_handle = block_click_task.clone();
                 move |_| {
                     if on_block_click.is_some() {
                         let pid = ctx.preview_id();
                         let task = spawn(async move {
-                            let mut ev = document::eval(&block_click_js(&pid));
-                            while let Ok(line) = ev.recv::<u64>().await {
+                            let mut ev = interop::start_eval(&block_click_js(&pid));
+                            while let Some(line) = interop::recv_u64(&mut ev).await {
                                 if let Some(handler) = on_block_click {
                                     handler.call(line as usize);
                                 }
@@ -821,7 +836,7 @@ pub(crate) fn utf16_to_byte_index(s: &str, utf16_idx: usize) -> Option<usize> {
 /// Generates JS that attaches a click listener to the preview element.
 ///
 /// When a click occurs, the listener walks up the DOM from the clicked element,
-/// looking for `data-source-line`. If found, it sends the integer line number
+/// looking for `data-source-start`. If found, it sends the integer source offset
 /// to Dioxus via `dioxus.send()`. The eval() loop in Rust reads these values.
 pub(crate) fn block_click_js(preview_id: &str) -> String {
     format!(
@@ -831,7 +846,7 @@ pub(crate) fn block_click_js(preview_id: &str) -> String {
     el.addEventListener('click', function(e) {{
         var target = e.target;
         while (target && target !== el) {{
-            var line = target.getAttribute('data-source-line');
+            var line = target.getAttribute('data-source-start');
             if (line !== null) {{
                 dioxus.send(parseInt(line, 10));
                 return;

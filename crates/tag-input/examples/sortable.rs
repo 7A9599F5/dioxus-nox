@@ -146,7 +146,7 @@ fn TagInputUI() -> Element {
                             // Compute insertion index in the list after removing the dragged item
                             let mut ids: Vec<DragId> = tags.iter().map(|t| DragId::new(t.id())).collect();
                             ids.remove(from);
-                            let to = e.compute_to_index(&ids).min(ids.len());
+                            let to = e.to_index.min(ids.len());
                             drop(tags);
                             ctx.move_tag(from, to);
                         }

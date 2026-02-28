@@ -1,9 +1,14 @@
 pub mod components;
 pub mod context;
 pub mod hooks;
+pub mod ime_proxy;
 pub mod inline_editor;
+pub mod inline_tokens;
+pub mod interop;
 pub mod parser;
+pub mod reveal_engine;
 pub mod types;
+pub mod viewport;
 
 #[cfg(test)]
 mod tests;
@@ -16,13 +21,15 @@ pub mod prelude {
         use_markdown_handle,
     };
     pub use crate::hooks::{use_debounced_parse, use_heading_index, use_viewport_height};
+    pub use crate::ime_proxy::ImeProxy;
     pub use crate::inline_editor::InlineEditor;
-    pub use crate::parser::{index_to_line_col, parse_document};
+    pub use crate::parser::{index_to_line_col, parse_document, parse_document_with_policy};
     pub use crate::types::{
-        BlockEntry, CursorPosition, HeadingEntry, HtmlRenderPolicy, Layout, LivePreviewVariant,
-        Mode, Orientation, ParseOptions, ParseState, ParsedDoc, Selection, SourceMap,
-        SourceMapEntry, VimAction, VimMode, VimState,
+        ActiveBlockInputEvent, BlockEntry, CursorPosition, HeadingEntry, HtmlRenderPolicy, Layout,
+        LivePreviewVariant, Mode, Orientation, ParseOptions, ParseState, ParsedDoc, Selection,
+        SourceMap, SourceMapEntry, VimAction, VimMode, VimState,
     };
+    pub use crate::viewport::EditorViewport;
 }
 
 /// Compound component namespace — `use dioxus_nox_markdown::markdown;` then `markdown::Root { ... }`.
@@ -31,5 +38,7 @@ pub mod markdown {
         Content, Divider, Editor, ModeBar, ModeTab, Preview, Root, Toolbar, ToolbarButton,
         ToolbarSeparator,
     };
+    pub use crate::ime_proxy::ImeProxy;
     pub use crate::inline_editor::InlineEditor;
+    pub use crate::viewport::EditorViewport;
 }

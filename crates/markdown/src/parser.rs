@@ -1,531 +1,214 @@
-use comrak::nodes::{ListType, NodeValue};
-use comrak::{Anchorizer, Arena, Options};
+use crop::Rope;
 use dioxus::prelude::*;
+use pulldown_cmark::{Event, Options, Parser, Tag};
+use std::ops::Range;
 
-use crate::types::{BlockEntry, HeadingEntry, HtmlRenderPolicy, ParsedDoc};
+use crate::types::{HeadingEntry, HtmlRenderPolicy, NodeType, OwnedAstNode, ParsedDoc};
 
-/// Build comrak options with GFM extensions enabled.
-pub(crate) fn build_comrak_options() -> Options<'static> {
-    let mut opts = Options::default();
-    opts.extension.strikethrough = true;
-    opts.extension.table = true;
-    opts.extension.autolink = true;
-    opts.extension.tasklist = true;
-    opts.extension.footnotes = true;
-    opts.extension.front_matter_delimiter = Some("---".to_owned());
+pub enum CustomEvent<'a> {
+    Standard(Event<'a>),
+    Wikilink(String),
+    Tag(String),
+}
+
+/// Build pulldown-cmark options with GFM extensions enabled.
+pub(crate) fn build_cmark_options() -> Options {
+    let mut opts = Options::empty();
+    opts.insert(Options::ENABLE_STRIKETHROUGH);
+    opts.insert(Options::ENABLE_TABLES);
+    opts.insert(Options::ENABLE_TASKLISTS);
+    opts.insert(Options::ENABLE_FOOTNOTES);
+    opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
     opts
 }
 
-/// Parse a markdown string into a `ParsedDoc`.
-///
-/// Extracts headings, front matter, and renders the AST to a Dioxus Element
-/// with `data-source-line` attributes on block-level elements for scroll sync.
-/// Also computes `blocks` for the inline editor.
-pub fn parse_document(input: &str) -> ParsedDoc {
-    let arena = Arena::new();
-    let opts = build_comrak_options();
-    let root = comrak::parse_document(&arena, input, &opts);
+/// A node in our custom AST, mapped directly to byte ranges in the Rope.
+pub struct AstNode<'a> {
+    pub event: CustomEvent<'a>,
+    pub range: Range<usize>,
+    pub children: Vec<AstNode<'a>>,
+}
 
-    let mut anchorizer = Anchorizer::new();
-    let headings = extract_headings(root, &mut anchorizer);
-    let front_matter = extract_front_matter(root);
-    let blocks = extract_blocks(root, input);
-    let element = render_ast_to_element(root);
+/// Parse a markdown rope into a `ParsedDoc`.
+///
+/// Builds a hierarchical AST using pulldown-cmark events, preserving exact byte
+/// offsets for the LivePreview mapping.
+pub fn parse_document(input: &Rope) -> ParsedDoc {
+    parse_document_with_policy(input, HtmlRenderPolicy::Escape)
+}
+
+/// Parse a markdown rope into a `ParsedDoc` with explicit HTML render policy.
+pub fn parse_document_with_policy(input: &Rope, html_render_policy: HtmlRenderPolicy) -> ParsedDoc {
+    let text = input.to_string(); // Temporary string for parsing, rope backing to come next if needed
+    let opts = build_cmark_options();
+    let parser = Parser::new_ext(&text, opts).into_offset_iter();
+
+    let mut root_children = Vec::new();
+    let mut stack: Vec<AstNode> = Vec::new();
+
+    let mut headings = Vec::new();
+    let mut front_matter = None;
+
+    // A simple builder to convert the flat event stream into a tree
+    for (event, range) in parser {
+        match event {
+            Event::Start(_) => {
+                stack.push(AstNode {
+                    event: CustomEvent::Standard(event),
+                    range,
+                    children: Vec::new(),
+                });
+            }
+            Event::End(_tag_end) => {
+                let mut node = stack.pop().expect("Mismatched End event in parser");
+                // Update the range to encompass the entire node
+                node.range.end = range.end;
+
+                // Track headings
+                if let CustomEvent::Standard(Event::Start(Tag::Heading { level, .. })) = &node.event
+                {
+                    let text_content = extract_text(&node);
+
+                    let mut anchor = String::new();
+                    let mut last_was_dash = false;
+                    for c in text_content.to_lowercase().chars() {
+                        if c.is_alphanumeric() {
+                            anchor.push(c);
+                            last_was_dash = false;
+                        } else if !last_was_dash {
+                            anchor.push('-');
+                            last_was_dash = true;
+                        }
+                    }
+                    let anchor = anchor.trim_matches('-').to_string();
+
+                    headings.push(HeadingEntry {
+                        level: *level as u8,
+                        text: text_content.clone(),
+                        anchor,
+                        line: index_to_line_col(&text, node.range.start).0,
+                    });
+                } else if let CustomEvent::Standard(Event::Start(Tag::MetadataBlock(_))) =
+                    &node.event
+                {
+                    front_matter = Some(text[node.range.clone()].to_string());
+                }
+
+                if let Some(parent) = stack.last_mut() {
+                    parent.children.push(node);
+                } else {
+                    root_children.push(node);
+                }
+            }
+            _ => {
+                let node = AstNode {
+                    event: CustomEvent::Standard(event),
+                    range,
+                    children: Vec::new(),
+                };
+                if let Some(parent) = stack.last_mut() {
+                    parent.children.push(node);
+                } else {
+                    root_children.push(node);
+                }
+            }
+        }
+    }
+
+    // Pass 2: Replace standard text nodes with custom Wikilink and Tag nodes
+    second_pass_custom_extensions(&mut root_children, &text);
+
+    let element = render_ast_to_element(&root_children, html_render_policy);
+    let ast = root_children.iter().filter_map(to_owned_node).collect();
 
     ParsedDoc {
         element,
         headings,
         front_matter,
-        blocks,
+        blocks: Vec::new(), // Inline Blocks to be completely removed/rewritten
+        ast,
     }
 }
 
-/// Render a markdown string to an HTML string using comrak's built-in HTML formatter.
-///
-/// Used by the inline editor to produce `BlockEntry.html` and to re-render
-/// an edited block on cursor departure.
-pub(crate) fn markdown_to_html(input: &str) -> String {
-    let opts = build_comrak_options();
-    comrak::markdown_to_html(input, &opts)
+fn to_owned_node(node: &AstNode) -> Option<OwnedAstNode> {
+    let node_type = match &node.event {
+        CustomEvent::Standard(Event::Start(tag)) => match tag {
+            Tag::Paragraph => NodeType::Paragraph,
+            Tag::Heading { level, .. } => NodeType::Heading(*level as u8),
+            Tag::BlockQuote(_) => NodeType::BlockQuote,
+            Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(info)) => {
+                let lang = info.split_whitespace().next().unwrap_or("").to_string();
+                NodeType::CodeBlock(lang)
+            }
+            Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Indented) => {
+                NodeType::CodeBlock(String::new())
+            }
+            Tag::List(start) => NodeType::List(*start),
+            Tag::Item => NodeType::Item,
+            Tag::Emphasis => NodeType::Emphasis,
+            Tag::Strong => NodeType::Strong,
+            Tag::Strikethrough => NodeType::Strikethrough,
+            Tag::Link {
+                dest_url, title, ..
+            } => NodeType::Link {
+                url: dest_url.to_string(),
+                title: title.to_string(),
+            },
+            Tag::Image {
+                dest_url, title, ..
+            } => NodeType::Image {
+                url: dest_url.to_string(),
+                title: title.to_string(),
+            },
+            Tag::Table(_) => NodeType::Table,
+            Tag::TableHead => NodeType::TableHead,
+            Tag::TableRow => NodeType::TableRow,
+            Tag::TableCell => NodeType::TableCell,
+            Tag::FootnoteDefinition(s) => NodeType::FootnoteReference(s.to_string()),
+            Tag::HtmlBlock => NodeType::HtmlBlock,
+            Tag::MetadataBlock(_) => NodeType::Rule,
+            Tag::DefinitionList => NodeType::DefinitionList,
+            Tag::DefinitionListTitle => NodeType::DefinitionListTitle,
+            Tag::DefinitionListDefinition => NodeType::DefinitionListDefinition,
+            Tag::Superscript => NodeType::Superscript,
+            Tag::Subscript => NodeType::Subscript,
+        },
+        CustomEvent::Standard(Event::Text(t)) => NodeType::Text(t.to_string()),
+        CustomEvent::Standard(Event::Code(c)) => NodeType::Code(c.to_string()),
+        CustomEvent::Standard(Event::Html(h)) | CustomEvent::Standard(Event::InlineHtml(h)) => {
+            NodeType::Html(h.to_string())
+        }
+        CustomEvent::Standard(Event::SoftBreak) => NodeType::SoftBreak,
+        CustomEvent::Standard(Event::HardBreak) => NodeType::HardBreak,
+        CustomEvent::Standard(Event::Rule) => NodeType::Rule,
+        CustomEvent::Standard(Event::TaskListMarker(b)) => NodeType::TaskListMarker(*b),
+        CustomEvent::Standard(Event::FootnoteReference(f)) => {
+            NodeType::FootnoteReference(f.to_string())
+        }
+        CustomEvent::Wikilink(link) => NodeType::Wikilink(link.clone()),
+        CustomEvent::Tag(tag) => NodeType::Tag(tag.clone()),
+        _ => return None,
+    };
+
+    Some(OwnedAstNode {
+        node_type,
+        range: node.range.clone(),
+        children: node.children.iter().filter_map(to_owned_node).collect(),
+    })
 }
 
-/// Render a single block's raw markdown to an HTML string, wrapped in a
-/// `<div data-block-index="{index}">` for use in the inline editor's `innerHTML`.
-pub(crate) fn render_block_to_html_string(raw: &str, index: usize) -> String {
-    let inner = markdown_to_html(raw);
-    format!("<div data-block-index=\"{index}\">{inner}</div>")
-}
-
-/// Extract the raw source text for a block using 1-based comrak `sourcepos` line numbers.
-fn extract_block_raw(input: &str, start_line: u32, end_line: u32) -> String {
-    let start = (start_line as usize).saturating_sub(1);
-    let end = end_line as usize;
-    input
-        .lines()
-        .skip(start)
-        .take(end.saturating_sub(start))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Walk the AST root's direct children and build `Vec<BlockEntry>`.
-///
-/// Front matter is skipped (it is already captured in `ParsedDoc.front_matter`).
-/// Top-level lists are split into **per-item** entries (`is_list_item: true`) so
-/// that the inline editor can switch individual bullet lines independently.
-/// Nested sublists remain inside their parent item's `raw` text.
-/// Block indices are 0-based and exclude front matter.
-fn extract_blocks<'a>(root: &'a comrak::nodes::AstNode<'a>, input: &str) -> Vec<BlockEntry> {
-    let mut blocks = Vec::new();
-    let mut index = 0usize;
-
-    for child in root.children() {
-        let data = child.data.borrow();
-        match &data.value {
-            NodeValue::FrontMatter(_) => {
-                drop(data);
-                continue;
-            }
-            NodeValue::List(_) => {
-                // Split each top-level list item into its own BlockEntry.
-                drop(data);
-                for item in child.children() {
-                    let idata = item.data.borrow();
-                    let sp = idata.sourcepos;
-                    let start_line = sp.start.line as u32;
-                    let end_line = sp.end.line as u32;
-                    drop(idata);
-
-                    let raw = extract_block_raw(input, start_line, end_line);
-                    let html = render_block_to_html_string(&raw, index);
-                    blocks.push(BlockEntry {
-                        index,
-                        raw,
-                        html,
-                        start_line,
-                        end_line,
-                        is_list_item: true,
-                    });
-                    index += 1;
-                }
-            }
-            _ => {
-                let sp = data.sourcepos;
-                let start_line = sp.start.line as u32;
-                let end_line = sp.end.line as u32;
-                drop(data);
-
-                let raw = extract_block_raw(input, start_line, end_line);
-                let html = render_block_to_html_string(&raw, index);
-                blocks.push(BlockEntry {
-                    index,
-                    raw,
-                    html,
-                    start_line,
-                    end_line,
-                    is_list_item: false,
-                });
-                index += 1;
-            }
+fn extract_text(node: &AstNode) -> String {
+    let mut buf = String::new();
+    for child in &node.children {
+        match &child.event {
+            CustomEvent::Standard(Event::Text(t)) => buf.push_str(t),
+            CustomEvent::Standard(Event::Code(c)) => buf.push_str(c),
+            CustomEvent::Wikilink(link) => buf.push_str(link),
+            CustomEvent::Tag(tag) => buf.push_str(tag),
+            _ => buf.push_str(&extract_text(child)),
         }
     }
-
-    blocks
-}
-
-/// Walk the AST and collect all headings with their metadata.
-fn extract_headings<'a>(
-    root: &'a comrak::nodes::AstNode<'a>,
-    anchorizer: &mut Anchorizer,
-) -> Vec<HeadingEntry> {
-    let mut headings = Vec::new();
-
-    for node in root.descendants() {
-        let data = node.data.borrow();
-        if let NodeValue::Heading(heading) = &data.value {
-            let text = collect_text(node);
-            let anchor = anchorizer.anchorize(&text);
-            // comrak sourcepos is 1-based; HeadingEntry.line is 0-based
-            let line = data.sourcepos.start.line.saturating_sub(1);
-
-            headings.push(HeadingEntry {
-                level: heading.level,
-                text,
-                anchor,
-                line,
-            });
-        }
-    }
-
-    headings
-}
-
-/// Recursively collect all text content from a node's children.
-/// Handles Text, Code (inline), SoftBreak (→ space), and LineBreak (→ space).
-fn collect_text<'a>(node: &'a comrak::nodes::AstNode<'a>) -> String {
-    let mut text = String::new();
-    collect_text_inner(node, &mut text);
-    text
-}
-
-fn collect_text_inner<'a>(node: &'a comrak::nodes::AstNode<'a>, buf: &mut String) {
-    for child in node.children() {
-        let data = child.data.borrow();
-        match &data.value {
-            NodeValue::Text(t) => buf.push_str(t),
-            NodeValue::Code(code) => buf.push_str(&code.literal),
-            NodeValue::SoftBreak | NodeValue::LineBreak => buf.push(' '),
-            // For other inline nodes (Emph, Strong, Link, etc.), recurse into children
-            _ => {
-                drop(data); // release borrow before recursing
-                collect_text_inner(child, buf);
-            }
-        }
-    }
-}
-
-/// Extract front matter from the AST root's direct children.
-fn extract_front_matter<'a>(root: &'a comrak::nodes::AstNode<'a>) -> Option<String> {
-    for child in root.children() {
-        let data = child.data.borrow();
-        if let NodeValue::FrontMatter(fm) = &data.value {
-            // comrak includes the delimiters in the FrontMatter string.
-            // Strip leading/trailing delimiter lines ("---\n" and "---\n").
-            let trimmed = fm
-                .strip_prefix("---\n")
-                .unwrap_or(fm)
-                .strip_suffix("---\n")
-                .or_else(|| fm.strip_suffix("---"))
-                .unwrap_or(fm);
-            return Some(trimmed.to_string());
-        }
-    }
-    None
-}
-
-/// Render a raw HTML fragment according to the given policy.
-///
-/// - `Escape`: render the raw HTML as visible text (safe default).
-/// - `Trusted`: render via `dangerous_inner_html` (opt-in for trusted input).
-fn render_html_fragment(raw: &str, policy: HtmlRenderPolicy) -> Element {
-    match policy {
-        HtmlRenderPolicy::Escape => rsx! { span { "{raw}" } },
-        HtmlRenderPolicy::Trusted => rsx! { span { dangerous_inner_html: "{raw}" } },
-    }
-}
-
-/// Sanitize an href value, blocking dangerous URI schemes.
-///
-/// Returns `Some(trimmed_url)` if the scheme is safe, `None` if blocked.
-///
-/// Blocked schemes (case-insensitive): `javascript`, `data`, `vbscript`.
-/// Allowed: `http(s)`, `mailto`, `tel`, `ftp`, absolute paths (`/`),
-/// anchors (`#`), and relative paths (no colon).
-pub(crate) fn sanitize_href(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Some(String::new());
-    }
-
-    // Anchors and absolute paths are always safe
-    if trimmed.starts_with('#') || trimmed.starts_with('/') {
-        return Some(trimmed.to_string());
-    }
-
-    let lower = trimmed.to_lowercase();
-
-    // Extract scheme (everything before the first ':')
-    if let Some(colon_pos) = lower.find(':') {
-        let scheme = &lower[..colon_pos];
-        match scheme {
-            "javascript" | "data" | "vbscript" => return None,
-            _ => return Some(trimmed.to_string()),
-        }
-    }
-
-    // No colon at all — relative path, safe
-    Some(trimmed.to_string())
-}
-
-/// Render a comrak AST node tree into a Dioxus Element.
-///
-/// Block-level elements receive `data-source-line="{N}"` attributes from
-/// comrak's sourcepos (1-indexed). This enables line-index scroll sync
-/// between the editor and preview panes.
-pub(crate) fn render_ast_to_element<'a>(root: &'a comrak::nodes::AstNode<'a>) -> Element {
-    let children: Vec<Element> = root.children().map(|child| render_node(child)).collect();
-    rsx! {
-        for child in children {
-            {child}
-        }
-    }
-}
-
-/// Render a single AST node (and its subtree) to an Element.
-fn render_node<'a>(node: &'a comrak::nodes::AstNode<'a>) -> Element {
-    let data = node.data.borrow();
-    let sp = data.sourcepos;
-    let source_line = sp.start.line.to_string();
-
-    match &data.value {
-        NodeValue::Document => {
-            drop(data);
-            render_ast_to_element(node)
-        }
-        NodeValue::FrontMatter(_) => {
-            // Front matter is extracted separately; not rendered
-            rsx! {}
-        }
-        NodeValue::Heading(h) => {
-            let level = h.level;
-            let level_str = level.to_string();
-            drop(data);
-            let children = render_children(node);
-            match level {
-                1 => {
-                    rsx! { h1 { "data-md-heading": "{level_str}", "data-source-line": "{source_line}", {children} } }
-                }
-                2 => {
-                    rsx! { h2 { "data-md-heading": "{level_str}", "data-source-line": "{source_line}", {children} } }
-                }
-                3 => {
-                    rsx! { h3 { "data-md-heading": "{level_str}", "data-source-line": "{source_line}", {children} } }
-                }
-                4 => {
-                    rsx! { h4 { "data-md-heading": "{level_str}", "data-source-line": "{source_line}", {children} } }
-                }
-                5 => {
-                    rsx! { h5 { "data-md-heading": "{level_str}", "data-source-line": "{source_line}", {children} } }
-                }
-                _ => {
-                    rsx! { h6 { "data-md-heading": "{level_str}", "data-source-line": "{source_line}", {children} } }
-                }
-            }
-        }
-        NodeValue::Paragraph => {
-            drop(data);
-            let children = render_children(node);
-            rsx! { p { "data-source-line": "{source_line}", {children} } }
-        }
-        NodeValue::CodeBlock(cb) => {
-            let lang = cb.info.split_whitespace().next().unwrap_or("").to_string();
-            let code_text = cb.literal.clone();
-            rsx! {
-                pre {
-                    "data-md-code-block": "",
-                    "data-md-language": "{lang}",
-                    "data-source-line": "{source_line}",
-                    code {
-                        class: "language-{lang}",
-                        {code_text}
-                    }
-                }
-            }
-        }
-        NodeValue::BlockQuote => {
-            drop(data);
-            let children = render_children(node);
-            rsx! { blockquote { "data-source-line": "{source_line}", {children} } }
-        }
-        NodeValue::List(nl) => {
-            let is_ordered = nl.list_type == ListType::Ordered;
-            let start = nl.start;
-            drop(data);
-            let children = render_children(node);
-            if is_ordered {
-                rsx! { ol { start: "{start}", "data-source-line": "{source_line}", {children} } }
-            } else {
-                rsx! { ul { "data-source-line": "{source_line}", {children} } }
-            }
-        }
-        NodeValue::Item(_) => {
-            drop(data);
-            let children = render_children(node);
-            rsx! { li { "data-source-line": "{source_line}", {children} } }
-        }
-        NodeValue::TaskItem(ti) => {
-            let checked = ti.symbol.is_some();
-            let checked_str = if checked { "true" } else { "false" };
-            drop(data);
-            let children = render_children(node);
-            rsx! {
-                li {
-                    "data-md-task-item": "",
-                    "data-md-task-checked": "{checked_str}",
-                    "data-source-line": "{source_line}",
-                    input {
-                        r#type: "checkbox",
-                        checked: "{checked}",
-                        disabled: true,
-                    }
-                    {children}
-                }
-            }
-        }
-        NodeValue::Table(_) => {
-            drop(data);
-            let children = render_children(node);
-            rsx! {
-                div {
-                    "data-md-table-wrapper": "",
-                    "data-source-line": "{source_line}",
-                    table { {children} }
-                }
-            }
-        }
-        NodeValue::TableRow(is_header) => {
-            let is_header = *is_header;
-            drop(data);
-            let children = render_children(node);
-            if is_header {
-                rsx! { thead { tr { {children} } } }
-            } else {
-                rsx! { tr { {children} } }
-            }
-        }
-        NodeValue::TableCell => {
-            let is_header = node
-                .parent()
-                .map(|p| matches!(p.data.borrow().value, NodeValue::TableRow(true)))
-                .unwrap_or(false);
-            drop(data);
-            let children = render_children(node);
-            if is_header {
-                rsx! { th { scope: "col", {children} } }
-            } else {
-                rsx! { td { {children} } }
-            }
-        }
-        NodeValue::ThematicBreak => {
-            rsx! { hr { "data-source-line": "{source_line}" } }
-        }
-        NodeValue::HtmlBlock(hb) => {
-            let fragment = render_html_fragment(&hb.literal, HtmlRenderPolicy::Escape);
-            rsx! { div { "data-source-line": "{source_line}", {fragment} } }
-        }
-        NodeValue::FootnoteDefinition(fd) => {
-            let name = fd.name.clone();
-            drop(data);
-            let children = render_children(node);
-            rsx! {
-                div {
-                    "data-md-footnote-def": "{name}",
-                    "data-source-line": "{source_line}",
-                    {children}
-                }
-            }
-        }
-        // Inline nodes
-        NodeValue::Text(t) => {
-            let text = t.to_string();
-            rsx! { "{text}" }
-        }
-        NodeValue::Emph => {
-            drop(data);
-            let children = render_children(node);
-            rsx! { em { {children} } }
-        }
-        NodeValue::Strong => {
-            drop(data);
-            let children = render_children(node);
-            rsx! { strong { {children} } }
-        }
-        NodeValue::Strikethrough => {
-            drop(data);
-            let children = render_children(node);
-            rsx! { del { {children} } }
-        }
-        NodeValue::Code(c) => {
-            let literal = c.literal.clone();
-            rsx! { code { "{literal}" } }
-        }
-        NodeValue::Link(link) => {
-            let safe_url = sanitize_href(&link.url).unwrap_or_default();
-            let title = link.title.clone();
-            let is_external = safe_url.starts_with("http://") || safe_url.starts_with("https://");
-            let external_str = if is_external { "true" } else { "false" };
-            drop(data);
-            let children = render_children(node);
-            rsx! {
-                a {
-                    href: "{safe_url}",
-                    title: "{title}",
-                    "data-md-link": "",
-                    "data-md-link-external": "{external_str}",
-                    {children}
-                }
-            }
-        }
-        NodeValue::Image(link) => {
-            let url = sanitize_href(&link.url).unwrap_or_default();
-            let title = link.title.clone();
-            let alt = collect_text(node);
-            rsx! { img { src: "{url}", alt: "{alt}", title: "{title}" } }
-        }
-        NodeValue::SoftBreak => rsx! { " " },
-        NodeValue::LineBreak => rsx! { br {} },
-        NodeValue::HtmlInline(html) => render_html_fragment(html, HtmlRenderPolicy::Escape),
-        NodeValue::FootnoteReference(fr) => {
-            let name = fr.name.clone();
-            rsx! {
-                sup {
-                    a { href: "#fn-{name}", "data-md-footnote-ref": "{name}", "{name}" }
-                }
-            }
-        }
-        // Catch-all for node types we don't render (DescriptionList, etc.)
-        _ => {
-            drop(data);
-            render_children(node)
-        }
-    }
-}
-
-/// Render all children of a node into a single Element.
-fn render_children<'a>(node: &'a comrak::nodes::AstNode<'a>) -> Element {
-    let children: Vec<Element> = node.children().map(|child| render_node(child)).collect();
-    rsx! {
-        for child in children {
-            {child}
-        }
-    }
-}
-
-/// Render a code block to a Dioxus Element.
-///
-/// Without the `syntax-highlighting` feature: emits a plain `<pre><code>` with
-/// `data-md-code-block` and `data-md-language` attributes and a CSS language class.
-///
-/// With the `syntax-highlighting` feature: same structure (full syntect integration
-/// is deferred to Phase 3 completion; the feature flag wires in the capability).
-#[cfg(feature = "syntax-highlighting")]
-#[allow(dead_code)] // MUST only receive syntect-escaped HTML; never raw user input.
-pub(crate) fn highlight_code(code: &str, lang: &str) -> Element {
-    rsx! {
-        pre {
-            "data-md-code-block": "",
-            "data-md-language": "{lang}",
-            code {
-                class: "language-{lang}",
-                dangerous_inner_html: "{code}",
-            }
-        }
-    }
-}
-
-#[cfg(not(feature = "syntax-highlighting"))]
-#[allow(dead_code)] // MUST only receive syntect-escaped HTML; never raw user input.
-pub(crate) fn highlight_code(code: &str, lang: &str) -> Element {
-    rsx! {
-        pre {
-            "data-md-code-block": "",
-            "data-md-language": "{lang}",
-            code {
-                class: "language-{lang}",
-                {code}
-            }
-        }
-    }
+    buf
 }
 
 /// Convert a byte offset into (line, column) for a given text.
@@ -538,4 +221,427 @@ pub fn index_to_line_col(text: &str, index: usize) -> (usize, usize) {
         None => index,
     };
     (line, col)
+}
+
+/// Helper: sanitize href strings.
+pub(crate) fn sanitize_href(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Some(String::new());
+    }
+    if trimmed.starts_with('#') || trimmed.starts_with('/') {
+        return Some(trimmed.to_string());
+    }
+    let lower = trimmed.to_lowercase();
+    if let Some(colon_pos) = lower.find(':') {
+        let scheme = &lower[..colon_pos];
+        match scheme {
+            "javascript" | "data" | "vbscript" => return None,
+            _ => return Some(trimmed.to_string()),
+        }
+    }
+    Some(trimmed.to_string())
+}
+
+/// Render the AST tree into a Dioxus Element.
+pub(crate) fn render_ast_to_element(
+    children: &[AstNode],
+    html_render_policy: HtmlRenderPolicy,
+) -> Element {
+    let kids: Vec<Element> = children
+        .iter()
+        .map(|node| render_node(node, html_render_policy))
+        .collect();
+    rsx! {
+        for child in kids {
+            {child}
+        }
+    }
+}
+
+fn render_node(node: &AstNode, html_render_policy: HtmlRenderPolicy) -> Element {
+    let start_str = node.range.start.to_string();
+    let end_str = node.range.end.to_string();
+
+    match &node.event {
+        CustomEvent::Standard(Event::Start(tag)) => {
+            render_tag(tag, &node.children, node.range.clone(), html_render_policy)
+        }
+        CustomEvent::Standard(Event::Text(t)) => {
+            let txt = t.to_string();
+            rsx! { "{txt}" }
+        }
+        CustomEvent::Standard(Event::Code(c)) => {
+            let code = c.to_string();
+            rsx! { code { "{code}" } }
+        }
+        CustomEvent::Standard(Event::SoftBreak) => rsx! { " " },
+        CustomEvent::Standard(Event::HardBreak) => rsx! { br {} },
+        CustomEvent::Standard(Event::Rule) => {
+            rsx! { hr { "data-source-start": "{start_str}", "data-source-end": "{end_str}" } }
+        }
+        CustomEvent::Standard(Event::Html(h)) | CustomEvent::Standard(Event::InlineHtml(h)) => {
+            let html = h.to_string();
+            if html_render_policy == HtmlRenderPolicy::Trusted {
+                rsx! { span { dangerous_inner_html: "{html}" } }
+            } else {
+                rsx! { span { "{html}" } }
+            }
+        }
+        CustomEvent::Standard(Event::TaskListMarker(checked)) => {
+            let is_checked = *checked;
+            rsx! { input { r#type: "checkbox", checked: is_checked, disabled: true } }
+        }
+        CustomEvent::Standard(Event::FootnoteReference(f)) => {
+            let f_str = f.to_string();
+            rsx! { sup { a { href: "#fn-{f_str}", "data-md-footnote-ref": "{f_str}", "{f_str}" } } }
+        }
+        CustomEvent::Tag(tag) => {
+            rsx! { span { "data-md-tag": "{tag}", "data-source-start": "{start_str}", "data-source-end": "{end_str}", "{tag}" } }
+        }
+        CustomEvent::Wikilink(link) => {
+            rsx! { a { "data-md-wikilink": "{link}", "data-source-start": "{start_str}", "data-source-end": "{end_str}", "[[{link}]]" } }
+        }
+        _ => rsx! { span {} },
+    }
+}
+
+fn render_tag(
+    tag: &Tag,
+    children: &[AstNode],
+    range: Range<usize>,
+    html_render_policy: HtmlRenderPolicy,
+) -> Element {
+    let start_str = range.start.to_string();
+    let end_str = range.end.to_string();
+    let kids_elements: Vec<Element> = children
+        .iter()
+        .map(|node| render_node(node, html_render_policy))
+        .collect();
+    let kids = rsx! { for c in kids_elements { {c} } };
+
+    match tag {
+        Tag::Paragraph => {
+            rsx! { p { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::Heading { level, .. } => {
+            let l = *level as u8;
+            match l {
+                1 => {
+                    rsx! { h1 { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+                }
+                2 => {
+                    rsx! { h2 { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+                }
+                3 => {
+                    rsx! { h3 { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+                }
+                4 => {
+                    rsx! { h4 { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+                }
+                5 => {
+                    rsx! { h5 { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+                }
+                _ => {
+                    rsx! { h6 { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+                }
+            }
+        }
+        Tag::BlockQuote(_) => {
+            rsx! { blockquote { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(info)) => {
+            let lang = info.split_whitespace().next().unwrap_or("").to_string();
+            rsx! {
+                pre {
+                    "data-md-code-block": "",
+                    "data-md-language": "{lang}",
+                    "data-source-start": "{start_str}",
+                    "data-source-end": "{end_str}",
+                    code {
+                        class: "language-{lang}",
+                        {kids}
+                    }
+                }
+            }
+        }
+        Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Indented) => {
+            rsx! {
+                pre {
+                    "data-md-code-block": "",
+                    "data-source-start": "{start_str}",
+                    "data-source-end": "{end_str}",
+                    code { {kids} }
+                }
+            }
+        }
+        Tag::List(Some(start_idx)) => {
+            let idx = *start_idx as i64;
+            rsx! { ol { start: "{idx}", "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::List(None) => {
+            rsx! { ul { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::Item => {
+            // TaskListMarker handling: check if the first child is a TaskListMarker.
+            let is_task = children.first().map_or(false, |c| {
+                matches!(c.event, CustomEvent::Standard(Event::TaskListMarker(_)))
+            });
+            if is_task {
+                let checked_str = match &children.first().unwrap().event {
+                    CustomEvent::Standard(Event::TaskListMarker(checked)) => {
+                        if *checked {
+                            "true"
+                        } else {
+                            "false"
+                        }
+                    }
+                    _ => "false",
+                };
+                rsx! {
+                    li {
+                        "data-md-task-item": "",
+                        "data-md-task-checked": "{checked_str}",
+                        "data-source-start": "{start_str}",
+                        "data-source-end": "{end_str}",
+                        {kids}
+                    }
+                }
+            } else {
+                rsx! { li { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+            }
+        }
+        Tag::Emphasis => {
+            rsx! { em { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::Strong => {
+            rsx! { strong { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::Strikethrough => {
+            rsx! { del { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::Link {
+            dest_url, title, ..
+        } => {
+            let safe_url = sanitize_href(dest_url).unwrap_or_default();
+            let title_str = title.to_string();
+            let is_external = safe_url.starts_with("http://") || safe_url.starts_with("https://");
+            let external_str = if is_external { "true" } else { "false" };
+            rsx! {
+                a {
+                    href: "{safe_url}",
+                    title: "{title_str}",
+                    "data-md-link": "",
+                    "data-md-link-external": "{external_str}",
+                    "data-source-start": "{start_str}",
+                    "data-source-end": "{end_str}",
+                    {kids}
+                }
+            }
+        }
+        Tag::Image {
+            dest_url, title, ..
+        } => {
+            let safe_url = sanitize_href(dest_url).unwrap_or_default();
+            let title_str = title.to_string();
+            // Alt text is rendered by the kids, but for an img tag we need plaintext alt
+            let alt_str = extract_text_from_children(children);
+            rsx! {
+                img {
+                    src: "{safe_url}",
+                    alt: "{alt_str}",
+                    title: "{title_str}",
+                    "data-source-start": "{start_str}",
+                    "data-source-end": "{end_str}"
+                }
+            }
+        }
+        Tag::Table(_) => rsx! {
+            div {
+                "data-md-table-wrapper": "",
+                "data-source-start": "{start_str}",
+                "data-source-end": "{end_str}",
+                table { {kids} }
+            }
+        },
+        Tag::TableHead => rsx! { thead { tr { {kids} } } },
+        Tag::TableRow => rsx! { tr { {kids} } },
+        Tag::TableCell => rsx! { td { {kids} } },
+        Tag::FootnoteDefinition(name) => {
+            let name_str = name.to_string();
+            rsx! {
+                div {
+                    "data-md-footnote-def": "{name_str}",
+                    "data-source-start": "{start_str}",
+                    "data-source-end": "{end_str}",
+                    {kids}
+                }
+            }
+        }
+        Tag::HtmlBlock => {
+            rsx! { div { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+        Tag::MetadataBlock(_) => rsx! { div { display: "none" } },
+        _ => {
+            rsx! { span { "data-source-start": "{start_str}", "data-source-end": "{end_str}", {kids} } }
+        }
+    }
+}
+
+fn extract_text_from_children(children: &[AstNode]) -> String {
+    let mut buf = String::new();
+    for child in children {
+        if let CustomEvent::Standard(Event::Text(t)) = &child.event {
+            buf.push_str(t);
+        } else {
+            buf.push_str(&extract_text_from_children(&child.children));
+        }
+    }
+    buf
+}
+
+fn second_pass_custom_extensions<'a>(nodes: &mut Vec<AstNode<'a>>, _text_source: &str) {
+    // Pre-process: merge adjacent Text nodes because pulldown_cmark can fragment failed reference links like `[[`
+    let mut merged: Vec<AstNode<'a>> = Vec::new();
+    for node in nodes.drain(..) {
+        if let CustomEvent::Standard(Event::Text(ref t)) = node.event {
+            if let Some(last) = merged.last_mut() {
+                if let CustomEvent::Standard(Event::Text(ref mut last_t)) = last.event {
+                    let mut combined = last_t.to_string();
+                    combined.push_str(t);
+                    last.event = CustomEvent::Standard(Event::Text(combined.into()));
+                    last.range.end = node.range.end;
+                    continue;
+                }
+            }
+        }
+        merged.push(node);
+    }
+    *nodes = merged;
+
+    let mut new_nodes = Vec::new();
+    let mut replaced = false;
+
+    for node in nodes.drain(..) {
+        let maybe_text = match &node.event {
+            CustomEvent::Standard(Event::Text(text)) => Some(text.to_string()),
+            _ => None,
+        };
+
+        if let Some(text) = maybe_text {
+            // Find hashtags and wikilinks inside the text node with native scanning.
+            let mut matches = scan_custom_tokens(&text);
+
+            if matches.is_empty() {
+                new_nodes.push(node);
+                continue;
+            }
+
+            replaced = true;
+            matches.sort_by_key(|a| a.0);
+
+            let mut last_idx = 0;
+            let start_offset = node.range.start;
+
+            for (m_start, m_end, token) in matches {
+                if m_start > last_idx {
+                    // Push standard text node before the match
+                    let slice = &text[last_idx..m_start];
+                    new_nodes.push(AstNode {
+                        event: CustomEvent::Standard(Event::Text(slice.to_string().into())),
+                        range: (start_offset + last_idx)..(start_offset + m_start),
+                        children: Vec::new(),
+                    });
+                }
+
+                // Push custom event
+                let event = match token {
+                    TokenKind::Tag(tag) => CustomEvent::Tag(tag),
+                    TokenKind::Wikilink(link) => CustomEvent::Wikilink(link),
+                };
+                new_nodes.push(AstNode {
+                    event,
+                    range: (start_offset + m_start)..(start_offset + m_end),
+                    children: Vec::new(),
+                });
+
+                last_idx = m_end;
+            }
+
+            // Push remainder
+            if last_idx < text.len() {
+                let slice = &text[last_idx..text.len()];
+                new_nodes.push(AstNode {
+                    event: CustomEvent::Standard(Event::Text(slice.to_string().into())),
+                    range: (start_offset + last_idx)..(start_offset + text.len()),
+                    children: Vec::new(),
+                });
+            }
+        } else {
+            // Recurse heavily into children
+            let mut recursed_node = node;
+            second_pass_custom_extensions(&mut recursed_node.children, _text_source);
+            new_nodes.push(recursed_node);
+        }
+    }
+
+    if replaced || !new_nodes.is_empty() {
+        *nodes = new_nodes;
+    }
+}
+
+enum TokenKind {
+    Tag(String),
+    Wikilink(String),
+}
+
+fn scan_custom_tokens(text: &str) -> Vec<(usize, usize, TokenKind)> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        // Wikilink: [[...]]
+        if bytes[i] == b'[' && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            let mut j = i + 2;
+            let mut found = None;
+            while j + 1 < bytes.len() {
+                if bytes[j] == b']' && bytes[j + 1] == b']' {
+                    found = Some(j);
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end_open) = found {
+                let inner = &text[i + 2..end_open];
+                out.push((i, end_open + 2, TokenKind::Wikilink(inner.to_string())));
+                i = end_open + 2;
+                continue;
+            }
+        }
+
+        // Tag: #[A-Za-z0-9_-]+
+        if bytes[i] == b'#' {
+            let mut j = i + 1;
+            while j < bytes.len() {
+                let b = bytes[j];
+                let valid = (b as char).is_ascii_alphanumeric() || b == b'_' || b == b'-';
+                if valid {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            if j > i + 1 {
+                out.push((i, j, TokenKind::Tag(text[i..j].to_string())));
+                i = j;
+                continue;
+            }
+        }
+
+        let ch_len = text[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        i += ch_len;
+    }
+
+    out
 }
