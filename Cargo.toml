@@ -7,6 +7,7 @@ members = [
     "crates/gestures",
     "crates/preview",
     "crates/shell",
+    "crates/suggest",
     "crates/tag-input",
     "crates/markdown",
     "crates/cmdk/examples/command_palette",
@@ -14,6 +15,7 @@ members = [
     "crates/cmdk/examples/command_palette_floating",
     "crates/cmdk/examples/command_palette_mobile",
     "crates/cmdk/examples/command_palette_pages",
+    "crates/suggest/examples/suggest-demo",
 ]
 resolver = "2"
 
@@ -38,3 +40,4 @@ tracing = "0.1"
 dioxus-nox-virtualize = { path = "crates/virtualize" }
 dioxus-nox-dnd = { path = "crates/dnd" }
 dioxus-nox-cmdk = { path = "crates/cmdk", default-features = false }
+dioxus-nox-suggest = { path = "crates/suggest" }
