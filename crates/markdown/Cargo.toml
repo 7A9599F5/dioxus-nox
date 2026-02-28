@@ -10,8 +10,9 @@ categories = ["gui", "wasm", "web-programming"]
 
 [dependencies]
 dioxus = { workspace = true }
-comrak = { workspace = true }
 gloo-timers = { workspace = true }
+crop = "0.4.3"
+pulldown-cmark = "0.13.1"
 
 [features]
 default = ["web"]
@@ -39,3 +40,6 @@ path = "examples/tailwind_styled.rs"
 [[example]]
 name = "inline_preview"
 path = "examples/inline_preview.rs"
+
+[dev-dependencies]
+dioxus-ssr = "0.7.3"

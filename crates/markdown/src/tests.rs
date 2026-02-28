@@ -327,7 +327,7 @@ mod context_tests {
     /// Creates a minimal uncontrolled MarkdownContext for testing.
     /// MUST be called inside an active Dioxus runtime (inside a component).
     fn make_test_context(initial_value: &str) -> MarkdownContext {
-        let raw = Rc::new(RefCell::new(initial_value.to_string()));
+        let raw = Rc::new(RefCell::new(crop::Rope::from(initial_value)));
         let raw_signal = Signal::new(raw);
         let mode = Signal::new(Mode::Source);
         let parsed_doc = Memo::new(move || {
@@ -336,6 +336,7 @@ mod context_tests {
                 headings: vec![],
                 front_matter: None,
                 blocks: vec![],
+                ast: vec![],
             })
         });
         MarkdownContext {
@@ -495,14 +496,16 @@ mod parser_tests {
 
     #[test]
     fn parse_empty_string() {
-        let doc = parse_document("");
+        let rope = crop::Rope::from("");
+        let doc = parse_document(&rope);
         assert!(doc.headings.is_empty());
         assert!(doc.front_matter.is_none());
     }
 
     #[test]
     fn parse_heading_level_1() {
-        let doc = parse_document("# Hello");
+        let rope = crop::Rope::from("# Hello");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 1);
         assert_eq!(doc.headings[0].level, 1);
         assert_eq!(doc.headings[0].text, "Hello");
@@ -511,7 +514,8 @@ mod parser_tests {
     #[test]
     fn parse_heading_all_levels() {
         let markdown = "# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 6);
         for (i, level) in (1u8..=6).enumerate() {
             assert_eq!(doc.headings[i].level, level, "heading {i} has wrong level");
@@ -525,21 +529,24 @@ mod parser_tests {
 
     #[test]
     fn parse_heading_slug_spaces() {
-        let doc = parse_document("# Hello World");
+        let rope = crop::Rope::from("# Hello World");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings[0].anchor, "hello-world");
     }
 
     #[test]
     fn parse_heading_slug_special_chars() {
         // Non-alphanumeric chars become hyphens; consecutive hyphens collapse; trailing trimmed
-        let doc = parse_document("# Rust & Go");
-        assert_eq!(doc.headings[0].anchor, "rust--go");
+        let rope = crop::Rope::from("# Rust & Go");
+        let doc = parse_document(&rope);
+        assert_eq!(doc.headings[0].anchor, "rust-go");
     }
 
     #[test]
     fn parse_gfm_task_list() {
         let markdown = "- [x] Done\n- [ ] Not done";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         // Task list items should parse without panic; no headings present
         assert!(doc.headings.is_empty());
         assert!(doc.front_matter.is_none());
@@ -548,7 +555,8 @@ mod parser_tests {
     #[test]
     fn parse_front_matter_raw() {
         let markdown = "---\ntitle: Test\n---\n\n# Content";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         let fm = doc
             .front_matter
             .as_deref()
@@ -561,7 +569,8 @@ mod parser_tests {
 
     #[test]
     fn parse_front_matter_absent() {
-        let doc = parse_document("# No front matter here");
+        let rope = crop::Rope::from("# No front matter here");
+        let doc = parse_document(&rope);
         assert!(doc.front_matter.is_none());
     }
 
@@ -569,7 +578,8 @@ mod parser_tests {
     fn parse_heading_line_numbers() {
         // HeadingEntry.line is 0-based per types.rs documentation
         let markdown = "# First\n\nSome paragraph.\n\n## Second";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 2);
         assert_eq!(doc.headings[0].line, 0, "first heading should be on line 0");
         assert_eq!(
@@ -580,7 +590,8 @@ mod parser_tests {
 
     #[test]
     fn parse_heading_with_inline_code() {
-        let doc = parse_document("# The `Config` struct");
+        let rope = crop::Rope::from("# The `Config` struct");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 1);
         // Heading text should contain the code content without backticks
         assert!(
@@ -593,7 +604,8 @@ mod parser_tests {
     #[test]
     fn parse_multiple_paragraphs_no_headings() {
         let markdown = "First paragraph.\n\nSecond paragraph.\n\nThird.";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         assert!(doc.headings.is_empty());
         assert!(doc.front_matter.is_none());
     }
@@ -614,7 +626,8 @@ Some text.
 
 > blockquote
 ";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 3);
         assert_eq!(doc.headings[0].level, 1);
         assert_eq!(doc.headings[0].text, "Title");
@@ -629,7 +642,8 @@ Some text.
         // Two identical headings should produce distinct slugs or identical slugs
         // (depends on implementation — this test documents behavior)
         let markdown = "# Title\n\n# Title";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 2);
         assert_eq!(doc.headings[0].anchor, "title");
         // Second slug may be "title" or "title-1" depending on implementation
@@ -640,7 +654,8 @@ Some text.
     fn parse_setext_heading() {
         // Setext-style headings should also be extracted
         let markdown = "Title\n=====\n\nSubsection\n----------";
-        let doc = parse_document(markdown);
+        let rope = crop::Rope::from(markdown);
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 2);
         assert_eq!(doc.headings[0].level, 1);
         assert_eq!(doc.headings[0].text, "Title");
@@ -977,13 +992,15 @@ mod hooks_tests {
 
     #[test]
     fn extract_heading_index_empty_doc() {
-        let doc = parse_document("");
+        let rope = crop::Rope::from("");
+        let doc = parse_document(&rope);
         assert!(doc.headings.is_empty());
     }
 
     #[test]
     fn extract_heading_index_returns_cloned_headings() {
-        let doc = parse_document("# Title\n\n## Subtitle");
+        let rope = crop::Rope::from("# Title\n\n## Subtitle");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 2);
         assert_eq!(doc.headings[0].level, 1);
         assert_eq!(doc.headings[0].text, "Title");
@@ -993,21 +1010,24 @@ mod hooks_tests {
 
     #[test]
     fn extract_heading_index_preserves_anchors() {
-        let doc = parse_document("# Hello World\n\n## Another Section");
+        let rope = crop::Rope::from("# Hello World\n\n## Another Section");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings[0].anchor, "hello-world");
         assert_eq!(doc.headings[1].anchor, "another-section");
     }
 
     #[test]
     fn extract_heading_index_preserves_line_numbers() {
-        let doc = parse_document("# First\n\nParagraph.\n\n## Second");
+        let rope = crop::Rope::from("# First\n\nParagraph.\n\n## Second");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings[0].line, 0);
         assert_eq!(doc.headings[1].line, 4);
     }
 
     #[test]
     fn extract_heading_index_with_front_matter() {
-        let doc = parse_document("---\ntitle: Test\n---\n\n# Content");
+        let rope = crop::Rope::from("---\ntitle: Test\n---\n\n# Content");
+        let doc = parse_document(&rope);
         assert_eq!(doc.headings.len(), 1);
         assert_eq!(doc.headings[0].text, "Content");
     }
@@ -1218,77 +1238,8 @@ mod markdown_handle_tests {
 // ============================================================
 #[cfg(test)]
 mod render_tests {
-    use crate::parser::{highlight_code, parse_document};
-
-    #[test]
-    fn highlight_code_no_lang_renders_without_panic() {
-        let elem = highlight_code("let x = 1;", "");
-        // Element is Result<VNode, RenderError> — check it's Ok
-        assert!(
-            elem.is_ok(),
-            "highlight_code with empty lang should succeed"
-        );
-    }
-
-    #[test]
-    fn highlight_code_with_rust_lang_renders_without_panic() {
-        let elem = highlight_code("fn main() {}", "rust");
-        assert!(elem.is_ok(), "highlight_code with rust lang should succeed");
-    }
-
-    #[test]
-    fn parse_document_code_block_no_panic() {
-        // Ensure parse_document handles code fences without panicking
-        let doc = parse_document("```rust\nfn main() {}\n```");
-        assert!(
-            doc.element.is_ok(),
-            "code fence document should render without error"
-        );
-    }
-
-    #[test]
-    fn parse_document_unlanguaged_code_block_no_panic() {
-        let doc = parse_document("```\nsome code\n```");
-        assert!(
-            doc.element.is_ok(),
-            "unlanguaged code block should render without error"
-        );
-    }
-
-    #[test]
-    fn highlight_code_has_data_md_code_block_in_fn() {
-        // The function compiles and doesn't panic — actual attribute testing
-        // requires a renderer, but we can verify the function exists and runs.
-        let _ = highlight_code("code", "rust");
-    }
-
-    #[test]
-    fn highlight_code_various_languages() {
-        // Verify highlight_code handles various language identifiers without panic
-        for lang in [
-            "javascript",
-            "python",
-            "go",
-            "c",
-            "html",
-            "css",
-            "toml",
-            "yaml",
-        ] {
-            let elem = highlight_code("some code", lang);
-            assert!(
-                elem.is_ok(),
-                "highlight_code should succeed for lang={lang}"
-            );
-        }
-    }
-
-    #[test]
-    fn highlight_code_multiline_content() {
-        let code = "fn main() {\n    println!(\"Hello\");\n}";
-        let elem = highlight_code(code, "rust");
-        assert!(elem.is_ok(), "multiline code should render without error");
-    }
+    // Note: highlight_code was removed during the switch to pulldown-cmark
+    // and native RSX generation. Code blocks are now natively rendered.
 }
 
 // ============================================================
@@ -1628,11 +1579,11 @@ mod block_click_tests {
     }
 
     #[test]
-    fn test_block_click_js_reads_data_source_line() {
+    fn test_block_click_js_reads_data_source_start() {
         let js = block_click_js("nox-md-preview");
         assert!(
-            js.contains("data-source-line"),
-            "JS should look for data-source-line attribute",
+            js.contains("data-source-start"),
+            "JS should look for data-source-start attribute",
         );
     }
 
@@ -1650,7 +1601,7 @@ mod block_click_tests {
         let js = block_click_js("nox-md-preview");
         assert!(
             js.contains("dioxus.send"),
-            "JS should send line number to Dioxus",
+            "JS should send source offset to Dioxus",
         );
     }
 
@@ -1659,78 +1610,23 @@ mod block_click_tests {
         let js = block_click_js("nox-md-preview");
         assert!(
             js.contains("parseInt") || js.contains("Number("),
-            "JS should convert line number to integer",
+            "JS should convert source offset to integer",
         );
     }
 }
 
 // ============================================================
-// Render source line tests — Wave 3C-parser
-// Verify comrak sourcepos data is available for block elements
-// so render_ast_to_element can emit data-source-line attributes.
-// In comrak 0.50, sourcepos is always tracked during parsing
-// (no parse option needed; render.sourcepos only affects HTML output).
+// Render source mapping tests — Wave 3C-parser
+// Verify block elements carry source-start/source-end attributes.
 // ============================================================
 #[cfg(test)]
-mod render_source_line_tests {
-    use crate::parser::{build_comrak_options, parse_document};
-
-    /// Verify comrak's sourcepos gives heading at line 1.
-    #[test]
-    fn test_sourcepos_heading_line_1() {
-        use comrak::{Arena, nodes::NodeValue};
-        let arena = Arena::new();
-        let opts = build_comrak_options();
-        let root = comrak::parse_document(&arena, "# Hello", &opts);
-        for node in root.children() {
-            if let NodeValue::Heading(_) = node.data.borrow().value {
-                let sp = node.data.borrow().sourcepos;
-                assert_eq!(sp.start.line, 1, "heading should be at line 1");
-                return;
-            }
-        }
-        panic!("no heading found");
-    }
-
-    #[test]
-    fn test_sourcepos_paragraph_line_3() {
-        use comrak::{Arena, nodes::NodeValue};
-        let arena = Arena::new();
-        let opts = build_comrak_options();
-        let root = comrak::parse_document(&arena, "# Title\n\nParagraph text", &opts);
-        for node in root.children() {
-            if let NodeValue::Paragraph = node.data.borrow().value {
-                let sp = node.data.borrow().sourcepos;
-                assert_eq!(sp.start.line, 3, "paragraph should be at line 3");
-                return;
-            }
-        }
-        panic!("no paragraph found");
-    }
-
-    #[test]
-    fn test_sourcepos_nonzero_for_content() {
-        use comrak::Arena;
-        let arena = Arena::new();
-        let opts = build_comrak_options();
-        let root = comrak::parse_document(&arena, "# Hello\n\nWorld", &opts);
-        let mut found_nonzero = false;
-        for node in root.children() {
-            let sp = node.data.borrow().sourcepos;
-            if sp.start.line > 0 {
-                found_nonzero = true;
-                break;
-            }
-        }
-        assert!(
-            found_nonzero,
-            "at least one node should have non-zero sourcepos"
-        );
-    }
+mod render_source_map_tests {
+    use crate::parser::parse_document;
 
     #[test]
     fn test_parse_document_produces_nonempty_doc_for_content() {
-        let doc = parse_document("# Hello\n\nWorld");
+        let rope = crop::Rope::from("# Hello\n\nWorld");
+        let doc = parse_document(&rope);
         assert!(!doc.headings.is_empty(), "should have at least one heading");
     }
 }
@@ -1977,7 +1873,8 @@ mod gap_004_table_tests {
     fn table_parse_does_not_panic() {
         // Verify that a GFM table parses without panicking
         let md = "| A | B |\n|---|---|\n| 1 | 2 |\n";
-        let doc = parse_document(md);
+        let rope = crop::Rope::from(md);
+        let doc = parse_document(&rope);
         // Table has no headings
         assert!(doc.headings.is_empty());
     }
@@ -1985,7 +1882,8 @@ mod gap_004_table_tests {
     #[test]
     fn table_with_header_and_body() {
         let md = "| Name | Value |\n|------|-------|\n| foo | bar |\n| baz | qux |\n";
-        let doc = parse_document(md);
+        let rope = crop::Rope::from(md);
+        let doc = parse_document(&rope);
         // Just verify it parses without panic and returns an element
         let _ = doc.element;
     }
@@ -2236,230 +2134,93 @@ fn block_entry_equality() {
     assert_eq!(a, b);
 }
 
-// ── parse_document block extraction tests ────────────────────────────
+// ── Custom Extension AST Tests ──────────────────────────────────────────
 
-#[test]
-fn parse_document_extracts_blocks() {
+#[cfg(test)]
+mod custom_extension_tests {
     use crate::parser::parse_document;
-    let md = "# Heading\n\nParagraph text.";
-    let doc = parse_document(md);
-    assert_eq!(doc.blocks.len(), 2, "should extract 2 top-level blocks");
-}
+    use dioxus::prelude::*;
 
-#[test]
-fn parse_document_block_indices_are_zero_based() {
-    use crate::parser::parse_document;
-    let md = "# A\n\n## B\n\nC";
-    let doc = parse_document(md);
-    for (i, block) in doc.blocks.iter().enumerate() {
-        assert_eq!(block.index, i, "block index should match position");
+    #[test]
+    fn parse_tag_extension() {
+        let md = "This is a #test tag.";
+        let rope = crop::Rope::from(md);
+        let doc = parse_document(&rope);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        // Ensure the span properly maps the tag text and attribute
+        assert!(html.contains("data-md-tag=\"#test\""));
+        assert!(html.contains(">#test</span>"));
+        assert!(html.contains("This is a "));
+        assert!(html.contains(" tag."));
+    }
+
+    #[test]
+    fn parse_wikilink_extension() {
+        let md = "Check out my [[Zettelkasten Note]].";
+        let rope = crop::Rope::from(md);
+        let doc = parse_document(&rope);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        println!("RENDERED HTML: {}", html);
+
+        assert!(html.contains("data-md-wikilink=\"Zettelkasten Note\""));
+        assert!(html.contains("Check out my "));
+        assert!(html.contains("[[Zettelkasten Note]]</a>"));
+    }
+
+    #[test]
+    fn parse_mixed_extensions() {
+        let md = "A #tag and a [[link]] side-by-side.";
+        let rope = crop::Rope::from(md);
+        let doc = parse_document(&rope);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        assert!(html.contains("data-md-tag=\"#tag\""));
+        assert!(html.contains("data-md-wikilink=\"link\""));
+        assert!(html.contains(" and a "));
+        assert!(html.contains(" side-by-side."));
     }
 }
 
-#[test]
-fn parse_document_block_raw_text_non_empty() {
-    use crate::parser::parse_document;
-    let md = "Hello world\n\nSecond paragraph.";
-    let doc = parse_document(md);
-    assert!(!doc.blocks.is_empty());
-    for block in &doc.blocks {
-        assert!(!block.raw.is_empty(), "block raw text should not be empty");
+#[cfg(test)]
+mod html_policy_tests {
+    use crate::parser::parse_document_with_policy;
+    use crate::types::HtmlRenderPolicy;
+    use dioxus::prelude::*;
+
+    #[test]
+    fn html_is_escaped_by_default_policy() {
+        let rope = crop::Rope::from("before <b>bold</b> after");
+        let doc = parse_document_with_policy(&rope, HtmlRenderPolicy::Escape);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        assert!(html.contains("&#60;b&#62;"));
+        assert!(html.contains("&#60;/b&#62;"));
     }
-}
 
-#[test]
-fn parse_document_block_html_contains_data_block_index() {
-    use crate::parser::parse_document;
-    let md = "First\n\nSecond";
-    let doc = parse_document(md);
-    for block in &doc.blocks {
-        assert!(
-            block.html.contains(&format!("data-block-index=\"{}\"", block.index)),
-            "block HTML should contain data-block-index attribute"
-        );
+    #[test]
+    fn trusted_policy_renders_raw_html() {
+        let rope = crop::Rope::from("before <b>bold</b> after");
+        let doc = parse_document_with_policy(&rope, HtmlRenderPolicy::Trusted);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        assert!(html.contains("<b>"));
+        assert!(html.contains("</b>"));
     }
-}
-
-#[test]
-fn parse_document_skips_front_matter_in_blocks() {
-    use crate::parser::parse_document;
-    let md = "---\ntitle: Test\n---\n\n# Title\n\nParagraph";
-    let doc = parse_document(md);
-    // Front matter should be extracted separately, not as a block
-    assert!(
-        doc.blocks
-            .iter()
-            .all(|b| !b.raw.contains("title: Test")),
-        "front matter should not appear in blocks"
-    );
-}
-
-#[test]
-fn parse_document_splits_list_into_per_item_blocks() {
-    use crate::parser::parse_document;
-    let md = "# Heading\n\n- item 1\n- item 2\n- item 3\n\nParagraph.";
-    let doc = parse_document(md);
-    // heading + 3 items + paragraph = 5 blocks
-    assert_eq!(doc.blocks.len(), 5, "list should be split into per-item blocks");
-}
-
-#[test]
-fn parse_document_list_items_flagged_correctly() {
-    use crate::parser::parse_document;
-    let md = "Intro.\n\n- item a\n- item b\n\nOutro.";
-    let doc = parse_document(md);
-    assert!(!doc.blocks[0].is_list_item, "paragraph should not be list item");
-    assert!(doc.blocks[1].is_list_item, "first list item should be flagged");
-    assert!(doc.blocks[2].is_list_item, "second list item should be flagged");
-    assert!(!doc.blocks[3].is_list_item, "closing paragraph should not be list item");
-}
-
-#[test]
-fn parse_document_task_items_are_list_items() {
-    use crate::parser::parse_document;
-    let md = "- [ ] unchecked\n- [x] checked";
-    let doc = parse_document(md);
-    assert_eq!(doc.blocks.len(), 2);
-    assert!(doc.blocks[0].is_list_item);
-    assert!(doc.blocks[1].is_list_item);
-}
-
-#[test]
-fn reconstruct_markdown_joins_list_items_with_newline() {
-    use crate::inline_editor::reconstruct_markdown;
-    let raws = vec!["- a".to_string(), "- b".to_string(), "- c".to_string()];
-    let metas = vec![true, true, true];
-    let out = reconstruct_markdown(&raws, &metas);
-    assert_eq!(out, "- a\n- b\n- c");
-}
-
-#[test]
-fn reconstruct_markdown_joins_non_list_with_double_newline() {
-    use crate::inline_editor::reconstruct_markdown;
-    let raws = vec!["Para one.".to_string(), "Para two.".to_string()];
-    let metas = vec![false, false];
-    let out = reconstruct_markdown(&raws, &metas);
-    assert_eq!(out, "Para one.\n\nPara two.");
-}
-
-#[test]
-fn reconstruct_markdown_mixed_blocks() {
-    use crate::inline_editor::reconstruct_markdown;
-    let raws = vec![
-        "Intro.".to_string(),
-        "- a".to_string(),
-        "- b".to_string(),
-        "Outro.".to_string(),
-    ];
-    let metas = vec![false, true, true, false];
-    let out = reconstruct_markdown(&raws, &metas);
-    assert_eq!(out, "Intro.\n\n- a\n- b\n\nOutro.");
-}
-
-#[test]
-fn render_block_to_html_string_wraps_with_data_block_index() {
-    use crate::parser::render_block_to_html_string;
-    let html = render_block_to_html_string("Hello", 7);
-    assert!(
-        html.contains("data-block-index=\"7\""),
-        "output should contain data-block-index attribute"
-    );
-    assert!(html.starts_with("<div data-block-index=\"7\">"));
-}
-
-// ── JS generator output tests ────────────────────────────────────────
-
-#[test]
-fn inline_editor_init_js_contains_editor_id() {
-    use crate::inline_editor::inline_editor_init_js;
-    let js = inline_editor_init_js("my-editor-1", "<p>Hello</p>");
-    assert!(js.contains("my-editor-1"), "JS should reference the editor ID");
-}
-
-#[test]
-fn inline_editor_init_js_sets_inner_html() {
-    use crate::inline_editor::inline_editor_init_js;
-    let js = inline_editor_init_js("ed", "<p>Hi</p>");
-    assert!(js.contains("innerHTML"), "JS should set innerHTML");
-}
-
-#[test]
-fn inline_editor_init_js_attaches_selectionchange() {
-    use crate::inline_editor::inline_editor_init_js;
-    let js = inline_editor_init_js("ed", "");
-    assert!(
-        js.contains("selectionchange"),
-        "JS should attach selectionchange listener"
-    );
-}
-
-#[test]
-fn inline_editor_switch_block_js_contains_block_index() {
-    use crate::inline_editor::inline_editor_switch_block_js;
-    let js = inline_editor_switch_block_js("ed", 3, "raw text", 10);
-    assert!(js.contains("3"), "JS should reference block index 3");
-    assert!(js.contains("ed"), "JS should reference editor ID");
-}
-
-#[test]
-fn inline_editor_switch_block_js_uses_text_content() {
-    use crate::inline_editor::inline_editor_switch_block_js;
-    let js = inline_editor_switch_block_js("ed", 0, "raw text", 0);
-    assert!(
-        js.contains("textContent"),
-        "JS should set textContent for raw display"
-    );
-}
-
-#[test]
-fn inline_editor_restore_block_js_contains_block_index() {
-    use crate::inline_editor::inline_editor_restore_block_js;
-    let js = inline_editor_restore_block_js("ed", 2, "<p>Hello</p>");
-    assert!(js.contains("2"), "JS should reference block index 2");
-    assert!(js.contains("ed"), "JS should reference editor ID");
-}
-
-#[test]
-fn inline_editor_restore_block_js_sets_inner_html() {
-    use crate::inline_editor::inline_editor_restore_block_js;
-    let js = inline_editor_restore_block_js("ed", 0, "<p>content</p>");
-    assert!(
-        js.contains("innerHTML"),
-        "JS should set innerHTML for rendered block"
-    );
-}
-
-#[test]
-fn render_blocks_html_concatenates_all() {
-    use crate::inline_editor::render_blocks_html;
-    let blocks = vec![
-        BlockEntry {
-            index: 0,
-            raw: "a".to_string(),
-            html: "<div data-block-index=\"0\"><p>a</p></div>".to_string(),
-            start_line: 1,
-            end_line: 1,
-            is_list_item: false,
-        },
-        BlockEntry {
-            index: 1,
-            raw: "b".to_string(),
-            html: "<div data-block-index=\"1\"><p>b</p></div>".to_string(),
-            start_line: 3,
-            end_line: 3,
-            is_list_item: false,
-        },
-    ];
-    let combined = render_blocks_html(&blocks);
-    assert!(combined.contains("data-block-index=\"0\""));
-    assert!(combined.contains("data-block-index=\"1\""));
-}
-
-#[test]
-fn inline_editor_js_escapes_single_quotes_in_content() {
-    use crate::inline_editor::inline_editor_init_js;
-    // Ensure JS is syntactically safe even when HTML contains single quotes
-    let js = inline_editor_init_js("ed", "it's a test");
-    // Single quote in HTML should be escaped so the JS string literal is valid
-    assert!(!js.contains("innerHTML = 'it's"), "raw single quote must not appear in JS string");
 }

@@ -22,7 +22,9 @@ use crate::types::TriggerContext;
 /// }
 /// ```
 pub fn use_suggestion() -> SuggestionHandle {
-    SuggestionHandle { ctx: use_context::<TriggerContext>() }
+    SuggestionHandle {
+        ctx: use_context::<TriggerContext>(),
+    }
 }
 
 /// Read-only handle providing access to the current suggestion state.

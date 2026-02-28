@@ -12,7 +12,11 @@ pub(crate) fn utf16_to_byte_index(text: &str, utf16_idx: usize) -> Option<usize>
         }
         count += ch.len_utf16();
     }
-    if count == utf16_idx { Some(text.len()) } else { None }
+    if count == utf16_idx {
+        Some(text.len())
+    } else {
+        None
+    }
 }
 
 /// Returns the byte offset of `trigger_char` in `text` if the trigger conditions are met.
@@ -43,7 +47,11 @@ pub fn detect_trigger(
     if line_start_only {
         let line_start = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
         let line_content = &before[line_start..];
-        if line_content.starts_with(trigger_char) { Some(line_start) } else { None }
+        if line_content.starts_with(trigger_char) {
+            Some(line_start)
+        } else {
+            None
+        }
     } else {
         // Scan backwards for the most recent occurrence of `trigger_char` that
         // is either at position 0 or immediately preceded by whitespace.
@@ -56,8 +64,15 @@ pub fn detect_trigger(
                 return None;
             }
             let preceded_by_whitespace = byte_pos == 0
-                || before[..byte_pos].chars().last().is_some_and(|c| c.is_whitespace());
-            if preceded_by_whitespace { Some(byte_pos) } else { None }
+                || before[..byte_pos]
+                    .chars()
+                    .last()
+                    .is_some_and(|c| c.is_whitespace());
+            if preceded_by_whitespace {
+                Some(byte_pos)
+            } else {
+                None
+            }
         })
     }
 }

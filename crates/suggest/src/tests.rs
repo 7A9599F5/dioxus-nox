@@ -147,12 +147,18 @@ fn hashtag_trigger_after_space() {
 
 #[test]
 fn filter_empty_after_slash() {
-    assert_eq!(extract_filter("/", 1, '/', true, false, 64), Some(String::new()));
+    assert_eq!(
+        extract_filter("/", 1, '/', true, false, 64),
+        Some(String::new())
+    );
 }
 
 #[test]
 fn filter_text() {
-    assert_eq!(extract_filter("/head", 5, '/', true, false, 64), Some("head".to_string()));
+    assert_eq!(
+        extract_filter("/head", 5, '/', true, false, 64),
+        Some("head".to_string())
+    );
 }
 
 #[test]
@@ -170,7 +176,10 @@ fn filter_none_mid_word() {
 
 #[test]
 fn filter_none_space_disallowed() {
-    assert_eq!(extract_filter("/hello world", 12, '/', true, false, 64), None);
+    assert_eq!(
+        extract_filter("/hello world", 12, '/', true, false, 64),
+        None
+    );
 }
 
 #[test]
@@ -184,7 +193,10 @@ fn filter_space_allowed() {
 
 #[test]
 fn filter_partial_word() {
-    assert_eq!(extract_filter("/he", 3, '/', true, false, 64), Some("he".to_string()));
+    assert_eq!(
+        extract_filter("/he", 3, '/', true, false, 64),
+        Some("he".to_string())
+    );
 }
 
 #[test]
@@ -220,7 +232,10 @@ fn filter_mention_after_space() {
 #[test]
 fn float_style_contains_position_fixed() {
     let s = compute_float_style(10.0, 200.0, 300.0, 4.0, 800.0);
-    assert!(s.contains("position:fixed"), "expected position:fixed in {s}");
+    assert!(
+        s.contains("position:fixed"),
+        "expected position:fixed in {s}"
+    );
 }
 
 #[test]
@@ -239,7 +254,10 @@ fn float_style_left_equals_anchor_left() {
 #[test]
 fn float_style_min_width_equals_anchor_width() {
     let s = compute_float_style(50.0, 200.0, 300.0, 4.0, 800.0);
-    assert!(s.contains("min-width:300px"), "expected min-width:300px in {s}");
+    assert!(
+        s.contains("min-width:300px"),
+        "expected min-width:300px in {s}"
+    );
 }
 
 #[test]

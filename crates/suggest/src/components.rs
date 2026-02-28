@@ -42,10 +42,12 @@ pub fn Root(
     let trigger_element: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
 
     // Keep on_select and trigger_configs in sync with props across re-renders.
-    let mut on_select_sig_mut = on_select_sig;
-    on_select_sig_mut.set(Some(on_select));
-    let mut trigger_configs_mut = trigger_configs;
-    trigger_configs_mut.set(triggers);
+    use_effect(move || {
+        let mut oss = on_select_sig;
+        oss.set(Some(on_select));
+        let mut tc = trigger_configs;
+        tc.set(triggers.clone());
+    });
 
     let instance_id = use_hook(next_instance_id);
 
@@ -93,8 +95,7 @@ pub fn Root(
 ///      Non-WASM targets: trigger detection is a no-op, stays inactive. -->
 #[component]
 pub fn Trigger(
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     children: Element,
     /// External `(text, cursor_utf16)` signal for non-textarea inputs (e.g. contenteditable).
     /// When `Some`, skips the `oninput` path and runs trigger detection reactively.
@@ -136,8 +137,7 @@ pub fn Trigger(
     });
 
     // Precompute data-trigger attr: Option<String> — absent when no trigger active.
-    let trigger_char_attr: Option<String> =
-        (*ctx.active_char.read()).map(|c| c.to_string());
+    let trigger_char_attr: Option<String> = (*ctx.active_char.read()).map(|c| c.to_string());
 
     rsx! {
         div {
@@ -265,8 +265,7 @@ pub fn List(
     /// Gap between the trigger element's bottom edge and the list top. Default: `4.0`.
     #[props(default = 4.0)]
     side_offset: f64,
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
     let ctx = use_context::<TriggerContext>();
@@ -284,7 +283,9 @@ pub fn List(
         let offset = side_offset;
         spawn(async move {
             let Some(data) = el else { return };
-            let Ok(rect) = data.get_client_rect().await else { return };
+            let Ok(rect) = data.get_client_rect().await else {
+                return;
+            };
             fs.set(compute_float_style(
                 rect.min_x(),
                 rect.max_y(),
@@ -330,8 +331,7 @@ pub fn List(
 pub fn Item(
     /// Identifies this item in [`TriggerSelectEvent::value`].
     value: String,
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
     let ctx = use_context::<TriggerContext>();
@@ -355,12 +355,13 @@ pub fn Item(
     let is_highlighted = use_memo(move || {
         let hi = *ctx.highlighted_index.read();
         let items = ctx.items.read();
-        hi.and_then(|idx| items.get(idx)).is_some_and(|v| v == &value)
+        hi.and_then(|idx| items.get(idx))
+            .is_some_and(|v| v == &value)
     });
 
     rsx! {
         div {
-            "data-highlighted": if *is_highlighted.read() { "true" } else { "" },
+            "data-highlighted": (*is_highlighted.read()).then_some("true"),
             role: "option",
             onclick: move |_| {
                 let ac = *ctx.active_char.read();
@@ -394,8 +395,7 @@ pub fn Item(
 pub fn Group(
     /// Accessible label for this group (rendered as visible text and `aria-label`).
     label: String,
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
     let label_text = label.clone();
@@ -422,8 +422,7 @@ pub fn Group(
 /// whether their filtered item list is empty.
 #[component]
 pub fn Empty(
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
     rsx! {

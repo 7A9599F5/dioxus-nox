@@ -2,12 +2,16 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(target_arch = "wasm32")]
+use gloo_timers::callback::Timeout;
+
 use dioxus::prelude::*;
 use dioxus_core::use_drop;
 
 pub(crate) static NEXT_VH_ID: AtomicU64 = AtomicU64::new(1);
 
 use crate::context::{MarkdownContext, escape_js};
+use crate::interop;
 use crate::parser::parse_document;
 use crate::types::{HeadingEntry, ParsedDoc};
 
@@ -114,7 +118,7 @@ pub(crate) async fn sync_editor_to_preview(editor_id: &str, preview_id: &str) {
         null
     "#
     );
-    let _ = document::eval(&js).await;
+    interop::eval_void(&js).await;
 }
 
 /// Synchronizes the editor pane scroll position to match the preview's scroll ratio.
@@ -140,7 +144,7 @@ pub(crate) async fn sync_preview_to_editor(editor_id: &str, preview_id: &str) {
         null
     "#
     );
-    let _ = document::eval(&js).await;
+    interop::eval_void(&js).await;
 }
 
 /// Hook for viewport height tracking (iOS/Android virtual keyboard).
@@ -156,7 +160,7 @@ pub fn use_viewport_height() -> Signal<f64> {
 
     use_effect(move || {
         spawn(async move {
-            let mut ev = document::eval(&format!(
+            let mut ev = interop::start_eval(&format!(
                 r#"
                 const send = () => dioxus.send(
                     window.visualViewport ? window.visualViewport.height : window.innerHeight
@@ -170,7 +174,7 @@ pub fn use_viewport_height() -> Signal<f64> {
                 }};
             "#
             ));
-            while let Ok(h) = ev.recv::<f64>().await {
+            while let Some(h) = interop::recv_f64(&mut ev).await {
                 height.set(h);
             }
         });
@@ -179,9 +183,10 @@ pub fn use_viewport_height() -> Signal<f64> {
     use_drop(move || {
         let key = format!("nox_md_vh_{cleanup_id}");
         spawn(async move {
-            let _ = document::eval(&format!(
+            interop::eval_void(&format!(
                 "if(window.__nox_md_cleanup && window.__nox_md_cleanup['{key}']){{window.__nox_md_cleanup['{key}']();delete window.__nox_md_cleanup['{key}'];}}"
-            )).await;
+            ))
+            .await;
         });
     });
 
@@ -193,10 +198,11 @@ pub fn use_viewport_height() -> Signal<f64> {
 /// Returns a `Signal<Rc<ParsedDoc>>` that updates after the debounce fires.
 /// The caller provides the raw content buffer and a debounce delay.
 ///
-/// Uses `gloo_timers::callback::Timeout` for the debounce timer (works on all
+/// On wasm32, uses `gloo_timers::callback::Timeout` for the debounce timer (works on all
 /// WebView-based Dioxus targets: Web, Desktop via Wry, iOS, Android).
+/// On non-wasm targets (native), fires immediately (no async timer without a tokio dep).
 pub fn use_debounced_parse(
-    raw_content: Signal<Rc<RefCell<String>>>,
+    raw_content: Signal<Rc<RefCell<crop::Rope>>>,
     delay_ms: u32,
 ) -> (Signal<Rc<ParsedDoc>>, Callback<()>) {
     let parsed = use_signal(|| {
@@ -205,26 +211,44 @@ pub fn use_debounced_parse(
             headings: vec![],
             front_matter: None,
             blocks: vec![],
+            ast: vec![],
         })
     });
 
-    let timer_handle: Rc<RefCell<Option<gloo_timers::callback::Timeout>>> =
-        use_hook(|| Rc::new(RefCell::new(None)));
+    #[cfg(target_arch = "wasm32")]
+    let timer_handle: Rc<RefCell<Option<Timeout>>> = use_hook(|| Rc::new(RefCell::new(None)));
 
     let trigger = {
+        #[cfg(target_arch = "wasm32")]
         let timer_handle = timer_handle.clone();
         Callback::new(move |_: ()| {
             // Clone the Rc to the content buffer; read actual content when timer fires
             // so we always parse the latest text, not a stale snapshot from trigger time.
             let content_rc = raw_content.read().clone();
             let mut parsed = parsed;
-            let mut guard = timer_handle.borrow_mut();
-            // Dropping the previous Some(Timeout) cancels the old timer.
-            *guard = Some(gloo_timers::callback::Timeout::new(delay_ms, move || {
-                let text = content_rc.borrow().clone();
-                let doc = parse_document(&text);
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                let timer_rc2 = timer_handle.clone();
+                let mut guard = timer_handle.borrow_mut();
+                // Dropping the previous Some(Timeout) cancels the old timer.
+                let _ = guard.take();
+                *guard = Some(Timeout::new(delay_ms, move || {
+                    let rope = content_rc.borrow().clone();
+                    let doc = parse_document(&rope);
+                    parsed.set(Rc::new(doc));
+                    *timer_rc2.borrow_mut() = None;
+                }));
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                // web_sys comment: confirmed no Dioxus 0.7 native timer API as of 2026-02-27.
+                let _ = delay_ms;
+                let rope = content_rc.borrow().clone();
+                let doc = parse_document(&rope);
                 parsed.set(Rc::new(doc));
-            }));
+            }
         })
     };
 

@@ -6,14 +6,10 @@
 //! - `dioxus-nox-suggest`   — /, @, # inline triggers
 //! - `dioxus-nox-cmdk`      — Ctrl+K command palette
 //! - `dioxus-nox-tag-input` — tag pills
-//! - `dioxus-nox-dnd`       — horizontal pill drag-to-reorder
+//! - `dioxus-nox-dnd`       — tree/tab drag-to-reorder
 //! - `dioxus-nox-preview`   — debounced preview in palette
 //!
 //! Run with: dx serve -p noxpad
-
-// NOTE: DOM cursor restoration after text replacement uses `document::eval` (wasm32 only).
-// NOTE: Note data is not persisted — seed data only.
-// NOTE: Tag autocomplete is plain substring match against all note tags.
 
 #![allow(non_snake_case)]
 
@@ -21,20 +17,29 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 use dioxus_nox_cmdk::{
-    CommandEmpty, CommandGroup, CommandHighlight, CommandInput, CommandItem,
-    CommandList, CommandRoot, use_command_palette,
-};
-use dioxus_nox_dnd::{
-    DragContextProvider, DragId, DragOverlay, ReorderEvent, SortableContext, SortableItem,
+    CommandEmpty, CommandGroup, CommandHighlight, CommandInput, CommandItem, CommandList,
+    CommandRoot, use_command_palette,
 };
 use dioxus_nox_dnd::types::Orientation;
-use dioxus_nox_markdown::markdown;
-use dioxus_nox_markdown::prelude::{
-    ActiveBlockInputEvent, LivePreviewVariant, Mode, use_markdown_context,
+use dioxus_nox_dnd::{
+    DragContextProvider, DragId, DragOverlay, DragType, MoveEvent, ReorderEvent, SortableContext,
+    SortableGroup, SortableItem, FEEDBACK_STYLES, FUNCTIONAL_STYLES,
 };
+use dioxus_nox_markdown::markdown;
+use dioxus_nox_markdown::types::{ActiveBlockInputEvent, LivePreviewVariant};
+use dioxus_nox_markdown::prelude::Mode;
 use dioxus_nox_preview::{use_debounced_active, use_preview_cache};
 use dioxus_nox_shell::AppShell;
 use dioxus_nox_suggest::{TriggerConfig, TriggerSelectEvent, suggest, use_suggestion};
+
+const FOLDER_TREE_ID: &str = "folder-tree";
+const FOLDER_DRAG_PREFIX: &str = "folder:";
+const FOLDER_NOTES_PREFIX: &str = "folder-notes:";
+const NOTE_DRAG_PREFIX: &str = "note:";
+const TAB_STRIP_ID: &str = "tab-strip";
+const TAB_DRAG_PREFIX: &str = "tab:";
+const NOTE_DRAG_TYPE: &str = "note";
+const FOLDER_DRAG_TYPE: &str = "folder";
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -46,7 +51,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 /* Shell layout */
 [data-shell] { display: grid; height: 100vh; overflow: hidden;
     grid-template-rows: 1fr auto;
-    grid-template-columns: 240px 1fr 280px;
+    grid-template-columns: 280px 1fr 280px;
     grid-template-areas: "sidebar main preview" "footer footer footer"; }
 [data-shell-columns="1"] { grid-template-columns: 1fr; grid-template-areas: "main" "footer"; }
 [data-shell-sidebar] { grid-area: sidebar; border-right: 1px solid #2a2a2a;
@@ -63,21 +68,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     padding-top: 80px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
 [data-shell-search][data-shell-search-active="true"] { display: flex; }
 
-/* Sidebar */
-.sidebar-header { padding: 12px 16px; font-weight: 600; font-size: 13px;
+/* Sidebar tree */
+.sidebar-header { padding: 12px 16px; font-weight: 600; font-size: 12px;
     color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
-.note-item { padding: 8px 16px; cursor: pointer; border-left: 2px solid transparent;
-    transition: background 0.1s; font-size: 14px; }
-.note-item:hover { background: #1a1a1a; }
-.note-item[data-active="true"] { border-left-color: #7c6af7; background: #1a1a1a; color: #fff; }
+.sidebar-tree { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.folder-node { border: 1px solid #242424; border-radius: 8px; background: #151515; }
+.folder-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    font-size: 13px; color: #bbb; border-bottom: 1px solid #1f1f1f; }
+.folder-header button { border: none; background: transparent; color: inherit; cursor: pointer; }
+.folder-handle { color: #666; cursor: grab; user-select: none; }
+.folder-name { font-weight: 600; }
+.folder-count { margin-left: auto; font-size: 11px; color: #6f6f6f; }
+.folder-notes { padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.note-item { padding: 7px 8px; cursor: pointer; border-left: 2px solid transparent;
+    transition: background 0.12s; font-size: 13px; border-radius: 6px; }
+.note-item:hover { background: #202020; }
+.note-item[data-active="true"] { border-left-color: #7c6af7; background: #23203a; color: #fff; }
 .note-item-title { font-weight: 500; }
-.note-item-tags { font-size: 11px; color: #555; margin-top: 2px; }
+.note-item-tags { font-size: 11px; color: #666; margin-top: 1px; }
+.empty-folder { padding: 8px; color: #555; font-size: 12px; }
 
 /* Editor */
 .note-editor { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .note-editor-header { padding: 12px 24px 0; }
 .note-title { font-size: 22px; font-weight: 700; background: transparent; border: none;
     color: #e0e0e0; width: 100%; outline: none; padding: 0; }
+
+.tab-strip { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid #1f1f1f;
+    min-height: 38px; align-items: center; overflow-x: auto; }
+.tab-item { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-radius: 6px 6px 0 0; border: 1px solid #2b2b2b; border-bottom: none;
+    color: #999; background: #141414; cursor: pointer; white-space: nowrap; }
+.tab-item[data-active="true"] { color: #fff; background: #1d1d1d; border-color: #3a335f; }
+.tab-close { border: none; background: transparent; color: #666; cursor: pointer; font-size: 13px; }
+.tab-close:hover { color: #d97b7b; }
+
 [data-md-root] { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 24px; }
 [data-md-editor][data-state="active"] { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 [data-md-inline-editor] { flex: 1; padding: 12px 0; outline: none;
@@ -93,7 +118,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: #888; margin: 8px 0; }
 [data-md-inline-editor] ul, [data-md-inline-editor] ol { padding-left: 20px; margin: 4px 0; }
 [data-md-inline-editor] hr { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
-[data-block-index] { min-height: 1.2em; }
 [data-md-root] textarea { flex: 1; background: transparent; border: none; outline: none;
     color: #e0e0e0; font-family: 'Fira Code', monospace; font-size: 14px;
     line-height: 1.7; resize: none; padding: 12px 0; }
@@ -169,10 +193,18 @@ mark { background: none; color: #7c6af7; font-weight: 600; }
 
 #[derive(Clone)]
 struct Note {
-    id:      String,
-    title:   String,
+    id: String,
+    title: String,
     content: String,
-    tags:    Vec<String>,
+    tags: Vec<String>,
+}
+
+#[derive(Clone)]
+struct FolderNode {
+    id: String,
+    name: String,
+    note_indices: Vec<usize>,
+    collapsed: bool,
 }
 
 fn seed_notes() -> Vec<Note> {
@@ -192,14 +224,37 @@ fn seed_notes() -> Vec<Note> {
         Note {
             id: "meeting-notes".into(),
             title: "Meeting Notes".into(),
-            content: "# Meeting Notes — Component API Review\n\n## Attendees\n\n@Alice @Bob @Carol\n\n## Action Items\n\n- [ ] Alice: update cmdk signal pattern\n- [ ] Bob: write migration guide\n- [ ] Carol: add E2E tests for dnd\n\n## Notes\n\nDecided to use `data-state` attributes consistently across all crates.".into(),
+            content: "# Meeting Notes - Component API Review\n\n## Attendees\n\n@Alice @Bob @Carol\n\n## Action Items\n\n- [ ] Alice: update cmdk signal pattern\n- [ ] Bob: write migration guide\n- [ ] Carol: add E2E tests for dnd\n\n## Notes\n\nDecided to use `data-state` attributes consistently across all crates.".into(),
             tags: vec!["meeting".into(), "planning".into()],
         },
         Note {
             id: "reading-list".into(),
             title: "Reading List".into(),
-            content: "# Reading List\n\n## In Progress\n\n- *Programming Rust* — Blandy & Orendorff\n- *The Rust Programming Language* — Klabnik & Nichols\n\n## Backlog\n\n- *Crafting Interpreters* — Robert Nystrom\n- *Database Internals* — Alex Petrov\n\n## Completed\n\n- *The Art of Problem Solving* ✓\n\n#rust #books #learning".into(),
+            content: "# Reading List\n\n## In Progress\n\n- *Programming Rust* - Blandy & Orendorff\n- *The Rust Programming Language* - Klabnik & Nichols\n\n## Backlog\n\n- *Crafting Interpreters* - Robert Nystrom\n- *Database Internals* - Alex Petrov\n\n## Completed\n\n- *The Art of Problem Solving*\n\n#rust #books #learning".into(),
             tags: vec!["books".into(), "learning".into(), "rust".into()],
+        },
+    ]
+}
+
+fn seed_folders() -> Vec<FolderNode> {
+    vec![
+        FolderNode {
+            id: "inbox".into(),
+            name: "Inbox".into(),
+            note_indices: vec![0, 2],
+            collapsed: false,
+        },
+        FolderNode {
+            id: "engineering".into(),
+            name: "Engineering".into(),
+            note_indices: vec![1],
+            collapsed: false,
+        },
+        FolderNode {
+            id: "reference".into(),
+            name: "Reference".into(),
+            note_indices: vec![3],
+            collapsed: false,
         },
     ]
 }
@@ -208,22 +263,202 @@ fn seed_notes() -> Vec<Note> {
 fn cmd_to_text(trigger_char: char, value: &str) -> String {
     match trigger_char {
         '/' => match value {
-            "h1"      => "# ".into(),
-            "h2"      => "## ".into(),
-            "h3"      => "### ".into(),
-            "bold"    => "**text**".into(),
-            "italic"  => "_text_".into(),
-            "code"    => "`code`".into(),
-            "quote"   => "> ".into(),
-            "task"    => "- [ ] ".into(),
-            "table"   => "| Col 1 | Col 2 |\n|-------|-------|\n|       |       |".into(),
+            "h1" => "# ".into(),
+            "h2" => "## ".into(),
+            "h3" => "### ".into(),
+            "bold" => "**text**".into(),
+            "italic" => "_text_".into(),
+            "code" => "`code`".into(),
+            "quote" => "> ".into(),
+            "task" => "- [ ] ".into(),
+            "table" => "| Col 1 | Col 2 |\n|-------|-------|\n|       |       |".into(),
             "divider" => "---".into(),
-            _         => String::new(),
+            _ => String::new(),
         },
         '@' => format!("@{value} "),
         '#' => format!("#{value} "),
-        _   => String::new(),
+        _ => String::new(),
     }
+}
+
+fn folder_drag_id(folder_id: &str) -> DragId {
+    DragId::new(format!("{FOLDER_DRAG_PREFIX}{folder_id}"))
+}
+
+fn folder_notes_container_id(folder_id: &str) -> String {
+    format!("{FOLDER_NOTES_PREFIX}{folder_id}")
+}
+
+fn note_drag_id(note_idx: usize) -> DragId {
+    DragId::new(format!("{NOTE_DRAG_PREFIX}{note_idx}"))
+}
+
+fn tab_drag_id(note_idx: usize) -> DragId {
+    DragId::new(format!("{TAB_DRAG_PREFIX}{note_idx}"))
+}
+
+fn parse_note_drag_id(id: &DragId) -> Option<usize> {
+    id.0.strip_prefix(NOTE_DRAG_PREFIX)?.parse::<usize>().ok()
+}
+
+fn parse_folder_notes_container_id(container_id: &str) -> Option<&str> {
+    container_id.strip_prefix(FOLDER_NOTES_PREFIX)
+}
+
+fn normalize_container_id(id: &DragId) -> &str {
+    id.0.strip_suffix("-container").unwrap_or(&id.0)
+}
+
+fn reorder_in_vec<T>(items: &mut Vec<T>, from: usize, to: usize) -> bool {
+    if from >= items.len() || to >= items.len() || from == to {
+        return false;
+    }
+    let item = items.remove(from);
+    items.insert(to, item);
+    true
+}
+
+fn reorder_folder_notes(
+    folders: &mut [FolderNode],
+    folder_id: &str,
+    from: usize,
+    to: usize,
+) -> bool {
+    let Some(folder) = folders.iter_mut().find(|folder| folder.id == folder_id) else {
+        return false;
+    };
+    reorder_in_vec(&mut folder.note_indices, from, to)
+}
+
+fn move_note_between_folders(
+    folders: &mut [FolderNode],
+    from_folder: &str,
+    to_folder: &str,
+    note_idx: usize,
+    to_index: usize,
+) -> bool {
+    if from_folder == to_folder {
+        let Some(folder) = folders.iter_mut().find(|folder| folder.id == from_folder) else {
+            return false;
+        };
+        let Some(from_index) = folder.note_indices.iter().position(|idx| *idx == note_idx) else {
+            return false;
+        };
+        if from_index == to_index {
+            return false;
+        }
+        let item = folder.note_indices.remove(from_index);
+        let insert_at = to_index.min(folder.note_indices.len());
+        folder.note_indices.insert(insert_at, item);
+        return true;
+    }
+
+    let source_idx = folders.iter().position(|folder| folder.id == from_folder);
+    let target_idx = folders.iter().position(|folder| folder.id == to_folder);
+    let (Some(source_idx), Some(target_idx)) = (source_idx, target_idx) else {
+        return false;
+    };
+
+    let Some(source_pos) = folders[source_idx]
+        .note_indices
+        .iter()
+        .position(|idx| *idx == note_idx)
+    else {
+        return false;
+    };
+
+    folders[source_idx].note_indices.remove(source_pos);
+
+    if let Some(existing) = folders[target_idx]
+        .note_indices
+        .iter()
+        .position(|idx| *idx == note_idx)
+    {
+        folders[target_idx].note_indices.remove(existing);
+    }
+
+    let insert_at = to_index.min(folders[target_idx].note_indices.len());
+    folders[target_idx].note_indices.insert(insert_at, note_idx);
+    true
+}
+
+fn ensure_tab_open(tabs: &mut Vec<usize>, note_idx: usize) {
+    if !tabs.contains(&note_idx) {
+        tabs.push(note_idx);
+    }
+}
+
+fn close_tab(tabs: &mut Vec<usize>, active: Option<usize>, closing: usize) -> Option<usize> {
+    let Some(closing_pos) = tabs.iter().position(|idx| *idx == closing) else {
+        return active;
+    };
+
+    tabs.remove(closing_pos);
+    if tabs.is_empty() {
+        return None;
+    }
+
+    match active {
+        Some(current) if current == closing => {
+            if closing_pos > 0 {
+                Some(tabs[closing_pos - 1])
+            } else {
+                Some(tabs[0])
+            }
+        }
+        Some(current) => tabs
+            .contains(&current)
+            .then_some(current)
+            .or_else(|| tabs.first().copied()),
+        None => tabs.first().copied(),
+    }
+}
+
+fn replace_trigger_range(
+    text: &str,
+    trigger_offset: usize,
+    trigger_char: char,
+    filter: &str,
+    replacement: &str,
+) -> String {
+    let start = trigger_offset.min(text.len());
+    let end = start
+        .saturating_add(trigger_char.len_utf8())
+        .saturating_add(filter.len())
+        .min(text.len());
+    format!("{}{}{}", &text[..start], replacement, &text[end..])
+}
+
+fn replace_in_active_block(
+    full_text: &str,
+    block: &ActiveBlockInputEvent,
+    event: &TriggerSelectEvent,
+    replacement: &str,
+) -> Option<String> {
+    let block_start = block.block_start.min(full_text.len());
+    let block_end = block.block_end.min(full_text.len());
+    if block_end < block_start {
+        return None;
+    }
+
+    let replaced_block = replace_trigger_range(
+        &block.raw_text,
+        event.trigger_offset,
+        event.trigger_char,
+        &event.filter,
+        replacement,
+    );
+
+    Some(format!(
+        "{}{}{}",
+        &full_text[..block_start],
+        replaced_block,
+        &full_text[block_end..]
+    ))
+}
+
+fn note_by_index(notes: &[Note], idx: usize) -> Option<&Note> {
+    notes.get(idx)
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -234,24 +469,30 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    let notes: Signal<Vec<Note>>          = use_signal(seed_notes);
+    let notes: Signal<Vec<Note>> = use_signal(seed_notes);
+    let folders: Signal<Vec<FolderNode>> = use_signal(seed_folders);
     let active_idx: Signal<Option<usize>> = use_signal(|| Some(0));
-    let mode: Signal<Mode>                = use_signal(|| Mode::LivePreview);
-    let search_open: Signal<bool>         = use_signal(|| false);
-    let search_read: ReadSignal<bool>     = search_open.into();
+    let tabs: Signal<Vec<usize>> = use_signal(|| vec![0]);
+    let mode: Signal<Mode> = use_signal(|| Mode::LivePreview);
+    let mut search_open: Signal<bool> = use_signal(|| false);
+    let search_read: ReadSignal<bool> = search_open.into();
 
     rsx! {
+        style { {FUNCTIONAL_STYLES} }
+        style { {FEEDBACK_STYLES} }
         style { {CSS} }
         AppShell {
             search_active: Some(search_read),
-            on_search_change: move |v| { let mut so = search_open; so.set(v); },
-            sidebar: rsx! { NoteSidebar { notes, active_idx } },
-            search:  rsx! { CmdkPalette { notes, active_idx, search_open } },
+            on_search_change: move |v| {
+                search_open.set(v);
+            },
+            sidebar: rsx! { NoteSidebar { notes, folders, active_idx, tabs } },
+            search: rsx! { CmdkPalette { notes, active_idx, tabs, search_open } },
             preview: rsx! { PreviewPane { notes, active_idx } },
-            footer:  rsx! { StatusBar { notes, active_idx } },
+            footer: rsx! { StatusBar { notes, active_idx } },
 
-            if let Some(idx) = (active_idx)() {
-                NoteEditor { notes, active_idx: idx, mode, search_open }
+            if (active_idx)().is_some() {
+                NoteEditor { notes, active_idx, tabs, mode }
             } else {
                 div { style: "padding:32px; color:#444", "Select a note to begin editing" }
             }
@@ -259,27 +500,163 @@ fn App() -> Element {
     }
 }
 
-// ── NoteSidebar ───────────────────────────────────────────────────────────────
+// ── Sidebar ───────────────────────────────────────────────────────────────────
 
 #[component]
-fn NoteSidebar(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> Element {
+fn NoteSidebar(
+    notes: Signal<Vec<Note>>,
+    folders: Signal<Vec<FolderNode>>,
+    active_idx: Signal<Option<usize>>,
+    tabs: Signal<Vec<usize>>,
+) -> Element {
+    let folders_snapshot = folders.read().clone();
+    let notes_snapshot = notes.read().clone();
+    let folder_drag_ids: Vec<DragId> = folders_snapshot
+        .iter()
+        .map(|folder| folder_drag_id(&folder.id))
+        .collect();
+
     rsx! {
         div {
-            div { class: "sidebar-header", "Notes" }
-            for (i, note) in notes.read().iter().enumerate() {
-                {
-                    let is_active = (active_idx)() == Some(i);
-                    let tags_preview = note.tags.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
-                    let title = note.title.clone();
-                    rsx! {
-                        div {
-                            class: "note-item",
-                            "data-active": if is_active { "true" } else { "false" },
-                            onclick: move |_| active_idx.set(Some(i)),
-                            div { class: "note-item-title", "{title}" }
-                            if !tags_preview.is_empty() {
-                                div { class: "note-item-tags", "{tags_preview}" }
+            div { class: "sidebar-header", "Folders" }
+            div { class: "sidebar-tree",
+                SortableGroup {
+                    on_reorder: move |evt: ReorderEvent| {
+                        let container_id = normalize_container_id(&evt.container_id);
+                        if container_id == FOLDER_TREE_ID {
+                            let mut folder_state = folders.write();
+                            reorder_in_vec(&mut folder_state, evt.from_index, evt.to_index);
+                            return;
+                        }
+
+                        if let Some(folder_id) = parse_folder_notes_container_id(container_id) {
+                            let mut folder_state = folders.write();
+                            reorder_folder_notes(&mut folder_state, folder_id, evt.from_index, evt.to_index);
+                        }
+                    },
+                    on_move: move |evt: MoveEvent| {
+                        let from_container = normalize_container_id(&evt.from_container);
+                        let to_container = normalize_container_id(&evt.to_container);
+
+                        let Some(from_folder) = parse_folder_notes_container_id(from_container) else {
+                            return;
+                        };
+                        let Some(to_folder) = parse_folder_notes_container_id(to_container) else {
+                            return;
+                        };
+                        let Some(note_idx) = parse_note_drag_id(&evt.item_id) else {
+                            return;
+                        };
+
+                        let mut folder_state = folders.write();
+                        move_note_between_folders(
+                            &mut folder_state,
+                            from_folder,
+                            to_folder,
+                            note_idx,
+                            evt.to_index,
+                        );
+                    },
+
+                    SortableContext {
+                        id: DragId::new(FOLDER_TREE_ID),
+                        items: folder_drag_ids,
+                        orientation: Orientation::Vertical,
+                        accepts: vec![DragType::new(FOLDER_DRAG_TYPE)],
+
+                        for folder in folders_snapshot.iter() {
+                            {
+                                let folder_id = folder.id.clone();
+                                let folder_name = folder.name.clone();
+                                let note_indices = folder.note_indices.clone();
+                                let collapsed = folder.collapsed;
+                                let note_drag_ids: Vec<DragId> = note_indices
+                                    .iter()
+                                    .map(|note_idx| note_drag_id(*note_idx))
+                                    .collect();
+
+                                rsx! {
+                                    SortableItem {
+                                        key: "{folder_id}",
+                                        id: folder_drag_id(&folder_id),
+                                        drag_type: Some(DragType::new(FOLDER_DRAG_TYPE)),
+                                        handle: Some(".folder-handle".to_string()),
+
+                                        div { class: "folder-node",
+                                            div { class: "folder-header",
+                                                span { class: "folder-handle", "::" }
+                                                button {
+                                                    onclick: move |_| {
+                                                        let mut folder_state = folders.write();
+                                                        if let Some(folder) = folder_state.iter_mut().find(|folder| folder.id == folder_id) {
+                                                            folder.collapsed = !folder.collapsed;
+                                                        }
+                                                    },
+                                                    if collapsed { ">" } else { "v" }
+                                                }
+                                                span { class: "folder-name", "{folder_name}" }
+                                                span { class: "folder-count", "{note_indices.len()}" }
+                                            }
+
+                                            if !collapsed {
+                                                SortableContext {
+                                                    id: DragId::new(folder_notes_container_id(&folder_id)),
+                                                    items: note_drag_ids,
+                                                    orientation: Orientation::Vertical,
+                                                    accepts: vec![DragType::new(NOTE_DRAG_TYPE)],
+
+                                                    div { class: "folder-notes",
+                                                        for note_idx in note_indices.iter().copied() {
+                                                            {
+                                                                let is_active = (active_idx)() == Some(note_idx);
+                                                                let note = note_by_index(&notes_snapshot, note_idx);
+                                                                let title = note
+                                                                    .map(|note| note.title.clone())
+                                                                    .unwrap_or_else(|| "Missing note".to_string());
+                                                                let tags_preview = note
+                                                                    .map(|note| note.tags.iter().take(3).cloned().collect::<Vec<_>>().join(", "))
+                                                                    .unwrap_or_default();
+
+                                                                rsx! {
+                                                                    SortableItem {
+                                                                        key: "note-{note_idx}",
+                                                                        id: note_drag_id(note_idx),
+                                                                        drag_type: Some(DragType::new(NOTE_DRAG_TYPE)),
+
+                                                                        div {
+                                                                            class: "note-item",
+                                                                            "data-active": if is_active { "true" } else { "false" },
+                                                                            onclick: move |_| {
+                                                                                active_idx.set(Some(note_idx));
+                                                                                let mut tab_state = tabs.write();
+                                                                                ensure_tab_open(&mut tab_state, note_idx);
+                                                                            },
+                                                                            div { class: "note-item-title", "{title}" }
+                                                                            if !tags_preview.is_empty() {
+                                                                                div { class: "note-item-tags", "{tags_preview}" }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if note_indices.is_empty() {
+                                                            div { class: "empty-folder", "Drop notes here" }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        }
+                    }
+
+                    DragOverlay {
+                        div { class: "tag-drag-overlay",
+                            span { class: "tag-pill", "Moving" }
                         }
                     }
                 }
@@ -288,48 +665,66 @@ fn NoteSidebar(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> E
     }
 }
 
-// ── NoteEditor ────────────────────────────────────────────────────────────────
+// ── Editor ────────────────────────────────────────────────────────────────────
 
 #[component]
 fn NoteEditor(
     notes: Signal<Vec<Note>>,
-    active_idx: usize,
+    active_idx: Signal<Option<usize>>,
+    tabs: Signal<Vec<usize>>,
     mode: Signal<Mode>,
-    search_open: Signal<bool>,
 ) -> Element {
-    // Track which note we're editing as a signal so effects can subscribe to switches.
-    let current_idx: Signal<usize> = use_signal(|| active_idx);
-    {
-        let mut ci = current_idx;
-        ci.set(active_idx);
-    }
+    let Some(initial_idx) = (active_idx)() else {
+        return rsx! {
+            div { style: "padding:32px; color:#444", "Select a note to begin editing" }
+        };
+    };
 
-    // Controlled value signal for markdown::Root.
-    let content: Signal<String> = use_signal(|| {
-        notes.peek().get(active_idx).map(|n| n.content.clone()).unwrap_or_default()
+    let mut current_idx: Signal<usize> = use_signal(|| initial_idx);
+    let mut content: Signal<String> = use_signal(|| {
+        notes
+            .peek()
+            .get(initial_idx)
+            .map(|note| note.content.clone())
+            .unwrap_or_default()
     });
 
-    // When the active note switches, reset the content signal.
-    // Use notes.peek() to avoid subscribing to content changes (only idx matters here).
+    let mut inline_input: Signal<(String, usize)> = use_signal(|| (String::new(), 0));
+    let mut active_block_input: Signal<Option<ActiveBlockInputEvent>> = use_signal(|| None);
+    let inline_input_read: ReadSignal<(String, usize)> = inline_input.into();
+
+    use_effect(move || {
+        if let Some(idx) = (active_idx)() {
+            current_idx.set(idx);
+            let mut tab_state = tabs.write();
+            ensure_tab_open(&mut tab_state, idx);
+        }
+    });
+
     use_effect(move || {
         let idx = *current_idx.read();
-        let new_content = notes.peek().get(idx).map(|n| n.content.clone()).unwrap_or_default();
-        let mut c = content;
-        c.set(new_content);
+        let next_content = notes
+            .peek()
+            .get(idx)
+            .map(|note| note.content.clone())
+            .unwrap_or_default();
+        content.set(next_content);
+        inline_input.set((String::new(), 0));
+        active_block_input.set(None);
     });
 
-    // Inline-mode cursor state for suggest::Trigger external_input.
-    let inline_input: Signal<(String, usize)> = use_signal(|| (String::new(), 0));
-    let inline_block_idx: Signal<usize>        = use_signal(|| 0);
-    // markdown::Root instance_n exposed via EditorBody for DOM ID construction.
-    let editor_n: Signal<Option<u64>>          = use_signal(|| None);
+    let note_title = notes
+        .read()
+        .get(*current_idx.read())
+        .map(|note| note.title.clone())
+        .unwrap_or_default();
 
-    let note_title = notes.read().get(active_idx).map(|n| n.title.clone()).unwrap_or_default();
-
-    // All tags across all notes for # suggestions.
     let all_tags: Vec<String> = {
-        let ns = notes.read();
-        let mut tags: Vec<String> = ns.iter().flat_map(|n| n.tags.iter().cloned()).collect();
+        let notes_read = notes.read();
+        let mut tags: Vec<String> = notes_read
+            .iter()
+            .flat_map(|note| note.tags.iter().cloned())
+            .collect();
         tags.sort();
         tags.dedup();
         tags
@@ -338,6 +733,7 @@ fn NoteEditor(
 
     rsx! {
         div { class: "note-editor",
+            TabStrip { notes, tabs, active_idx }
             ModeBar { mode }
 
             div { class: "note-editor-header",
@@ -345,138 +741,167 @@ fn NoteEditor(
                     class: "note-title",
                     value: "{note_title}",
                     oninput: move |evt| {
-                        let v = evt.value();
-                        let mut ns = notes.write();
-                        if let Some(note) = ns.get_mut(active_idx) {
-                            note.title = v;
+                        let value = evt.value();
+                        let idx = *current_idx.read();
+                        let mut note_state = notes.write();
+                        if let Some(note) = note_state.get_mut(idx) {
+                            note.title = value;
                         }
                     }
                 }
             }
 
-            suggest::Root {
-                triggers: vec![
-                    TriggerConfig::slash(),
-                    TriggerConfig::mention(),
-                    TriggerConfig::hashtag(),
-                ],
-                on_select: move |evt: TriggerSelectEvent| {
-                    let replacement = cmd_to_text(evt.trigger_char, &evt.value);
-                    if replacement.is_empty() { return; }
-                    let trigger_end = evt.trigger_offset
-                        + evt.trigger_char.len_utf8()
-                        + evt.filter.len();
-
-                    if (mode)() == Mode::LivePreview {
-                        // Inline mode: replace text in contenteditable block.
-                        let (block_text, _) = (*inline_input.read()).clone();
-                        let idx         = *inline_block_idx.read();
-                        let safe_start  = evt.trigger_offset.min(block_text.len());
-                        let safe_end    = trigger_end.min(block_text.len());
-                        let new_block   = format!("{}{}{}", &block_text[..safe_start],
-                                                  replacement, &block_text[safe_end..]);
-                        let cursor_after = safe_start + replacement.len();
-                        if let Some(n) = *editor_n.read() {
-                            let eid = format!("nox-md-{n}-inline");
-                            spawn(async move {
-                                let js = format!(r#"(function(){{
-    var ed=document.getElementById('{eid}');
-    var bl=ed?ed.querySelector('[data-block-index="{idx}"]'):null;
-    if(!bl)return;
-    bl.textContent={new_block:?};
-    var sel=window.getSelection(),range=document.createRange();
-    var tn=bl.firstChild||bl;
-    var off=Math.min({cursor_after},bl.textContent.length);
-    try{{range.setStart(tn,off);range.collapse(true);sel.removeAllRanges();sel.addRange(range);}}catch(e){{}}
-    bl.dispatchEvent(new Event('input',{{bubbles:true}}));
-}})();"#);
-                                let _ = document::eval(&js).await;
-                            });
+            if (mode)() == Mode::Read {
+                markdown::Root {
+                    value: Some(content),
+                    mode: Some(mode),
+                    live_preview_variant: LivePreviewVariant::Inline,
+                    markdown::Content {}
+                }
+            } else {
+                suggest::Root {
+                    triggers: vec![
+                        TriggerConfig::slash(),
+                        TriggerConfig::mention(),
+                        TriggerConfig::hashtag(),
+                    ],
+                    on_select: move |evt: TriggerSelectEvent| {
+                        let replacement = cmd_to_text(evt.trigger_char, &evt.value);
+                        if replacement.is_empty() {
+                            return;
                         }
-                    } else {
-                        // Source / Read mode: replace in controlled content signal.
-                        let old         = (*content.read()).clone();
-                        let safe_start  = evt.trigger_offset.min(old.len());
-                        let safe_end    = trigger_end.min(old.len());
-                        let new_text    = format!("{}{}{}", &old[..safe_start], replacement, &old[safe_end..]);
-                        let cursor_after = safe_start + replacement.len();
-                        let mut c = content;
-                        c.set(new_text.clone());
-                        // Sync textarea DOM cursor position.
-                        if let Some(n) = *editor_n.read() {
-                            let eid = format!("nox-md-{n}-editor");
-                            let nt  = new_text.clone();
-                            spawn(async move {
-                                let js = format!(
-                                    "var el=document.getElementById('{eid}');\
-                                     if(el){{el.value={nt:?};\
-                                     el.setSelectionRange({cursor_after},{cursor_after});\
-                                     el.dispatchEvent(new Event('input',{{bubbles:true}}));}}"
-                                );
-                                let _ = document::eval(&js).await;
-                            });
-                        }
-                    }
-                },
 
-                suggest::Trigger {
-                    // Feed inline-editor cursor position reactively when in Inline mode.
-                    external_input: if (mode)() == Mode::LivePreview {
-                        Some(inline_input.into())
-                    } else {
-                        None
+                        let old_text = content.read().clone();
+                        let new_text = if let Some(block) = active_block_input.read().as_ref() {
+                            replace_in_active_block(&old_text, block, &evt, &replacement)
+                                .unwrap_or_else(|| {
+                                    replace_trigger_range(
+                                        &old_text,
+                                        evt.trigger_offset,
+                                        evt.trigger_char,
+                                        &evt.filter,
+                                        &replacement,
+                                    )
+                                })
+                        } else {
+                            replace_trigger_range(
+                                &old_text,
+                                evt.trigger_offset,
+                                evt.trigger_char,
+                                &evt.filter,
+                                &replacement,
+                            )
+                        };
+
+                        content.set(new_text.clone());
+                        let idx = *current_idx.read();
+                        let mut note_state = notes.write();
+                        if let Some(note) = note_state.get_mut(idx) {
+                            note.content = new_text;
+                        }
                     },
 
-                    markdown::Root {
-                        value: Some(content),
-                        on_value_change: move |v: String| {
-                            let mut c = content;
-                            c.set(v.clone());
-                            let mut ns = notes.write();
-                            if let Some(note) = ns.get_mut(active_idx) {
-                                note.content = v;
-                            }
+                    suggest::Trigger {
+                        external_input: if (mode)() == Mode::LivePreview {
+                            Some(inline_input_read)
+                        } else {
+                            None
                         },
-                        mode: Some(mode),
-                        live_preview_variant: LivePreviewVariant::Inline,
+                        style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
 
-                        EditorBody { inline_input, inline_block_idx, editor_n }
+                        markdown::Root {
+                            value: Some(content),
+                            mode: Some(mode),
+                            live_preview_variant: LivePreviewVariant::Inline,
+                            on_value_change: move |value: String| {
+                                content.set(value.clone());
+                                let idx = *current_idx.read();
+                                let mut note_state = notes.write();
+                                if let Some(note) = note_state.get_mut(idx) {
+                                    note.content = value;
+                                }
+                            },
+
+                            markdown::Editor {
+                                on_active_block_input: move |evt: ActiveBlockInputEvent| {
+                                    inline_input
+                                        .set((evt.raw_text.clone(), evt.cursor_raw_utf16));
+                                    active_block_input.set(Some(evt));
+                                }
+                            }
+                        }
                     }
-                }
 
-                SlashList { all_tags, people }
+                    SlashList { all_tags, people }
+                }
             }
 
-            TagBar { notes, active_idx }
+            TagBar {
+                notes,
+                active_idx: *current_idx.read()
+            }
         }
     }
 }
 
-// ── EditorBody (inside markdown::Root context) ────────────────────────────────
-
 #[component]
-fn EditorBody(
-    inline_input: Signal<(String, usize)>,
-    inline_block_idx: Signal<usize>,
-    editor_n: Signal<Option<u64>>,
-) -> Element {
-    let ctx = use_markdown_context();
-    // Expose the instance_n so the parent can construct DOM IDs.
-    {
-        let mut en = editor_n;
-        en.set(Some(ctx.instance_n));
-    }
+fn TabStrip(notes: Signal<Vec<Note>>, tabs: Signal<Vec<usize>>, active_idx: Signal<Option<usize>>) -> Element {
+    let tabs_snapshot = tabs.read().clone();
+    let notes_snapshot = notes.read().clone();
+    let tab_ids: Vec<DragId> = tabs_snapshot
+        .iter()
+        .map(|note_idx| tab_drag_id(*note_idx))
+        .collect();
 
     rsx! {
-        markdown::Editor {
-            on_active_block_input: move |e: ActiveBlockInputEvent| {
-                let mut ii = inline_input;
-                ii.set((e.text, e.cursor_utf16));
-                let mut ib = inline_block_idx;
-                ib.set(e.block_idx);
-            },
+        div { class: "tab-strip",
+            SortableContext {
+                id: DragId::new(TAB_STRIP_ID),
+                items: tab_ids,
+                orientation: Orientation::Horizontal,
+                on_reorder: move |evt: ReorderEvent| {
+                    let mut tab_state = tabs.write();
+                    reorder_in_vec(&mut tab_state, evt.from_index, evt.to_index);
+                },
+
+                for note_idx in tabs_snapshot.iter().copied() {
+                    {
+                        let title = note_by_index(&notes_snapshot, note_idx)
+                            .map(|note| note.title.clone())
+                            .unwrap_or_else(|| "Missing note".to_string());
+                        let is_active = (active_idx)() == Some(note_idx);
+
+                        rsx! {
+                            SortableItem {
+                                key: "tab-{note_idx}",
+                                id: tab_drag_id(note_idx),
+
+                                div {
+                                    class: "tab-item",
+                                    "data-active": if is_active { "true" } else { "false" },
+                                    onclick: move |_| {
+                                        active_idx.set(Some(note_idx));
+                                        let mut tab_state = tabs.write();
+                                        ensure_tab_open(&mut tab_state, note_idx);
+                                    },
+                                    span { "{title}" }
+                                    button {
+                                        class: "tab-close",
+                                        onclick: move |evt: MouseEvent| {
+                                            evt.stop_propagation();
+                                            let mut tab_state = tabs.write();
+                                            let next_active = close_tab(&mut tab_state, (active_idx)(), note_idx);
+                                            active_idx.set(next_active);
+                                        },
+                                        "x"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        markdown::Preview {}
     }
 }
 
@@ -484,25 +909,31 @@ fn EditorBody(
 
 #[component]
 fn ModeBar(mode: Signal<Mode>) -> Element {
-    let cur = (mode)();
+    let current_mode = (mode)();
     rsx! {
         div { class: "mode-bar",
             button {
                 class: "mode-tab",
-                "data-active": if cur == Mode::Source { "true" } else { "false" },
-                onclick: move |_| { let mut m = mode; m.set(Mode::Source); },
+                "data-active": if current_mode == Mode::Source { "true" } else { "false" },
+                onclick: move |_| {
+                    mode.set(Mode::Source);
+                },
                 "Source"
             }
             button {
                 class: "mode-tab",
-                "data-active": if cur == Mode::LivePreview { "true" } else { "false" },
-                onclick: move |_| { let mut m = mode; m.set(Mode::LivePreview); },
+                "data-active": if current_mode == Mode::LivePreview { "true" } else { "false" },
+                onclick: move |_| {
+                    mode.set(Mode::LivePreview);
+                },
                 "Inline"
             }
             button {
                 class: "mode-tab",
-                "data-active": if cur == Mode::Read { "true" } else { "false" },
-                onclick: move |_| { let mut m = mode; m.set(Mode::Read); },
+                "data-active": if current_mode == Mode::Read { "true" } else { "false" },
+                onclick: move |_| {
+                    mode.set(Mode::Read);
+                },
                 "Read"
             }
         }
@@ -513,32 +944,37 @@ fn ModeBar(mode: Signal<Mode>) -> Element {
 
 #[component]
 fn SlashList(all_tags: Vec<String>, people: Vec<&'static str>) -> Element {
-    let sg     = use_suggestion();
-    let filter = sg.filter();
-    let trigger = sg.active_char();
+    let suggestion = use_suggestion();
+    let filter = suggestion.filter();
+    let trigger = suggestion.active_char();
 
     rsx! {
         suggest::List {
             if trigger == Some('/') {
                 {
                     let slash_cmds: &[(&str, &str, &str)] = &[
-                        ("h1",      "Heading 1",   "H₁"),
-                        ("h2",      "Heading 2",   "H₂"),
-                        ("h3",      "Heading 3",   "H₃"),
-                        ("bold",    "Bold",         "𝐁"),
-                        ("italic",  "Italic",       "𝐼"),
-                        ("code",    "Inline Code",  "</>"),
-                        ("quote",   "Blockquote",   "❝"),
-                        ("task",    "Task Item",    "☑"),
-                        ("table",   "Table",        "▦"),
-                        ("divider", "Divider",      "─"),
+                        ("h1", "Heading 1", "H1"),
+                        ("h2", "Heading 2", "H2"),
+                        ("h3", "Heading 3", "H3"),
+                        ("bold", "Bold", "B"),
+                        ("italic", "Italic", "I"),
+                        ("code", "Inline Code", "</>"),
+                        ("quote", "Blockquote", ">"),
+                        ("task", "Task Item", "[]"),
+                        ("table", "Table", "Tbl"),
+                        ("divider", "Divider", "---"),
                     ];
-                    let f = filter.to_lowercase();
+                    let normalized = filter.to_lowercase();
                     rsx! {
-                        for &(val, label, icon) in slash_cmds.iter()
-                            .filter(|&&(v, l, _)| f.is_empty() || v.contains(&*f) || l.to_lowercase().contains(&*f))
+                        for &(value, label, icon) in slash_cmds
+                            .iter()
+                            .filter(|&&(value, label, _)| {
+                                normalized.is_empty()
+                                    || value.contains(&normalized)
+                                    || label.to_lowercase().contains(&normalized)
+                            })
                         {
-                            suggest::Item { value: val.to_string(),
+                            suggest::Item { value: value.to_string(),
                                 span { class: "cmd-icon", "{icon}" }
                                 "{label}"
                             }
@@ -549,13 +985,14 @@ fn SlashList(all_tags: Vec<String>, people: Vec<&'static str>) -> Element {
 
             if trigger == Some('@') {
                 {
-                    let f = filter.to_lowercase();
+                    let normalized = filter.to_lowercase();
                     rsx! {
-                        for &person in people.iter()
-                            .filter(|&&p| f.is_empty() || p.to_lowercase().contains(&*f))
+                        for &person in people
+                            .iter()
+                            .filter(|&&person| normalized.is_empty() || person.to_lowercase().contains(&normalized))
                         {
                             suggest::Item { value: person.to_string(),
-                                span { class: "cmd-icon", "👤" }
+                                span { class: "cmd-icon", "@" }
                                 "{person}"
                             }
                         }
@@ -565,10 +1002,11 @@ fn SlashList(all_tags: Vec<String>, people: Vec<&'static str>) -> Element {
 
             if trigger == Some('#') {
                 {
-                    let f = filter.to_lowercase();
+                    let normalized = filter.to_lowercase();
                     rsx! {
-                        for tag in all_tags.iter()
-                            .filter(|t| f.is_empty() || t.to_lowercase().contains(&*f))
+                        for tag in all_tags
+                            .iter()
+                            .filter(|tag| normalized.is_empty() || tag.to_lowercase().contains(&normalized))
                         {
                             suggest::Item { value: tag.clone(),
                                 span { class: "cmd-icon", "#" }
@@ -586,9 +1024,13 @@ fn SlashList(all_tags: Vec<String>, people: Vec<&'static str>) -> Element {
 
 #[component]
 fn TagBar(notes: Signal<Vec<Note>>, active_idx: usize) -> Element {
-    let tags: Vec<String> = notes.read().get(active_idx).map(|n| n.tags.clone()).unwrap_or_default();
-    let tag_ids: Vec<DragId> = tags.iter().map(|t| DragId::new(t.clone())).collect();
-    let new_tag: Signal<String> = use_signal(String::new);
+    let tags: Vec<String> = notes
+        .read()
+        .get(active_idx)
+        .map(|note| note.tags.clone())
+        .unwrap_or_default();
+    let tag_ids: Vec<DragId> = tags.iter().map(|tag| DragId::new(tag.clone())).collect();
+    let mut new_tag: Signal<String> = use_signal(String::new);
 
     rsx! {
         div { class: "tag-bar",
@@ -598,67 +1040,67 @@ fn TagBar(notes: Signal<Vec<Note>>, active_idx: usize) -> Element {
                     items: tag_ids.clone(),
                     orientation: Orientation::Horizontal,
                     on_reorder: move |evt: ReorderEvent| {
-                        let mut ns = notes.write();
-                        if let Some(note) = ns.get_mut(active_idx) {
-                            if evt.from_index < note.tags.len() && evt.to_index < note.tags.len() {
-                                note.tags.swap(evt.from_index, evt.to_index);
-                            }
+                        let mut note_state = notes.write();
+                        if let Some(note) = note_state.get_mut(active_idx) {
+                            reorder_in_vec(&mut note.tags, evt.from_index, evt.to_index);
                         }
                     },
-                    for (i, tag) in tags.iter().enumerate() {
+
+                    for (idx, tag) in tags.iter().enumerate() {
                         {
-                            let tag_val  = tag.clone();
-                            let drag_id  = tag_ids.get(i).cloned()
+                            let tag_value = tag.clone();
+                            let drag_id = tag_ids
+                                .get(idx)
+                                .cloned()
                                 .unwrap_or_else(|| DragId::new(tag.clone()));
                             rsx! {
-                                SortableItem { id: drag_id,
+                                SortableItem {
+                                    id: drag_id,
                                     span { class: "tag-pill",
-                                        "#{tag_val}"
+                                        "#{tag_value}"
                                         button {
                                             class: "tag-remove",
                                             onclick: move |_| {
-                                                let tv = tag_val.clone();
-                                                let mut ns = notes.write();
-                                                if let Some(note) = ns.get_mut(active_idx) {
-                                                    note.tags.retain(|t| t != &tv);
+                                                let mut note_state = notes.write();
+                                                if let Some(note) = note_state.get_mut(active_idx) {
+                                                    note.tags.retain(|tag| tag != &tag_value);
                                                 }
                                             },
-                                            "×"
-                                        }
+                                            "x"
+                                        },
                                     }
                                 }
                             }
                         }
                     }
                 }
+
                 DragOverlay {
                     div { class: "tag-drag-overlay",
                         span { class: "tag-pill", "tag" }
                     }
                 }
             }
-            // Inline add-tag input
+
             div { class: "tag-input-wrap",
                 input {
                     r#type: "text",
-                    placeholder: "add tag…",
+                    placeholder: "add tag...",
                     value: "{new_tag}",
                     oninput: move |evt| {
-                        let mut nt = new_tag;
-                        nt.set(evt.value());
+                        new_tag.set(evt.value());
                     },
-                    onkeydown: move |evt| {
+                    onkeydown: move |evt: KeyboardEvent| {
                         if evt.key().to_string() == "Enter" {
-                            let val = new_tag.read().trim().to_string();
-                            if !val.is_empty() {
-                                let mut ns = notes.write();
-                                if let Some(note) = ns.get_mut(active_idx) {
-                                    if !note.tags.contains(&val) {
-                                        note.tags.push(val);
-                                    }
+                            let value = new_tag.read().trim().to_string();
+                            if !value.is_empty() {
+                                let mut note_state = notes.write();
+                                if let Some(note) = note_state.get_mut(active_idx)
+                                    && !note.tags.contains(&value)
+                                {
+                                    note.tags.push(value);
                                 }
-                                let mut nt = new_tag;
-                                nt.set(String::new());
+                                new_tag.set(String::new());
                             }
                         }
                     },
@@ -674,19 +1116,17 @@ fn TagBar(notes: Signal<Vec<Note>>, active_idx: usize) -> Element {
 fn CmdkPalette(
     notes: Signal<Vec<Note>>,
     active_idx: Signal<Option<usize>>,
+    tabs: Signal<Vec<usize>>,
     search_open: Signal<bool>,
 ) -> Element {
-    let palette = use_command_palette(true);  // true = enable Ctrl+K shortcut
+    let palette = use_command_palette(true);
 
-    // Sync shell search_open with palette open signal.
     use_effect(move || {
         let is_open = (palette.open)();
-        let mut so = search_open;
-        so.set(is_open);
+        search_open.set(is_open);
     });
 
-    // Track active item for debounced preview.
-    let active_val: Signal<Option<String>> = use_signal(|| None);
+    let mut active_val: Signal<Option<String>> = use_signal(|| None);
 
     rsx! {
         div {
@@ -696,25 +1136,25 @@ fn CmdkPalette(
                 onclick: move |evt| evt.stop_propagation(),
 
                 CommandRoot {
-                    on_active_change: move |v: Option<String>| {
-                        let mut av = active_val;
-                        av.set(v);
+                    on_active_change: move |value: Option<String>| {
+                        active_val.set(value);
                     },
-                    on_select: move |val: String| {
-                        if let Some(id) = val.strip_prefix("note:") {
-                            let id_str = id.to_string();
-                            let ns = notes.read();
-                            if let Some(i) = ns.iter().position(|n| n.id == id_str) {
-                                active_idx.set(Some(i));
+                    on_select: move |value: String| {
+                        if let Some(note_id) = value.strip_prefix("note:") {
+                            let note_id = note_id.to_string();
+                            let notes_read = notes.read();
+                            if let Some(index) = notes_read.iter().position(|note| note.id == note_id) {
+                                active_idx.set(Some(index));
+                                let mut tab_state = tabs.write();
+                                ensure_tab_open(&mut tab_state, index);
                             }
                         }
                         palette.hide();
-                        let mut so = search_open;
-                        so.set(false);
+                        search_open.set(false);
                     },
 
                     div { class: "cmdk-input-wrap",
-                        CommandInput { placeholder: "Search notes…" }
+                        CommandInput { placeholder: "Search notes..." }
                     }
                     div { class: "cmdk-list",
                         CommandList {
@@ -724,20 +1164,20 @@ fn CmdkPalette(
                             CommandGroup { id: "notes", heading: "Notes",
                                 for note in notes.read().iter() {
                                     {
-                                        let val   = format!("note:{}", note.id);
+                                        let value = format!("note:{}", note.id);
                                         let title = note.title.clone();
-                                        let tags_str = note.tags.join(", ");
+                                        let tags = note.tags.join(", ");
                                         rsx! {
                                             CommandItem {
-                                                id: val.clone(),
-                                                value: val,
+                                                id: value.clone(),
+                                                value: value,
                                                 label: title.clone(),
                                                 div { class: "cmdk-item",
                                                     div { class: "cmdk-item-title",
                                                         CommandHighlight { label: title }
                                                     }
-                                                    if !tags_str.is_empty() {
-                                                        div { class: "cmdk-item-tags", "{tags_str}" }
+                                                    if !tags.is_empty() {
+                                                        div { class: "cmdk-item-tags", "{tags}" }
                                                     }
                                                 }
                                             }
@@ -760,38 +1200,45 @@ fn CmdkPalette(
 #[component]
 fn ActiveNotePreview(notes: Signal<Vec<Note>>, active_val: Signal<Option<String>>) -> Element {
     let debounced = use_debounced_active(active_val.into(), 150);
-    let cache     = use_preview_cache(10);
-    let cache_eff = cache.clone();  // clone for use_effect capture
+    let cache = use_preview_cache(10);
+    let cache_for_effect = cache.clone();
 
     use_effect(move || {
-        let val = (debounced)();
-        let Some(ref v) = val else { return };
-        if cache_eff.get(v).is_some() { return; }
+        let selected = (debounced)();
+        let Some(ref value) = selected else {
+            return;
+        };
+        if cache_for_effect.get(value).is_some() {
+            return;
+        }
 
-        let notes_snap = notes.read();
-        if let Some(note_id) = v.strip_prefix("note:") {
-            if let Some(note) = notes_snap.iter().find(|n| n.id == note_id) {
-                let preview_text = note.content.lines().take(6).collect::<Vec<_>>().join("\n");
-                let key = v.clone();
-                cache_eff.insert(key, Rc::new(move || {
-                    let pt = preview_text.clone();
-                    rsx! { div { class: "preview-content", "{pt}" } }
-                }));
-            }
+        let notes_snapshot = notes.read();
+        if let Some(note_id) = value.strip_prefix("note:")
+            && let Some(note) = notes_snapshot.iter().find(|note| note.id == note_id)
+        {
+            let preview_text = note.content.lines().take(6).collect::<Vec<_>>().join("\n");
+            let cache_key = value.clone();
+            cache_for_effect.insert(
+                cache_key,
+                Rc::new(move || {
+                    let text = preview_text.clone();
+                    rsx! { div { class: "preview-content", "{text}" } }
+                }),
+            );
         }
     });
 
-    let val       = (debounced)();
-    let is_loading = (active_val)() != val;
+    let selected = (debounced)();
+    let is_loading = (active_val)() != selected;
 
     rsx! {
         div {
             "data-preview-loading": if is_loading { "true" } else { "false" },
-            if let Some(ref v) = val {
-                if let Some(render_fn) = cache.get(v) {
+            if let Some(ref value) = selected {
+                if let Some(render_fn) = cache.get(value) {
                     div { {(render_fn)()} }
                 } else {
-                    div { class: "preview-empty", "Loading…" }
+                    div { class: "preview-empty", "Loading..." }
                 }
             } else {
                 div { class: "preview-empty", "Arrow through results to preview" }
@@ -806,7 +1253,10 @@ fn ActiveNotePreview(notes: Signal<Vec<Note>>, active_val: Signal<Option<String>
 fn PreviewPane(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> Element {
     let info = use_memo(move || {
         let idx = (active_idx)()?;
-        notes.read().get(idx).map(|n| (n.title.clone(), n.content.clone()))
+        notes
+            .read()
+            .get(idx)
+            .map(|note| (note.title.clone(), note.content.clone()))
     });
 
     rsx! {
@@ -829,11 +1279,11 @@ fn PreviewPane(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> E
 #[component]
 fn StatusBar(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> Element {
     let stats = use_memo(move || {
-        let idx  = (active_idx)()?;
-        let ns   = notes.read();
-        let note = ns.get(idx)?;
+        let idx = (active_idx)()?;
+        let notes_read = notes.read();
+        let note = notes_read.get(idx)?;
         let words = note.content.split_whitespace().count();
-        let tags  = note.tags.len();
+        let tags = note.tags.len();
         Some((words, tags))
     });
 
@@ -844,5 +1294,49 @@ fn StatusBar(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> Ele
         } else {
             span { "No note" }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reorder_vector_moves_item() {
+        let mut values = vec![1, 2, 3, 4];
+        let changed = reorder_in_vec(&mut values, 1, 3);
+        assert!(changed);
+        assert_eq!(values, vec![1, 3, 4, 2]);
+    }
+
+    #[test]
+    fn move_note_between_folders_updates_membership() {
+        let mut folders = vec![
+            FolderNode {
+                id: "a".to_string(),
+                name: "A".to_string(),
+                note_indices: vec![0, 1],
+                collapsed: false,
+            },
+            FolderNode {
+                id: "b".to_string(),
+                name: "B".to_string(),
+                note_indices: vec![2],
+                collapsed: false,
+            },
+        ];
+
+        let changed = move_note_between_folders(&mut folders, "a", "b", 1, 0);
+        assert!(changed);
+        assert_eq!(folders[0].note_indices, vec![0]);
+        assert_eq!(folders[1].note_indices, vec![1, 2]);
+    }
+
+    #[test]
+    fn close_tab_selects_previous_when_active_closed() {
+        let mut tabs = vec![0, 1, 2];
+        let next_active = close_tab(&mut tabs, Some(2), 2);
+        assert_eq!(tabs, vec![0, 1]);
+        assert_eq!(next_active, Some(1));
     }
 }

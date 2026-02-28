@@ -36,21 +36,36 @@ impl TriggerConfig {
     ///
     /// `line_start_only = true`, `allow_spaces = false`, `max_filter_len = 64`.
     pub fn slash() -> Self {
-        Self { char: '/', line_start_only: true, max_filter_len: 64, allow_spaces: false }
+        Self {
+            char: '/',
+            line_start_only: true,
+            max_filter_len: 64,
+            allow_spaces: false,
+        }
     }
 
     /// Convenience constructor for a mention trigger (`@`).
     ///
     /// `line_start_only = false`, `allow_spaces = false`, `max_filter_len = 64`.
     pub fn mention() -> Self {
-        Self { char: '@', line_start_only: false, max_filter_len: 64, allow_spaces: false }
+        Self {
+            char: '@',
+            line_start_only: false,
+            max_filter_len: 64,
+            allow_spaces: false,
+        }
     }
 
     /// Convenience constructor for a hashtag trigger (`#`).
     ///
     /// `line_start_only = false`, `allow_spaces = false`, `max_filter_len = 64`.
     pub fn hashtag() -> Self {
-        Self { char: '#', line_start_only: false, max_filter_len: 64, allow_spaces: false }
+        Self {
+            char: '#',
+            line_start_only: false,
+            max_filter_len: 64,
+            allow_spaces: false,
+        }
     }
 }
 
@@ -165,7 +180,12 @@ impl TriggerContext {
         let filter = self.filter.read().clone();
         let trigger_offset = *self.trigger_offset.read();
         drop(items);
-        let event = TriggerSelectEvent { trigger_char, value, filter, trigger_offset };
+        let event = TriggerSelectEvent {
+            trigger_char,
+            value,
+            filter,
+            trigger_offset,
+        };
         if let Some(ref h) = *self.on_select.read() {
             h.call(event);
         }

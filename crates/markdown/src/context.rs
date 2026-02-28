@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use dioxus::prelude::*;
 
+use crate::interop;
 use crate::types::{CursorPosition, LivePreviewVariant, Mode, ParsedDoc, Selection};
+use crop::Rope;
 
 static NEXT_ROOT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -32,10 +34,10 @@ pub struct MarkdownContext {
 
     // ── Value / content state ───────────────────────────────────────
     /// The uncontrolled hot-path buffer for raw editor content.
-    /// NOT a reactive Signal for the String itself — avoids textarea cursor
+    /// NOT a reactive Signal for the Rope itself — avoids textarea cursor
     /// reset on every re-render. Editor writes to the inner RefCell on
     /// every keystroke; debounce reads from it.
-    pub raw_content: Signal<Rc<RefCell<String>>>,
+    pub raw_content: Signal<Rc<RefCell<Rope>>>,
     /// Whether value is externally controlled.
     pub is_value_controlled: bool,
     /// Callback fired when value changes (controlled pattern).
@@ -104,12 +106,12 @@ impl MarkdownContext {
         if let Some(handler) = &self.on_value_change {
             handler.call(value.clone());
         }
-        *self.raw_content.read().borrow_mut() = value;
+        *self.raw_content.read().borrow_mut() = Rope::from(value);
     }
 
-    /// Returns a clone of the current raw markdown value.
+    /// Returns a clone of the current raw markdown value as a String.
     pub fn raw_value(&self) -> String {
-        self.raw_content.read().borrow().clone()
+        self.raw_content.read().borrow().to_string()
     }
 
     /// Returns the DOM ID for the editor textarea.
@@ -148,6 +150,8 @@ pub struct CursorContext {
     pub cursor_position: Signal<CursorPosition>,
     /// Current text selection, if any.
     pub selection: Signal<Option<Selection>>,
+    /// Current unsanitized IME Composition (Preedit) overlay text from mobile/native input.
+    pub preedit: Signal<Option<String>>,
 }
 
 /// Convenience hook to consume `MarkdownContext` from a descendant of `markdown::Root`.
@@ -169,13 +173,9 @@ pub(crate) async fn read_cursor_and_selection(
     editor_id: &str,
     text: &str,
 ) -> Option<(CursorPosition, Option<Selection>)> {
-    let js = format!(
-        "var el = document.getElementById('{editor_id}');\
-         if(el) dioxus.send([el.selectionStart ?? 0, el.selectionEnd ?? 0]);\
-         else dioxus.send([0, 0]);"
-    );
-    let mut eval = document::eval(&js);
-    let arr = eval.recv::<Vec<u64>>().await.ok()?;
+    let js = interop::caret_adapter().read_textarea_selection_js(editor_id);
+    let mut eval = interop::start_eval(&js);
+    let arr = interop::recv_vec_u64(&mut eval).await?;
     let start_utf16 = *arr.first()? as usize;
     let end_utf16 = *arr.get(1)? as usize;
 
@@ -331,14 +331,14 @@ impl MarkdownHandle {
     /// Inserts `text` at the current cursor position, replacing any selection.
     /// Dispatches a synthetic `input` event to sync Rust state.
     pub async fn insert_text(&self, text: &str) {
-        let _ = document::eval(&handle_insert_text_js(&self.editor_id(), text)).await;
+        interop::eval_void(&handle_insert_text_js(&self.editor_id(), text)).await;
     }
 
     /// Wraps the current selection with `prefix` and `suffix`.
     /// If no text is selected, inserts `prefix` + `suffix` at cursor.
     /// Dispatches a synthetic `input` event to sync Rust state.
     pub async fn wrap_selection(&self, prefix: &str, suffix: &str) {
-        let _ = document::eval(&handle_wrap_selection_js(&self.editor_id(), prefix, suffix)).await;
+        interop::eval_void(&handle_wrap_selection_js(&self.editor_id(), prefix, suffix)).await;
     }
 
     /// Focuses the editor textarea via `MountedData::set_focus(true)`.
@@ -358,7 +358,7 @@ impl MarkdownHandle {
     /// Replaces the entire editor content with `text`.
     /// Dispatches a synthetic `input` event to sync Rust state.
     pub async fn set_content(&self, text: &str) {
-        let _ = document::eval(&handle_set_content_js(&self.editor_id(), text)).await;
+        interop::eval_void(&handle_set_content_js(&self.editor_id(), text)).await;
     }
 }
 
