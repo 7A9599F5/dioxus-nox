@@ -1,5 +1,6 @@
 pub mod components;
 pub mod context;
+pub mod highlight;
 pub mod hooks;
 pub mod ime_proxy;
 pub mod inline_editor;
@@ -16,6 +17,10 @@ mod tests;
 /// Prelude — import everything for typical consumer usage.
 pub mod prelude {
     pub use crate::components::*;
+    pub use crate::highlight::{
+        HighlightResult, generate_theme_css, highlight_code, supported_languages,
+        wrap_with_line_numbers,
+    };
     pub use crate::context::{
         CursorContext, MarkdownContext, MarkdownHandle, use_cursor_context, use_markdown_context,
         use_markdown_handle,

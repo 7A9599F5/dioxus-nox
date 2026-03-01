@@ -75,6 +75,17 @@ pub struct MarkdownContext {
     /// `SplitPane` (default) = existing split-pane behaviour.
     /// `Inline` = Obsidian-style cursor-aware block switching.
     pub live_preview_variant: Signal<LivePreviewVariant>,
+
+    /// CSS class prefix for syntax-highlighted code spans (e.g. `"hl-"` → `class="hl-keyword"`).
+    pub highlight_class_prefix: Signal<String>,
+
+    // ── Code block display config ─────────────────────────────────────
+    /// Show line numbers on rendered code blocks in Preview/Content.
+    pub show_code_line_numbers: bool,
+    /// Show language label on rendered code blocks (fenced only).
+    pub show_code_language: bool,
+    /// Show line number gutter on source editor textarea.
+    pub show_editor_line_numbers: bool,
 }
 
 impl MarkdownContext {
@@ -137,6 +148,11 @@ impl MarkdownContext {
     /// Returns the DOM ID for the inline editor `<div contenteditable>`.
     pub fn inline_editor_id(&self) -> String {
         format!("nox-md-{}-inline", self.instance_n)
+    }
+
+    /// Returns the DOM ID for the editor line-number gutter.
+    pub fn gutter_id(&self) -> String {
+        format!("nox-md-{}-gutter", self.instance_n)
     }
 }
 

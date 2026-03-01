@@ -354,6 +354,10 @@ mod context_tests {
             disabled: false,
             trigger_parse: Callback::new(|_| {}),
             live_preview_variant: Signal::new(crate::types::LivePreviewVariant::SplitPane),
+            highlight_class_prefix: Signal::new("hl-".to_string()),
+            show_code_line_numbers: false,
+            show_code_language: true,
+            show_editor_line_numbers: false,
         }
     }
 
@@ -2223,4 +2227,339 @@ mod html_policy_tests {
         assert!(html.contains("<b>"));
         assert!(html.contains("</b>"));
     }
+}
+
+// ── Syntax highlighting tests ────────────────────────────────────────
+
+mod highlight_tests {
+    use crate::highlight::{generate_theme_css, highlight_code, supported_languages};
+
+    #[test]
+    fn highlight_code_html_escapes_special_chars() {
+        let result = highlight_code("<script>alert('xss')</script>", "", "hl-");
+        assert!(result.html.contains("&lt;script&gt;"));
+        assert!(result.html.contains("&lt;/script&gt;"));
+        assert!(!result.language_matched);
+    }
+
+    #[test]
+    fn highlight_code_empty_input() {
+        let result = highlight_code("", "rust", "hl-");
+        assert_eq!(result.html, "");
+        // Empty code is technically valid — language_matched depends on feature flag
+    }
+
+    #[test]
+    fn highlight_code_unrecognized_lang_returns_plain_text() {
+        let result = highlight_code("some code", "zyx_nonexistent_lang", "hl-");
+        assert!(!result.language_matched);
+        assert_eq!(result.html, "some code");
+    }
+
+    #[test]
+    fn highlight_code_escapes_ampersands() {
+        let result = highlight_code("a && b", "", "hl-");
+        assert!(result.html.contains("&amp;&amp;"));
+    }
+
+    #[test]
+    fn highlight_code_escapes_quotes() {
+        let result = highlight_code(r#"x = "hello""#, "", "hl-");
+        assert!(result.html.contains("&quot;hello&quot;"));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn highlight_code_produces_spans_for_rust() {
+        let result = highlight_code("fn main() {}", "rust", "hl-");
+        assert!(result.language_matched);
+        assert!(result.html.contains("<span class=\"hl-"));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn highlight_code_custom_prefix() {
+        let result = highlight_code("fn main() {}", "rust", "sx-");
+        assert!(result.language_matched);
+        assert!(result.html.contains("class=\"sx-"));
+        assert!(!result.html.contains("class=\"hl-"));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn highlight_code_empty_prefix() {
+        let result = highlight_code("let x = 1;", "rust", "");
+        assert!(result.language_matched);
+        // With empty prefix, syntect uses Spaced style (no prefix on class names)
+        assert!(result.html.contains("<span class=\""));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn generate_theme_css_produces_rules() {
+        let css = generate_theme_css("base16-ocean.dark", "hl-");
+        assert!(css.is_some());
+        let css = css.unwrap();
+        assert!(css.contains("color:"));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn generate_theme_css_unknown_theme_returns_none() {
+        let css = generate_theme_css("nonexistent_theme_xyz", "hl-");
+        assert!(css.is_none());
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn supported_languages_is_nonempty() {
+        let langs = supported_languages();
+        assert!(!langs.is_empty());
+        assert!(langs.contains(&"rs"));
+    }
+
+    #[cfg(not(feature = "syntax-highlighting"))]
+    #[test]
+    fn generate_theme_css_returns_none_without_feature() {
+        assert!(generate_theme_css("base16-ocean.dark", "hl-").is_none());
+    }
+
+    #[cfg(not(feature = "syntax-highlighting"))]
+    #[test]
+    fn supported_languages_empty_without_feature() {
+        assert!(supported_languages().is_empty());
+    }
+}
+
+mod highlight_parser_tests {
+    use crate::parser::parse_document;
+    use crop::Rope;
+
+    #[test]
+    fn parse_document_code_block_uses_dangerous_inner_html() {
+        let md = "```rust\nfn main() {}\n```\n";
+        let doc = parse_document(&Rope::from(md));
+        // The element should render without panic — basic smoke test
+        let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+            |props: dioxus::prelude::Element| props,
+            doc.element,
+        );
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+        // Should contain the code block structure
+        assert!(html.contains("data-md-code-block"));
+        assert!(html.contains("language-rust"));
+    }
+
+    #[test]
+    fn parse_document_indented_code_block() {
+        let md = "    indented code\n    second line\n\n";
+        let doc = parse_document(&Rope::from(md));
+        let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+            |props: dioxus::prelude::Element| props,
+            doc.element,
+        );
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+        assert!(html.contains("data-md-code-block"));
+        assert!(html.contains("indented code"));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn parse_document_code_block_has_highlighted_attr() {
+        let md = "```rust\nfn main() {}\n```\n";
+        let doc = parse_document(&Rope::from(md));
+        let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+            |props: dioxus::prelude::Element| props,
+            doc.element,
+        );
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+        assert!(html.contains("data-md-highlighted"));
+        assert!(html.contains("<span class=\"hl-"));
+    }
+
+    #[cfg(feature = "syntax-highlighting")]
+    #[test]
+    fn parse_document_unknown_lang_no_highlighted_attr() {
+        let md = "```zyx\nsome code\n```\n";
+        let doc = parse_document(&Rope::from(md));
+        let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+            |props: dioxus::prelude::Element| props,
+            doc.element,
+        );
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+        assert!(!html.contains("data-md-highlighted"));
+    }
+}
+
+// ── wrap_with_line_numbers tests ─────────────────────────────────────
+
+use crate::highlight::wrap_with_line_numbers;
+
+#[test]
+fn wrap_line_numbers_empty_input() {
+    let result = wrap_with_line_numbers("");
+    assert!(result.contains("data-line-number=\"1\""));
+    assert!(result.contains("data-md-line-gutter"));
+    // Single empty line should produce one numbered line
+    assert_eq!(result.matches("data-line-number").count(), 1);
+}
+
+#[test]
+fn wrap_line_numbers_single_line() {
+    let result = wrap_with_line_numbers("hello world");
+    assert!(result.contains("data-line-number=\"1\""));
+    assert!(result.contains("hello world"));
+    assert_eq!(result.matches("data-line-number").count(), 1);
+}
+
+#[test]
+fn wrap_line_numbers_multi_line() {
+    let result = wrap_with_line_numbers("line1\nline2\nline3");
+    assert!(result.contains("data-line-number=\"1\""));
+    assert!(result.contains("data-line-number=\"2\""));
+    assert!(result.contains("data-line-number=\"3\""));
+    assert_eq!(result.matches("data-line-number").count(), 3);
+    assert!(result.contains("line1"));
+    assert!(result.contains("line2"));
+    assert!(result.contains("line3"));
+}
+
+#[test]
+fn wrap_line_numbers_trailing_newline_trimmed() {
+    // syntect often ends output with a trailing newline — should not produce an extra empty line
+    let result = wrap_with_line_numbers("line1\nline2\n");
+    assert_eq!(result.matches("data-line-number").count(), 2);
+}
+
+#[test]
+fn wrap_line_numbers_non_selectable_gutter() {
+    let result = wrap_with_line_numbers("hello");
+    assert!(result.contains("user-select:none"));
+    assert!(result.contains("aria-hidden=\"true\""));
+}
+
+#[test]
+fn wrap_line_numbers_preserves_html_spans() {
+    // Simulate highlighted HTML with spans
+    let html = "<span class=\"hl-keyword\">fn</span> main() {}\n<span class=\"hl-comment\">// end</span>";
+    let result = wrap_with_line_numbers(html);
+    assert_eq!(result.matches("data-line-number").count(), 2);
+    assert!(result.contains("<span class=\"hl-keyword\">fn</span> main() {}"));
+    assert!(result.contains("<span class=\"hl-comment\">// end</span>"));
+}
+
+// ── Code block feature integration tests ─────────────────────────────
+
+use crop::Rope;
+use crate::parser::parse_document_full_with_config;
+
+#[test]
+fn parse_document_line_numbers_enabled() {
+    use crate::types::HtmlRenderPolicy;
+    let md = "```rust\nfn main() {}\n```\n";
+    let doc = parse_document_full_with_config(
+        &Rope::from(md),
+        HtmlRenderPolicy::Escape,
+        "hl-",
+        true,  // show_code_line_numbers
+        true,  // show_code_language
+    );
+    let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+        |props: dioxus::prelude::Element| props,
+        doc.element,
+    );
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("data-md-line-numbers"), "missing data-md-line-numbers on pre");
+    assert!(html.contains("data-md-line-gutter"), "missing line gutter spans");
+    assert!(html.contains("data-line-number"), "missing data-line-number on line spans");
+}
+
+#[test]
+fn parse_document_line_numbers_disabled() {
+    use crate::types::HtmlRenderPolicy;
+    let md = "```rust\nfn main() {}\n```\n";
+    let doc = parse_document_full_with_config(
+        &Rope::from(md),
+        HtmlRenderPolicy::Escape,
+        "hl-",
+        false, // show_code_line_numbers
+        true,  // show_code_language
+    );
+    let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+        |props: dioxus::prelude::Element| props,
+        doc.element,
+    );
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(!html.contains("data-md-line-numbers"), "should not have data-md-line-numbers when disabled");
+    assert!(!html.contains("data-md-line-gutter"), "should not have gutter spans when disabled");
+}
+
+#[test]
+fn parse_document_language_label_enabled() {
+    use crate::types::HtmlRenderPolicy;
+    let md = "```rust\nfn main() {}\n```\n";
+    let doc = parse_document_full_with_config(
+        &Rope::from(md),
+        HtmlRenderPolicy::Escape,
+        "hl-",
+        false,
+        true, // show_code_language
+    );
+    let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+        |props: dioxus::prelude::Element| props,
+        doc.element,
+    );
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("data-md-code-header"), "missing code header div");
+    assert!(html.contains("data-md-code-language"), "missing code language span");
+    assert!(html.contains(">rust<"), "missing language text 'rust'");
+}
+
+#[test]
+fn parse_document_language_label_disabled() {
+    use crate::types::HtmlRenderPolicy;
+    let md = "```rust\nfn main() {}\n```\n";
+    let doc = parse_document_full_with_config(
+        &Rope::from(md),
+        HtmlRenderPolicy::Escape,
+        "hl-",
+        false,
+        false, // show_code_language disabled
+    );
+    let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+        |props: dioxus::prelude::Element| props,
+        doc.element,
+    );
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(!html.contains("data-md-code-header"), "should not have code header when disabled");
+    assert!(!html.contains("data-md-code-language"), "should not have code language when disabled");
+}
+
+#[test]
+fn parse_document_indented_code_block_no_language_label() {
+    use crate::types::HtmlRenderPolicy;
+    // Indented code blocks have no language info — should never show language label
+    let md = "    fn main() {}\n";
+    let doc = parse_document_full_with_config(
+        &Rope::from(md),
+        HtmlRenderPolicy::Escape,
+        "hl-",
+        false,
+        true, // show_code_language enabled but no lang for indented blocks
+    );
+    let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
+        |props: dioxus::prelude::Element| props,
+        doc.element,
+    );
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(!html.contains("data-md-code-header"), "indented code blocks should never show language header");
 }

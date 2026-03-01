@@ -147,6 +147,22 @@ pub(crate) async fn sync_preview_to_editor(editor_id: &str, preview_id: &str) {
     interop::eval_void(&js).await;
 }
 
+/// Synchronizes the editor gutter scroll position to match the textarea's scrollTop.
+///
+/// Called from Editor's onscroll handler when editor line numbers are enabled.
+/// Sets gutter.scrollTop = textarea.scrollTop so line numbers stay aligned.
+pub(crate) async fn sync_gutter_scroll(editor_id: &str, gutter_id: &str) {
+    let js = format!(
+        r#"
+        const ed = document.getElementById('{editor_id}');
+        const gt = document.getElementById('{gutter_id}');
+        if (ed && gt) {{ gt.scrollTop = ed.scrollTop; }}
+        null
+    "#
+    );
+    interop::eval_void(&js).await;
+}
+
 /// Hook for viewport height tracking (iOS/Android virtual keyboard).
 ///
 /// Returns a `Signal<f64>` that tracks `window.visualViewport.height` (or

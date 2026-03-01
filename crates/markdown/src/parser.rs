@@ -5,6 +5,15 @@ use std::ops::Range;
 
 use crate::types::{HeadingEntry, HtmlRenderPolicy, NodeType, OwnedAstNode, ParsedDoc};
 
+/// Configuration for rendering the AST to Dioxus elements.
+#[derive(Debug, Clone)]
+pub(crate) struct RenderConfig<'a> {
+    pub html_render_policy: HtmlRenderPolicy,
+    pub highlight_class_prefix: &'a str,
+    pub show_code_line_numbers: bool,
+    pub show_code_language: bool,
+}
+
 pub enum CustomEvent<'a> {
     Standard(Event<'a>),
     Wikilink(String),
@@ -39,6 +48,35 @@ pub fn parse_document(input: &Rope) -> ParsedDoc {
 
 /// Parse a markdown rope into a `ParsedDoc` with explicit HTML render policy.
 pub fn parse_document_with_policy(input: &Rope, html_render_policy: HtmlRenderPolicy) -> ParsedDoc {
+    parse_document_full(input, html_render_policy, "hl-")
+}
+
+/// Parse a markdown rope with explicit HTML render policy and highlight class prefix.
+///
+/// `highlight_class_prefix` is prepended to CSS class names in syntax-highlighted
+/// code blocks (e.g. `"hl-"` produces `<span class="hl-keyword">`).
+pub fn parse_document_full(
+    input: &Rope,
+    html_render_policy: HtmlRenderPolicy,
+    highlight_class_prefix: &str,
+) -> ParsedDoc {
+    parse_document_full_with_config(
+        input,
+        html_render_policy,
+        highlight_class_prefix,
+        false,
+        true,
+    )
+}
+
+/// Parse a markdown rope with full configuration (including code block display options).
+pub fn parse_document_full_with_config(
+    input: &Rope,
+    html_render_policy: HtmlRenderPolicy,
+    highlight_class_prefix: &str,
+    show_code_line_numbers: bool,
+    show_code_language: bool,
+) -> ParsedDoc {
     let text = input.to_string(); // Temporary string for parsing, rope backing to come next if needed
     let opts = build_cmark_options();
     let parser = Parser::new_ext(&text, opts).into_offset_iter();
@@ -118,7 +156,13 @@ pub fn parse_document_with_policy(input: &Rope, html_render_policy: HtmlRenderPo
     // Pass 2: Replace standard text nodes with custom Wikilink and Tag nodes
     second_pass_custom_extensions(&mut root_children, &text);
 
-    let element = render_ast_to_element(&root_children, html_render_policy);
+    let config = RenderConfig {
+        html_render_policy,
+        highlight_class_prefix,
+        show_code_line_numbers,
+        show_code_language,
+    };
+    let element = render_ast_to_element(&root_children, &config);
     let ast = root_children.iter().filter_map(to_owned_node).collect();
 
     ParsedDoc {
@@ -246,11 +290,11 @@ pub(crate) fn sanitize_href(raw: &str) -> Option<String> {
 /// Render the AST tree into a Dioxus Element.
 pub(crate) fn render_ast_to_element(
     children: &[AstNode],
-    html_render_policy: HtmlRenderPolicy,
+    config: &RenderConfig,
 ) -> Element {
     let kids: Vec<Element> = children
         .iter()
-        .map(|node| render_node(node, html_render_policy))
+        .map(|node| render_node(node, config))
         .collect();
     rsx! {
         for child in kids {
@@ -259,13 +303,13 @@ pub(crate) fn render_ast_to_element(
     }
 }
 
-fn render_node(node: &AstNode, html_render_policy: HtmlRenderPolicy) -> Element {
+fn render_node(node: &AstNode, config: &RenderConfig) -> Element {
     let start_str = node.range.start.to_string();
     let end_str = node.range.end.to_string();
 
     match &node.event {
         CustomEvent::Standard(Event::Start(tag)) => {
-            render_tag(tag, &node.children, node.range.clone(), html_render_policy)
+            render_tag(tag, &node.children, node.range.clone(), config)
         }
         CustomEvent::Standard(Event::Text(t)) => {
             let txt = t.to_string();
@@ -282,7 +326,7 @@ fn render_node(node: &AstNode, html_render_policy: HtmlRenderPolicy) -> Element 
         }
         CustomEvent::Standard(Event::Html(h)) | CustomEvent::Standard(Event::InlineHtml(h)) => {
             let html = h.to_string();
-            if html_render_policy == HtmlRenderPolicy::Trusted {
+            if config.html_render_policy == HtmlRenderPolicy::Trusted {
                 rsx! { span { dangerous_inner_html: "{html}" } }
             } else {
                 rsx! { span { "{html}" } }
@@ -310,13 +354,13 @@ fn render_tag(
     tag: &Tag,
     children: &[AstNode],
     range: Range<usize>,
-    html_render_policy: HtmlRenderPolicy,
+    config: &RenderConfig,
 ) -> Element {
     let start_str = range.start.to_string();
     let end_str = range.end.to_string();
     let kids_elements: Vec<Element> = children
         .iter()
-        .map(|node| render_node(node, html_render_policy))
+        .map(|node| render_node(node, config))
         .collect();
     let kids = rsx! { for c in kids_elements { {c} } };
 
@@ -352,26 +396,51 @@ fn render_tag(
         }
         Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(info)) => {
             let lang = info.split_whitespace().next().unwrap_or("").to_string();
+            let code_text = extract_text_from_children(children);
+            let mut result = crate::highlight::highlight_code(&code_text, &lang, config.highlight_class_prefix);
+            if config.show_code_line_numbers {
+                result.html = crate::highlight::wrap_with_line_numbers(&result.html);
+            }
+            let highlighted_attr = result.language_matched.then_some("true");
+            let line_numbers_attr = config.show_code_line_numbers.then_some("");
+            let show_lang_header = config.show_code_language && !lang.is_empty();
             rsx! {
                 pre {
                     "data-md-code-block": "",
                     "data-md-language": "{lang}",
+                    "data-md-highlighted": highlighted_attr,
+                    "data-md-line-numbers": line_numbers_attr,
                     "data-source-start": "{start_str}",
                     "data-source-end": "{end_str}",
+                    if show_lang_header {
+                        div {
+                            "data-md-code-header": "",
+                            span { "data-md-code-language": "", "{lang}" }
+                        }
+                    }
                     code {
                         class: "language-{lang}",
-                        {kids}
+                        dangerous_inner_html: "{result.html}"
                     }
                 }
             }
         }
         Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Indented) => {
+            let code_text = extract_text_from_children(children);
+            let mut result = crate::highlight::highlight_code(&code_text, "", config.highlight_class_prefix);
+            if config.show_code_line_numbers {
+                result.html = crate::highlight::wrap_with_line_numbers(&result.html);
+            }
+            let line_numbers_attr = config.show_code_line_numbers.then_some("");
             rsx! {
                 pre {
                     "data-md-code-block": "",
+                    "data-md-line-numbers": line_numbers_attr,
                     "data-source-start": "{start_str}",
                     "data-source-end": "{end_str}",
-                    code { {kids} }
+                    code {
+                        dangerous_inner_html: "{result.html}"
+                    }
                 }
             }
         }

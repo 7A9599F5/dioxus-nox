@@ -29,34 +29,33 @@ struct RootState {
     trigger_parse: Callback<()>,
 }
 
-/// Initializes the core reactive state for the Root component.
-///
-/// Handles uncontrolled/controlled patterns for both mode and value,
-/// sets up the parse generation counter and derived parsed document memo.
-///
-/// # Arguments
-/// - `initial_mode`: initial mode for uncontrolled usage
-/// - `controlled_mode`: externally controlled mode signal (takes precedence)
-/// - `default_value`: initial value for uncontrolled usage
-/// - `controlled_value`: externally controlled value signal (takes precedence)
 // TODO(REF-002): consider unifying the gen+memo parse trigger with use_debounced_parse
 // from hooks.rs. Currently use_debounced_parse returns Signal<Rc<ParsedDoc>> (not Memo)
 // and uses gloo_timers for debouncing, while Root uses a synchronous gen counter + Memo.
 // Unification would require use_debounced_parse to return Memo<Rc<ParsedDoc>> or Root
 // to switch to Signal-based parsed state.
-fn use_root_state(
+
+/// Configuration for `use_root_state` — bundles parse and render options.
+struct RootConfig {
     initial_mode: Option<Mode>,
     controlled_mode: Option<Signal<Mode>>,
     default_value: Option<String>,
     controlled_value: Option<Signal<String>>,
     html_render_policy: HtmlRenderPolicy,
-) -> RootState {
+    highlight_class_prefix: String,
+    show_code_line_numbers: bool,
+    show_code_language: bool,
+}
+
+fn use_root_state(cfg: RootConfig) -> RootState {
     // Always allocate the internal mode signal unconditionally (rules of hooks).
     // If a controlled `mode` prop is provided, we use that instead.
-    let internal_mode = use_signal(|| initial_mode.unwrap_or(Mode::Source));
-    let mode = controlled_mode.unwrap_or(internal_mode);
+    let internal_mode = use_signal(|| cfg.initial_mode.unwrap_or(Mode::Source));
+    let mode = cfg.controlled_mode.unwrap_or(internal_mode);
 
     // Raw content buffer (hot-path, not a Signal<Rope>)
+    let default_value = cfg.default_value;
+    let controlled_value = cfg.controlled_value;
     let raw_content_ref: Rc<RefCell<Rope>> = use_hook(|| {
         Rc::new(RefCell::new(Rope::from(
             controlled_value
@@ -73,13 +72,20 @@ fn use_root_state(
 
     // Parsed document memo — recomputes when parse_gen changes.
     let raw_for_memo = raw_content;
+    let html_render_policy = cfg.html_render_policy;
+    let highlight_class_prefix = cfg.highlight_class_prefix;
+    let show_code_line_numbers = cfg.show_code_line_numbers;
+    let show_code_language = cfg.show_code_language;
     let parsed_doc: Memo<Rc<crate::types::ParsedDoc>> = use_memo(move || {
         // Read parse_gen to subscribe to trigger_parse updates
         let _gen = (parse_gen)();
         let content_rope = raw_for_memo.read().borrow().clone();
-        Rc::new(crate::parser::parse_document_with_policy(
+        Rc::new(crate::parser::parse_document_full_with_config(
             &content_rope,
             html_render_policy,
+            &highlight_class_prefix,
+            show_code_line_numbers,
+            show_code_language,
         ))
     });
 
@@ -126,11 +132,36 @@ pub fn Root(
     /// for trusted markdown input.
     #[props(default)]
     html_render_policy: HtmlRenderPolicy,
+    /// CSS class prefix for syntax-highlighted code spans.
+    ///
+    /// Default `"hl-"` produces `<span class="hl-keyword">`. Set to `""` for
+    /// unprefixed syntect classes, or a custom prefix for namespace isolation.
+    #[props(default = "hl-".to_string())]
+    #[props(into)]
+    highlight_class_prefix: String,
+    /// Show line numbers on rendered code blocks in Preview/Content.
+    #[props(default = false)]
+    show_code_line_numbers: bool,
+    /// Show language label on rendered fenced code blocks.
+    #[props(default = true)]
+    show_code_language: bool,
+    /// Show line number gutter on the source editor textarea.
+    #[props(default = false)]
+    show_editor_line_numbers: bool,
     class: Option<String>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
-    let state = use_root_state(initial_mode, mode, default_value, value, html_render_policy);
+    let state = use_root_state(RootConfig {
+        initial_mode,
+        controlled_mode: mode,
+        default_value,
+        controlled_value: value,
+        html_render_policy,
+        highlight_class_prefix: highlight_class_prefix.clone(),
+        show_code_line_numbers,
+        show_code_language,
+    });
 
     // Generate unique per-instance number for DOM IDs.
     let instance_n = use_hook(make_instance_n);
@@ -145,6 +176,7 @@ pub fn Root(
     let preedit = use_signal(|| None::<String>);
     let editor_mount: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
     let live_preview_variant_sig = use_signal(|| live_preview_variant);
+    let highlight_prefix_sig = use_signal(|| highlight_class_prefix);
 
     use_context_provider(|| MarkdownContext {
         mode: state.mode,
@@ -161,6 +193,10 @@ pub fn Root(
         disabled,
         trigger_parse: state.trigger_parse,
         live_preview_variant: live_preview_variant_sig,
+        highlight_class_prefix: highlight_prefix_sig,
+        show_code_line_numbers,
+        show_code_language,
+        show_editor_line_numbers,
     });
 
     use_context_provider(|| CursorContext {
@@ -261,6 +297,12 @@ pub fn Editor(
     // Focus tracking signal for data-md-editor-focused attribute
     let mut is_focused = use_signal(|| false);
 
+    // Line count signal for editor gutter (always allocated — rules of hooks)
+    let mut line_count = use_signal(|| {
+        let initial = ctx.raw_value();
+        initial.chars().filter(|&c| c == '\n').count() + 1
+    });
+
     // data-state: active when Source or LivePreview, inactive when Read
     let data_state = match (ctx.mode)() {
         Mode::Read => "inactive",
@@ -308,6 +350,10 @@ pub fn Editor(
             "data-md-word-wrap": "true",
             "data-disabled": disabled_attr,
             ..additional_attributes,
+            // ── Editor line number gutter ──
+            if ctx.show_editor_line_numbers {
+                {render_editor_gutter(ctx.gutter_id(), (line_count)())}
+            }
             textarea {
                 id: "{editor_id}",
                 role: "textbox",
@@ -370,6 +416,8 @@ pub fn Editor(
                 oninput: move |evt: FormEvent| {
                     let new_value = evt.value();
                     ctx.handle_value_change(new_value.clone());
+                    // Update line count for gutter
+                    line_count.set(new_value.chars().filter(|&c| c == '\n').count() + 1);
                     // Only trigger parse when not in IME composition
                     if !*composing_for_input.borrow() {
                         ctx.trigger_parse.call(());
@@ -435,8 +483,16 @@ pub fn Editor(
                     is_focused.set(false);
                 },
 
-                // ── Scroll sync: editor → preview ──
+                // ── Scroll sync: editor → preview + gutter ──
                 onscroll: move |_| {
+                    // Sync gutter scroll position to match textarea
+                    if ctx.show_editor_line_numbers {
+                        let eid = ctx.editor_id();
+                        let gid = ctx.gutter_id();
+                        spawn(async move {
+                            crate::hooks::sync_gutter_scroll(&eid, &gid).await;
+                        });
+                    }
                     if (ctx.is_preview_scrolling)() { return; }
                     let mut editor_flag = ctx.is_editor_scrolling;
                     let eid = ctx.editor_id();
@@ -806,6 +862,25 @@ pub fn Divider(
             "data-orientation": orientation.as_attr(),
             "data-md-splitter-dragging": "false",
             ..additional_attributes,
+        }
+    }
+}
+
+// ── Editor line number gutter helper ──────────────────────────────────
+
+/// Renders the editor line-number gutter div.
+fn render_editor_gutter(gutter_id: String, line_count: usize) -> Element {
+    let lines: Vec<usize> = (1..=line_count).collect();
+    rsx! {
+        div {
+            id: "{gutter_id}",
+            "data-md-line-gutter": "",
+            "data-md-editor-gutter": "",
+            aria_hidden: "true",
+            style: "user-select:none;overflow:hidden",
+            for i in lines {
+                div { "data-md-line-number": "{i}", "{i}" }
+            }
         }
     }
 }
