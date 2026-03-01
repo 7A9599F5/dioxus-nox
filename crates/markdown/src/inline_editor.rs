@@ -1099,13 +1099,28 @@ fn adjacent_editable_offset(
             .iter()
             .rev()
             .find(|range| range.start < current_start)
-            .map(last_caret_offset)
+            .map(|range| {
+                // Inter-block navigation: use end - 1 because AST ranges may
+                // include a trailing newline that we must not land on.
+                if range.end > range.start {
+                    range.end.saturating_sub(1)
+                } else {
+                    range.start
+                }
+            })
             .unwrap_or(current_start),
         NavDirection::Next => ranges
             .iter()
             .find(|range| range.start > current_start)
             .map(|range| range.start)
-            .unwrap_or(last_caret_offset(&(current_start..current_end))),
+            .unwrap_or_else(|| {
+                let range = &(current_start..current_end);
+                if range.end > range.start {
+                    range.end.saturating_sub(1)
+                } else {
+                    range.start
+                }
+            }),
     }
 }
 
@@ -1120,11 +1135,7 @@ fn collect_editable_ranges(nodes: &[OwnedAstNode], out: &mut Vec<std::ops::Range
 }
 
 fn last_caret_offset(range: &std::ops::Range<usize>) -> usize {
-    if range.end > range.start {
-        range.end.saturating_sub(1)
-    } else {
-        range.start
-    }
+    range.end
 }
 
 fn is_navigation_key(key: &str) -> bool {

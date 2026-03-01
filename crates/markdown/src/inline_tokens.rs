@@ -519,4 +519,75 @@ mod tests {
         let visible = raw_offset_to_visible_utf16(&model, raw);
         assert_eq!(visible, 5);
     }
+
+    #[test]
+    fn visible_end_maps_past_hidden_closing_marker() {
+        // "a single *owner*" — emphasis wraps "owner" with hidden * markers
+        let emph = OwnedAstNode {
+            node_type: NodeType::Emphasis,
+            range: 9..17,
+            children: vec![text_node(10, 16, "owner!")],
+        };
+        let node = OwnedAstNode {
+            node_type: NodeType::Paragraph,
+            range: 0..17,
+            children: vec![text_node(0, 9, "a single "), emph],
+        };
+        let raw = "a single *owner!*";
+        let hidden = vec![
+            MarkerVisibility {
+                marker_idx: 0,
+                visible: false,
+            },
+            MarkerVisibility {
+                marker_idx: 1,
+                visible: false,
+            },
+        ];
+        let model = build_tokenized_block(&node, raw, &hidden);
+        // Visible text: "a single owner!" (15 chars, visible UTF-16 range 0..15)
+        assert_eq!(model.visible_text, "a single owner!");
+        let max_visible = model.segments.last().map_or(0, |s| s.visible_utf16_end);
+        assert_eq!(max_visible, 15);
+
+        // At max_visible, raw offset lands at the closing * position (16, not 17).
+        // The last_caret_offset fix (returning range.end instead of range.end-1)
+        // ensures this position is no longer clamped away by the inline editor.
+        let raw_at_end = visible_utf16_to_raw_offset(&model, max_visible);
+        assert_eq!(raw_at_end, 16); // at the closing *, within the allowed range
+    }
+
+    #[test]
+    fn roundtrip_at_end_with_hidden_closing_marker() {
+        // "hello **world**" — strong wraps "world" with hidden ** markers
+        let strong = OwnedAstNode {
+            node_type: NodeType::Strong,
+            range: 6..15,
+            children: vec![text_node(8, 13, "world")],
+        };
+        let node = OwnedAstNode {
+            node_type: NodeType::Paragraph,
+            range: 0..15,
+            children: vec![text_node(0, 6, "hello "), strong],
+        };
+        let raw = "hello **world**";
+        let hidden = vec![
+            MarkerVisibility {
+                marker_idx: 0,
+                visible: false,
+            },
+            MarkerVisibility {
+                marker_idx: 1,
+                visible: false,
+            },
+        ];
+        let model = build_tokenized_block(&node, raw, &hidden);
+        assert_eq!(model.visible_text, "hello world");
+        let max_vis = model.segments.last().map_or(0, |s| s.visible_utf16_end);
+
+        // Round-trip: visible end → raw → visible should be stable
+        let raw_end = visible_utf16_to_raw_offset(&model, max_vis);
+        let vis_back = raw_offset_to_visible_utf16(&model, raw_end);
+        assert_eq!(vis_back, max_vis);
+    }
 }
