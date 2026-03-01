@@ -13,13 +13,14 @@ dioxus = { workspace = true }
 gloo-timers = { workspace = true }
 crop = "0.4.3"
 pulldown-cmark = "0.13.1"
+syntect = { workspace = true, features = ["default-fancy", "html"], optional = true }
 
 [features]
 default = ["web"]
 web = ["dioxus/web"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
-syntax-highlighting = []
+syntax-highlighting = ["dep:syntect"]
 
 [[example]]
 name = "basic_editor"

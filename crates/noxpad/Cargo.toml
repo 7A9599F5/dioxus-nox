@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 dioxus            = { workspace = true, features = ["web"] }
 dioxus-nox-shell  = { workspace = true }
-dioxus-nox-markdown = { workspace = true }
+dioxus-nox-markdown = { workspace = true, features = ["syntax-highlighting"] }
 dioxus-nox-cmdk   = { workspace = true, features = ["web"] }
 dioxus-nox-suggest = { workspace = true }
 dioxus-nox-tag-input = { workspace = true }
