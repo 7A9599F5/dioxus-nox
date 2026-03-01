@@ -8,7 +8,8 @@ use crate::context::{
     read_cursor_and_selection,
 };
 use crate::hooks::{
-    sync_editor_to_preview, sync_preview_to_editor, tab_indent_js, wrap_selection_js,
+    select_all_children_js, sync_editor_to_preview, sync_preview_to_editor, tab_indent_js,
+    wrap_selection_js,
 };
 use crate::inline_editor::InlineEditor;
 use crate::interop;
@@ -362,6 +363,7 @@ pub fn Editor(
                 placeholder: placeholder,
                 spellcheck: if spell_check { "true" } else { "false" },
                 disabled: ctx.disabled,
+                initial_value: ctx.raw_value(),
 
                 // ── onkeydown: Tab indent and Ctrl+B/I/K formatting shortcuts ──
                 onkeydown: move |evt: KeyboardEvent| {
@@ -619,13 +621,42 @@ pub fn Content(
     let ctx = use_context::<MarkdownContext>();
     let parsed = (ctx.parsed_doc)();
     let read_id = ctx.read_panel_id();
+    let mut mounted: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
+
+    // Auto-focus the Content div when entering Read mode so Ctrl+A is scoped.
+    use_effect(move || {
+        let mode = (ctx.mode)();
+        if mode == Mode::Read
+            && let Some(node) = mounted.read().as_ref()
+        {
+            let node = node.clone();
+            spawn(async move {
+                let _ = node.set_focus(true).await;
+            });
+        }
+    });
 
     rsx! {
         div {
             id: "{read_id}",
             class: class,
             role: "article",
+            tabindex: "-1",
             "data-md-mode": "read",
+            onmounted: move |evt: MountedEvent| {
+                mounted.set(Some(evt.data()));
+            },
+            onkeydown: move |evt: KeyboardEvent| {
+                let key = evt.key().to_string();
+                let ctrl_or_meta = evt.modifiers().ctrl() || evt.modifiers().meta();
+                if ctrl_or_meta && (key == "a" || key == "A") {
+                    evt.prevent_default();
+                    let rid = ctx.read_panel_id();
+                    spawn(async move {
+                        interop::eval_void(&select_all_children_js(&rid)).await;
+                    });
+                }
+            },
             ..additional_attributes,
             {parsed.element.clone()}
         }

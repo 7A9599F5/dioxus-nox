@@ -3,6 +3,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::context::{CursorContext, MarkdownContext};
+use crate::hooks::select_all_children_js;
 use crate::inline_tokens::{
     InlineMark, InlineSegment, MarkerVisibility, SegmentKind, TokenizedBlock,
     build_tokenized_block, collect_marker_tokens, raw_offset_to_visible_utf16,
@@ -61,10 +62,25 @@ pub fn InlineEditor(on_active_block_input: Option<EventHandler<ActiveBlockInputE
         }),
     }];
 
+    let ctx = use_context::<MarkdownContext>();
+    let inline_id = ctx.inline_editor_id();
+
     rsx! {
         div {
+            id: "{inline_id}",
             "data-md-inline-editor": "true",
             "data-state": "active",
+            onkeydown: move |evt: KeyboardEvent| {
+                let key = evt.key().to_string();
+                let ctrl_or_meta = evt.modifiers().ctrl() || evt.modifiers().meta();
+                if ctrl_or_meta && (key == "a" || key == "A") {
+                    evt.prevent_default();
+                    let iid = ctx.inline_editor_id();
+                    spawn(async move {
+                        interop::eval_void(&select_all_children_js(&iid)).await;
+                    });
+                }
+            },
             EditorViewport { overrides: overrides }
         }
     }
