@@ -322,6 +322,11 @@ fn TokenAwareBlockEditor(
                 style: "width:100%;min-width:100%;max-width:100%;box-sizing:border-box;outline:none;white-space:pre-wrap;word-break:break-word;",
                 onkeydown: move |evt: KeyboardEvent| {
                     let key = evt.key().to_string();
+                    if key == "Backspace" {
+                        evt.prevent_default();
+                        perform_block_join(ctx, cursor_ctx, safe_start);
+                        return;
+                    }
                     if key == "Enter" && !evt.modifiers().shift() {
                         evt.prevent_default();
                         let mut len_enter = current_len;
@@ -544,6 +549,16 @@ fn TokenAwareBlockEditor(
                             local_raw,
                         );
                     });
+                    return;
+                }
+                // ── Backspace at start of block: join with previous ──
+                if key == "Backspace" && target_visible_cursor == 0 && safe_start > 0 {
+                    evt.prevent_default();
+                    if let Some(nc) = nav_ctx {
+                        let mut gc = nc.goal_column;
+                        gc.set(None);
+                    }
+                    perform_block_join(ctx, cursor_ctx, safe_start);
                     return;
                 }
                 if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
@@ -1217,6 +1232,10 @@ fn ActiveBlockEditor(
                                 });
                                 continue;
                             }
+                            if msg == "backjoin" {
+                                perform_block_join(ctx, Some(cctx), safe_start);
+                                continue;
+                            }
                             if let Some(rest) = msg.strip_prefix("split:")
                                 && let Ok(split_utf16) = rest.parse::<usize>()
                             {
@@ -1845,6 +1864,37 @@ fn perform_block_split(
     if let Some(mut cctx) = cursor_ctx {
         cctx.cursor_position.set(CursorPosition {
             offset: start + split_at + 2,
+            line: 0,
+            column: 0,
+        });
+    }
+}
+
+/// Remove exactly ONE `\n` before `block_start`.
+///
+/// Symmetric inverse of `perform_block_split` (which inserts `\n\n`).
+/// Two paragraphs (`\n\n` gap): first Backspace → `\n` (soft break).
+/// Multiple blank lines (`\n\n\n\n`): each Backspace removes one `\n`.
+fn perform_block_join(
+    ctx: MarkdownContext,
+    cursor_ctx: Option<CursorContext>,
+    block_start: usize,
+) {
+    if block_start == 0 {
+        return;
+    }
+    let current_global = ctx.raw_value();
+    let pos = block_start.min(current_global.len());
+    if pos == 0 || current_global.as_bytes()[pos - 1] != b'\n' {
+        return;
+    }
+    let join_point = pos - 1;
+    let rebuilt = format!("{}{}", &current_global[..join_point], &current_global[pos..]);
+    ctx.handle_value_change(rebuilt);
+    ctx.trigger_parse.call(());
+    if let Some(mut cctx) = cursor_ctx {
+        cctx.cursor_position.set(CursorPosition {
+            offset: join_point,
             line: 0,
             column: 0,
         });
