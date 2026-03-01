@@ -216,6 +216,7 @@ pub fn Root(
     // Always call use_effect unconditionally (rules of hooks).
     // The effect is a no-op when value is None.
     let raw_for_effect = state.raw_content;
+    let trigger = state.trigger_parse;
     use_effect(move || {
         if let Some(cv) = value {
             let text = cv();
@@ -224,6 +225,12 @@ pub fn Root(
             if current == text {
                 return;
             }
+            // Synchronously update raw_content and re-parse.
+            // Primary sync for Inline/Read modes where no textarea exists.
+            *raw_for_effect.read().borrow_mut() = Rope::from(text.clone());
+            trigger.call(());
+            // Also sync textarea DOM value for Source mode.
+            // No-op if textarea is absent (Inline/Read modes).
             let eid = format!("nox-md-{instance_n}-editor");
             spawn(async move {
                 let js = handle_set_content_js(&eid, &text);
