@@ -79,6 +79,26 @@ pub(crate) fn tab_indent_js(editor_id: &str, tab_size: u8) -> String {
     )
 }
 
+/// Generates JS that selects all content within the element with `element_id`.
+///
+/// Uses `window.getSelection()` + `Range.selectNodeContents()` to create a
+/// selection spanning the entire element. Used by Content (Read mode) and
+/// InlineEditor (Inline mode) to scope Ctrl+A to the markdown region.
+pub(crate) fn select_all_children_js(element_id: &str) -> String {
+    format!(
+        r#"(function() {{
+    var el = document.getElementById('{element_id}');
+    if (!el) return;
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    sel.addRange(range);
+}})();"#,
+        element_id = element_id,
+    )
+}
+
 /// Reactive hook returning the heading index from the current parsed document.
 ///
 /// Consumes `MarkdownContext` — must be called inside a descendant of `markdown::Root`.
