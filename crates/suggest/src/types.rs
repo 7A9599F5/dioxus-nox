@@ -111,6 +111,10 @@ pub struct TriggerContext {
     pub(crate) trigger_configs: Signal<Vec<TriggerConfig>>,
     /// Mounted data of the `Trigger` wrapper div; used by `List` for positioning.
     pub(crate) trigger_element: Signal<Option<std::rc::Rc<MountedData>>>,
+    /// Caret-level anchor rect `[left, bottom, width]` for precise popover placement.
+    /// Populated by `Trigger` via JS eval after trigger detection.
+    /// When `Some`, `List` uses this instead of `trigger_element.get_client_rect()`.
+    pub(crate) anchor_rect: Signal<Option<[f64; 3]>>,
     /// Unique ID per `Root` instance (used for `PartialEq`).
     pub(crate) instance_id: u32,
 }
@@ -136,6 +140,8 @@ impl TriggerContext {
         f.set(String::new());
         let mut to = self.trigger_offset;
         to.set(0);
+        let mut ar = self.anchor_rect;
+        ar.set(None);
     }
 
     // ── Internal navigation ───────────────────────────────────────────────
