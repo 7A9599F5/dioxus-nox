@@ -38,6 +38,11 @@ struct BeforeInputMeta {
     is_collapsed: bool,
 }
 
+#[derive(Clone, Copy)]
+struct InlineNavCtx {
+    goal_column: Signal<Option<usize>>,
+}
+
 /// Obsidian-style inline markdown editor surface.
 ///
 /// In inline mode, this component renders fully formatted markdown blocks and
@@ -48,6 +53,10 @@ pub fn InlineEditor(on_active_block_input: Option<EventHandler<ActiveBlockInputE
     let cursor_offset = cursor_ctx
         .map(|c| c.cursor_position.read().offset)
         .unwrap_or(0);
+
+    provide_context(InlineNavCtx {
+        goal_column: use_signal(|| None),
+    });
 
     let overrides = vec![BlockOverride {
         matches: Rc::new(is_editable_block),
@@ -253,6 +262,7 @@ fn TokenAwareBlockEditor(
 ) -> Element {
     let ctx = use_context::<MarkdownContext>();
     let cursor_ctx = try_use_context::<CursorContext>();
+    let nav_ctx = try_use_context::<InlineNavCtx>();
     let raw = ctx.raw_value();
 
     let node_end = node.range.end.min(raw.len());
@@ -373,21 +383,58 @@ fn TokenAwareBlockEditor(
                         } else {
                             NavDirection::Next
                         };
-                        let target = adjacent_editable_offset(
-                            &parsed.ast,
-                            safe_start,
-                            safe_end,
-                            direction,
-                        );
-                        cctx.cursor_position.set(CursorPosition {
-                            offset: target,
-                            line: 0,
-                            column: 0,
+                        let block_id_vert = block_id_nav.clone();
+                        let raw_vert = ctx.raw_value();
+                        spawn(async move {
+                            let visible_now = {
+                                let js = interop::caret_adapter()
+                                    .read_contenteditable_selection_js(&block_id_vert);
+                                let mut eval = interop::start_eval(&js);
+                                interop::recv_string(&mut eval)
+                                    .await
+                                    .and_then(|s| s.parse::<usize>().ok())
+                                    .unwrap_or(0)
+                            };
+                            let goal_col = if let Some(nc) = nav_ctx {
+                                if let Some(gc) = (nc.goal_column)() {
+                                    gc
+                                } else {
+                                    let mut gc_sig = nc.goal_column;
+                                    gc_sig.set(Some(visible_now));
+                                    visible_now
+                                }
+                            } else {
+                                visible_now
+                            };
+                            if let Some(target_node) = adjacent_editable_node(
+                                &parsed.ast,
+                                safe_start,
+                                direction,
+                            ) {
+                                let t_start = target_node.range.start.min(raw_vert.len());
+                                let t_end = target_node.range.end.min(raw_vert.len());
+                                let clamped = resolve_visible_column_in_block(
+                                    &target_node,
+                                    &raw_vert,
+                                    t_start,
+                                    t_end,
+                                    goal_col,
+                                );
+                                cctx.cursor_position.set(CursorPosition {
+                                    offset: clamped,
+                                    line: 0,
+                                    column: 0,
+                                });
+                            }
                         });
                     }
                 }
                 if key == "ArrowLeft" || key == "ArrowRight" {
                     evt.prevent_default();
+                    if let Some(nc) = nav_ctx {
+                        let mut gc = nc.goal_column;
+                        gc.set(None);
+                    }
                     if let Some(mut cctx) = cursor_ctx {
                         let block_id = block_id_nav.clone();
                         let model = model_for_nav.clone();
@@ -429,6 +476,10 @@ fn TokenAwareBlockEditor(
             oninput: move |_| {
                 if is_composing() {
                     return;
+                }
+                if let Some(nc) = nav_ctx {
+                    let mut gc = nc.goal_column;
+                    gc.set(None);
                 }
                 // Drop stale restore requests from earlier click/nav events.
                 // Text mutations own caret placement via the input pipeline.
@@ -539,6 +590,10 @@ fn TokenAwareBlockEditor(
                 }
             },
             onmouseup: move |_| {
+                if let Some(nc) = nav_ctx {
+                    let mut gc = nc.goal_column;
+                    gc.set(None);
+                }
                 if let Some(mut cctx) = cursor_ctx {
                     let block_id = block_id_mouseup.clone();
                     let model = model_for_mouseup.clone();
@@ -589,8 +644,14 @@ fn TokenAwareBlockEditor(
                 }
             },
             onmounted: move |_| {
+                let mount_target = nav_ctx
+                    .and_then(|nc| {
+                        (nc.goal_column)()
+                            .map(|gc| gc.min(utf16_len(&inline_visible_text)))
+                    })
+                    .unwrap_or(target_visible_cursor_mount);
                 let set_js = interop::caret_adapter()
-                    .set_contenteditable_selection_js(&block_id_mount, target_visible_cursor_mount);
+                    .set_contenteditable_selection_js(&block_id_mount, mount_target);
                 let bind_js = interop::caret_adapter().bind_contenteditable_input_js(&block_id_mount);
                 spawn(async move {
                     interop::eval_void(&set_js).await;
@@ -1033,6 +1094,35 @@ fn ActiveBlockEditor(
     }
 }
 
+/// Convert a visible UTF-16 column to a raw byte offset within a block.
+/// All markers are treated as hidden (cursor not yet in target block).
+fn resolve_visible_column_in_block(
+    node: &OwnedAstNode,
+    full_raw: &str,
+    block_start: usize,
+    block_end: usize,
+    visible_utf16: usize,
+) -> usize {
+    let editable_end = trim_editable_block_end(full_raw, block_start, block_end);
+    let block_raw = &full_raw[block_start..editable_end];
+    let mut model_node = node.clone();
+    model_node.range = block_start..editable_end;
+    let markers = collect_marker_tokens(&model_node, block_raw, block_start);
+    let visibility = markers
+        .iter()
+        .enumerate()
+        .map(|(idx, _)| MarkerVisibility {
+            marker_idx: idx,
+            visible: false,
+        })
+        .collect::<Vec<_>>();
+    let model = build_tokenized_block(&model_node, full_raw, &visibility);
+    let visible_byte = visible_utf16_to_raw_offset(&model, visible_utf16);
+    block_start
+        .saturating_add(visible_byte)
+        .min(last_caret_offset(&(block_start..editable_end)))
+}
+
 fn handle_inactive_block_click(
     cursor_ctx: Option<CursorContext>,
     raw: String,
@@ -1041,6 +1131,10 @@ fn handle_inactive_block_click(
     safe_start: usize,
     safe_end: usize,
 ) {
+    if let Some(nc) = try_use_context::<InlineNavCtx>() {
+        let mut gc = nc.goal_column;
+        gc.set(None);
+    }
     if let Some(mut cctx) = cursor_ctx {
         spawn(async move {
             let js = interop::caret_adapter().read_block_visual_offset_js(&block_id);
@@ -1052,23 +1146,9 @@ fn handle_inactive_block_click(
 
             let slice_end = safe_end.min(raw.len());
             let slice_start = safe_start.min(slice_end);
-            let editable_end = trim_editable_block_end(&raw, slice_start, slice_end);
-            let block_raw = &raw[slice_start..editable_end];
-            let mut model_node = node.clone();
-            model_node.range = slice_start..editable_end;
-            let markers = collect_marker_tokens(&model_node, block_raw, slice_start);
-            let visibility = markers
-                .iter()
-                .enumerate()
-                .map(|(idx, _)| MarkerVisibility {
-                    marker_idx: idx,
-                    visible: false,
-                })
-                .collect::<Vec<_>>();
-            let model = build_tokenized_block(&model_node, &raw, &visibility);
-            let visible_byte = visible_utf16_to_raw_offset(&model, visual_utf16);
-            let new_offset = slice_start.saturating_add(visible_byte);
-            let clamped_offset = new_offset.min(last_caret_offset(&(slice_start..editable_end)));
+            let clamped_offset = resolve_visible_column_in_block(
+                &node, &raw, slice_start, slice_end, visual_utf16,
+            );
 
             cctx.cursor_position.set(CursorPosition {
                 offset: clamped_offset,
@@ -1091,28 +1171,28 @@ fn adjacent_editable_offset(
     current_end: usize,
     direction: NavDirection,
 ) -> usize {
-    let mut ranges = Vec::new();
-    collect_editable_ranges(ast, &mut ranges);
+    let mut nodes = Vec::new();
+    collect_editable_nodes(ast, &mut nodes);
 
     match direction {
-        NavDirection::Prev => ranges
+        NavDirection::Prev => nodes
             .iter()
             .rev()
-            .find(|range| range.start < current_start)
-            .map(|range| {
+            .find(|n| n.range.start < current_start)
+            .map(|n| {
                 // Inter-block navigation: use end - 1 because AST ranges may
                 // include a trailing newline that we must not land on.
-                if range.end > range.start {
-                    range.end.saturating_sub(1)
+                if n.range.end > n.range.start {
+                    n.range.end.saturating_sub(1)
                 } else {
-                    range.start
+                    n.range.start
                 }
             })
             .unwrap_or(current_start),
-        NavDirection::Next => ranges
+        NavDirection::Next => nodes
             .iter()
-            .find(|range| range.start > current_start)
-            .map(|range| range.start)
+            .find(|n| n.range.start > current_start)
+            .map(|n| n.range.start)
             .unwrap_or_else(|| {
                 let range = &(current_start..current_end);
                 if range.end > range.start {
@@ -1124,13 +1204,33 @@ fn adjacent_editable_offset(
     }
 }
 
-fn collect_editable_ranges(nodes: &[OwnedAstNode], out: &mut Vec<std::ops::Range<usize>>) {
+fn adjacent_editable_node(
+    ast: &[OwnedAstNode],
+    current_start: usize,
+    direction: NavDirection,
+) -> Option<OwnedAstNode> {
+    let mut nodes = Vec::new();
+    collect_editable_nodes(ast, &mut nodes);
+    match direction {
+        NavDirection::Prev => nodes
+            .iter()
+            .rev()
+            .find(|n| n.range.start < current_start)
+            .cloned(),
+        NavDirection::Next => nodes
+            .iter()
+            .find(|n| n.range.start > current_start)
+            .cloned(),
+    }
+}
+
+fn collect_editable_nodes(nodes: &[OwnedAstNode], out: &mut Vec<OwnedAstNode>) {
     for node in nodes {
         if is_editable_block(node) {
-            out.push(node.range.clone());
+            out.push(node.clone());
             continue;
         }
-        collect_editable_ranges(&node.children, out);
+        collect_editable_nodes(&node.children, out);
     }
 }
 
