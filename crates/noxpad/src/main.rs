@@ -123,6 +123,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: #888; margin: 8px 0; }
 [data-md-inline-editor] ul, [data-md-inline-editor] ol { padding-left: 20px; margin: 4px 0; }
 [data-md-inline-editor] hr { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
+[role="article"][data-md-mode="read"] { flex: 1; padding: 12px 0; overflow-y: auto;
+    line-height: 1.7; font-size: 15px; }
+[data-md-mode="read"] h1 { font-size: 1.8em; font-weight: 700; margin: 0.8em 0 0.4em; }
+[data-md-mode="read"] h2 { font-size: 1.4em; font-weight: 600; margin: 0.7em 0 0.3em; }
+[data-md-mode="read"] h3 { font-size: 1.2em; font-weight: 600; margin: 0.6em 0 0.2em; }
+[data-md-mode="read"] p { margin: 0.4em 0; }
+[data-md-mode="read"] code { background: #222; padding: 1px 4px; border-radius: 3px;
+    font-family: monospace; font-size: 0.9em; }
+[data-md-mode="read"] pre { background: #1a1a1a; padding: 12px; border-radius: 6px; margin: 8px 0; }
+[data-md-mode="read"] blockquote { border-left: 3px solid #444; padding-left: 12px;
+    color: #888; margin: 8px 0; }
+[data-md-mode="read"] ul, [data-md-mode="read"] ol { padding-left: 20px; margin: 4px 0; }
+[data-md-mode="read"] hr { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
 [data-md-root] textarea { flex: 1; background: transparent; border: none; outline: none;
     color: #e0e0e0; font-family: 'Fira Code', monospace; font-size: 14px;
     line-height: 1.7; resize: none; padding: 12px 0; }
