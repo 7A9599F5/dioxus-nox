@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-cd crates/suggest/examples/noxpad/playwright
+cd crates/noxpad/playwright
 npm install
 npm run install:browsers
 ```

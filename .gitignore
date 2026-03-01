@@ -9,3 +9,5 @@ tmp/
 .claude/
 .context/
 **/.context/
+.pi/
+.pi/lib/widget-helpers.ts
