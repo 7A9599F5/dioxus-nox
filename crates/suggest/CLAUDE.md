@@ -53,6 +53,15 @@ let sg = use_suggestion();
 use_effect(move || { cmd_ctx.search.set(sg.filter()); });
 ```
 
+## Known Issues
+
+### `external_input` effect subscription lost after mode switch
+**Severity:** Medium — workaround is page refresh
+**Location:** `components.rs`, `Trigger` component, `use_effect` at ~line 152
+**Symptom:** After switching from a mode where `external_input` is `None` (e.g. Source) back to a mode where it is `Some(signal)` (e.g. Inline/LivePreview), the `use_effect` that drives trigger detection from the external signal stops firing. Typing `/` in inline mode does nothing until the page is reloaded.
+**Root cause:** The `use_effect` closure early-returns when `external_input` is `None`, subscribing to zero signals. When the component re-renders with `external_input: Some(sig)`, Dioxus 0.7's effect scheduler has no prior signal subscription to invalidate, so the effect body never re-runs despite the new prop value.
+**Fix direction:** Read a "generation" signal before the early-return guard so the effect always has at least one subscription. Alternatively, restructure so `external_input` is always `Some(sig)` (with a sentinel value like `("", 0)` when inactive), avoiding the `None` → `Some` transition entirely.
+
 ## v0.1 Limitations
 - `highlighted_index` uses mount-order Vec indexing; items with duplicate values behave unexpectedly
 - No auto-flip for `List` placement (always opens below)

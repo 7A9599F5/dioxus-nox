@@ -7,6 +7,61 @@ use crate::placement::compute_float_style;
 use crate::trigger::{detect_trigger, extract_filter};
 use crate::types::{TriggerConfig, TriggerContext, TriggerSelectEvent, next_instance_id};
 
+// ── Anchor rect helper ───────────────────────────────────────────────────────
+
+/// Populate `ctx.anchor_rect` with the caret bounding rect via JS eval.
+///
+/// Uses `window.getSelection().getRangeAt(0).getBoundingClientRect()` first
+/// (works for contenteditable), falling back to `document.activeElement`
+/// rect (works for textarea). Non-WASM: no-op.
+///
+/// <!-- web_sys used here: confirmed no Dioxus 0.7 native API for caret rect
+///      as of 2026-03-01. Source: Dioxus docs + dioxus-primitives search.
+///      Non-WASM targets: anchor_rect stays None, List falls back to trigger_element. -->
+#[allow(unused_variables)]
+async fn update_anchor_rect(ctx: TriggerContext) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let js = r#"
+            (function() {
+                var sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                    var r = sel.getRangeAt(0).getBoundingClientRect();
+                    if (r.width > 0 || r.height > 0) {
+                        dioxus.send([r.left, r.bottom, r.width]);
+                        return;
+                    }
+                }
+                var el = document.activeElement;
+                if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
+                    var text = el.value.substring(0, el.selectionStart);
+                    var lines = text.split('\n');
+                    var lineNum = lines.length - 1;
+                    var style = window.getComputedStyle(el);
+                    var lineHeight = parseFloat(style.lineHeight);
+                    if (isNaN(lineHeight)) lineHeight = parseFloat(style.fontSize) * 1.2;
+                    var paddingTop = parseFloat(style.paddingTop) || 0;
+                    var paddingLeft = parseFloat(style.paddingLeft) || 0;
+                    var rect = el.getBoundingClientRect();
+                    var top = rect.top + paddingTop + (lineNum * lineHeight) - el.scrollTop;
+                    var bottom = top + lineHeight;
+                    dioxus.send([rect.left + paddingLeft, bottom, rect.width]);
+                } else if (el) {
+                    var r = el.getBoundingClientRect();
+                    dioxus.send([r.left, r.bottom, r.width]);
+                } else {
+                    dioxus.send(null);
+                }
+            })()
+        "#;
+        let mut ev = document::eval(js);
+        if let Ok(arr) = ev.recv::<Option<[f64; 3]>>().await {
+            let mut ar = ctx.anchor_rect;
+            ar.set(arr);
+        }
+    }
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 /// Context provider for the suggestion primitive.
@@ -40,6 +95,7 @@ pub fn Root(
         use_signal(|| Some(on_select));
     let trigger_configs: Signal<Vec<TriggerConfig>> = use_signal(|| triggers.clone());
     let trigger_element: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
+    let anchor_rect: Signal<Option<[f64; 3]>> = use_signal(|| None);
 
     // Keep on_select and trigger_configs in sync with props across re-renders.
     use_effect(move || {
@@ -60,6 +116,7 @@ pub fn Root(
         on_select: on_select_sig,
         trigger_configs,
         trigger_element,
+        anchor_rect,
         instance_id,
     };
 
@@ -128,6 +185,10 @@ pub fn Trigger(
                 ctx2.filter.set(filter);
                 ctx2.highlighted_index.set(None);
                 found = true;
+                // Populate anchor_rect from caret position for precise popover placement.
+                spawn(async move {
+                    update_anchor_rect(ctx2).await;
+                });
                 break;
             }
         }
@@ -197,6 +258,7 @@ pub fn Trigger(
                             ctx_inner.trigger_offset.set(offset);
                             ctx_inner.filter.set(filter);
                             ctx_inner.highlighted_index.set(None);
+                            update_anchor_rect(ctx_inner).await;
                             found = true;
                             break;
                         }
@@ -271,16 +333,25 @@ pub fn List(
     let ctx = use_context::<TriggerContext>();
     let float_style: Signal<String> = use_signal(String::new);
 
-    // Recompute position whenever the trigger opens.
+    // Recompute position whenever the trigger opens or anchor_rect changes.
     use_effect(move || {
         // Subscribe BEFORE early-return guard (Dioxus 0.7 gotcha).
         let is_open = ctx.active_char.read().is_some();
+        let maybe_anchor = *ctx.anchor_rect.read();
         if !is_open {
             return;
         }
-        let el = ctx.trigger_element.read().clone();
         let mut fs = float_style;
         let offset = side_offset;
+
+        // Prefer caret-level anchor_rect when available (precise positioning).
+        if let Some([left, bottom, width]) = maybe_anchor {
+            fs.set(compute_float_style(left, bottom, width.max(240.0), offset, 0.0));
+            return;
+        }
+
+        // Fallback: use trigger_element rect (wraps entire editor).
+        let el = ctx.trigger_element.read().clone();
         spawn(async move {
             let Some(data) = el else { return };
             let Ok(rect) = data.get_client_rect().await else {

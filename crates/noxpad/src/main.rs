@@ -434,34 +434,6 @@ fn replace_trigger_range(
     format!("{}{}{}", &text[..start], replacement, &text[end..])
 }
 
-fn replace_in_active_block(
-    full_text: &str,
-    block: &ActiveBlockInputEvent,
-    event: &TriggerSelectEvent,
-    replacement: &str,
-) -> Option<String> {
-    let block_start = block.block_start.min(full_text.len());
-    let block_end = block.block_end.min(full_text.len());
-    if block_end < block_start {
-        return None;
-    }
-
-    let replaced_block = replace_trigger_range(
-        &block.raw_text,
-        event.trigger_offset,
-        event.trigger_char,
-        &event.filter,
-        replacement,
-    );
-
-    Some(format!(
-        "{}{}{}",
-        &full_text[..block_start],
-        replaced_block,
-        &full_text[block_end..]
-    ))
-}
-
 fn note_by_index(notes: &[Note], idx: usize) -> Option<&Note> {
     notes.get(idx)
 }
@@ -701,7 +673,6 @@ fn NoteEditor(
     });
 
     let mut inline_input: Signal<(String, usize)> = use_signal(|| (String::new(), 0));
-    let mut active_block_input: Signal<Option<ActiveBlockInputEvent>> = use_signal(|| None);
     let inline_input_read: ReadSignal<(String, usize)> = inline_input.into();
 
     use_effect(move || {
@@ -721,7 +692,6 @@ fn NoteEditor(
             .unwrap_or_default();
         content.set(next_content);
         inline_input.set((String::new(), 0));
-        active_block_input.set(None);
     });
 
     let note_title = notes
@@ -772,7 +742,7 @@ fn NoteEditor(
             } else {
                 suggest::Root {
                     triggers: vec![
-                        TriggerConfig::slash(),
+                        TriggerConfig { line_start_only: false, ..TriggerConfig::slash() },
                         TriggerConfig::mention(),
                         TriggerConfig::hashtag(),
                     ],
@@ -782,27 +752,17 @@ fn NoteEditor(
                             return;
                         }
 
+                        // trigger_offset is always a full-doc byte offset (both
+                        // Source mode and Inline mode now pass full doc text), so
+                        // replace_trigger_range works directly on the full content.
                         let old_text = content.read().clone();
-                        let new_text = if let Some(block) = active_block_input.read().as_ref() {
-                            replace_in_active_block(&old_text, block, &evt, &replacement)
-                                .unwrap_or_else(|| {
-                                    replace_trigger_range(
-                                        &old_text,
-                                        evt.trigger_offset,
-                                        evt.trigger_char,
-                                        &evt.filter,
-                                        &replacement,
-                                    )
-                                })
-                        } else {
-                            replace_trigger_range(
-                                &old_text,
-                                evt.trigger_offset,
-                                evt.trigger_char,
-                                &evt.filter,
-                                &replacement,
-                            )
-                        };
+                        let new_text = replace_trigger_range(
+                            &old_text,
+                            evt.trigger_offset,
+                            evt.trigger_char,
+                            &evt.filter,
+                            &replacement,
+                        );
 
                         content.set(new_text.clone());
                         let idx = *current_idx.read();
@@ -835,9 +795,14 @@ fn NoteEditor(
 
                             markdown::Editor {
                                 on_active_block_input: move |evt: ActiveBlockInputEvent| {
-                                    inline_input
-                                        .set((evt.raw_text.clone(), evt.cursor_raw_utf16));
-                                    active_block_input.set(Some(evt));
+                                    // Pass full document text + absolute cursor to
+                                    // suggest::Trigger so line_start_only detection
+                                    // works correctly in inline mode.
+                                    let full_raw = content.read().clone();
+                                    let prefix_len = evt.block_start.min(full_raw.len());
+                                    let prefix_utf16 = full_raw[..prefix_len].encode_utf16().count();
+                                    let abs_cursor_utf16 = prefix_utf16 + evt.cursor_raw_utf16;
+                                    inline_input.set((full_raw, abs_cursor_utf16));
                                 }
                             }
                         }
