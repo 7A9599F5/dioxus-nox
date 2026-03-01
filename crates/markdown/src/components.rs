@@ -288,6 +288,12 @@ pub fn Editor(
     /// Fires on every `oninput` in inline mode with the active block's raw text + cursor.
     /// Forwarded to [`InlineEditor`] when `LivePreviewVariant::Inline` is active.
     on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
+    /// Intercept keydown events before the editor processes them.
+    ///
+    /// Called with the key name (e.g. `"ArrowDown"`). Return `true` to consume
+    /// the event (prevent_default + stop_propagation), `false` to let it through.
+    /// Used by suggestion popovers to capture arrow/Enter/Escape navigation.
+    on_key_intercept: Option<Callback<String, bool>>,
     #[props(extends = GlobalAttributes)] additional_attributes: Vec<Attribute>,
 ) -> Element {
     let ctx = use_context::<MarkdownContext>();
@@ -343,7 +349,7 @@ pub fn Editor(
                 "data-md-word-wrap": "true",
                 "data-disabled": disabled_attr,
                 ..additional_attributes,
-                InlineEditor { on_active_block_input }
+                InlineEditor { on_active_block_input, on_key_intercept }
             }
         };
     }
@@ -376,6 +382,16 @@ pub fn Editor(
                 onkeydown: move |evt: KeyboardEvent| {
                     // CRITICAL: ALL prevent_default() calls MUST be SYNCHRONOUS before any spawn
                     let key = evt.key().to_string();
+
+                    // ── Key intercept (suggestion popover) ────────────────────
+                    if let Some(ref interceptor) = on_key_intercept
+                        && interceptor.call(key.clone())
+                    {
+                        evt.prevent_default();
+                        evt.stop_propagation();
+                        return;
+                    }
+
                     let ctrl = evt.modifiers().ctrl();
                     let shift = evt.modifiers().shift();
 

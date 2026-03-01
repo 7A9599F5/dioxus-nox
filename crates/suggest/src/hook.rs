@@ -61,4 +61,12 @@ impl SuggestionHandle {
     pub fn close(&self) {
         self.ctx.close();
     }
+
+    /// Handle a keydown event when the suggestion popover is open.
+    ///
+    /// Returns `true` if the key was consumed (caller should `prevent_default`
+    /// and `stop_propagation`), `false` if the key should pass through.
+    pub fn handle_keydown(&self, key: &str) -> bool {
+        self.ctx.handle_keydown(key)
+    }
 }

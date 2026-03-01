@@ -43,7 +43,10 @@ struct BeforeInputMeta {
 /// In inline mode, this component renders fully formatted markdown blocks and
 /// swaps only the active block into a raw-markdown `<textarea>`.
 #[component]
-pub fn InlineEditor(on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>) -> Element {
+pub fn InlineEditor(
+    on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
+    on_key_intercept: Option<Callback<String, bool>>,
+) -> Element {
     let cursor_ctx = try_use_context::<CursorContext>();
     let cursor_offset = cursor_ctx
         .map(|c| c.cursor_position.read().offset)
@@ -56,7 +59,8 @@ pub fn InlineEditor(on_active_block_input: Option<EventHandler<ActiveBlockInputE
                 InlineBlockNode {
                     node: node,
                     cursor_offset: cursor_offset,
-                    on_active_block_input: on_active_block_input
+                    on_active_block_input: on_active_block_input,
+                    on_key_intercept: on_key_intercept,
                 }
             }
         }),
@@ -102,6 +106,7 @@ fn InlineBlockNode(
     node: OwnedAstNode,
     cursor_offset: usize,
     on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
+    on_key_intercept: Option<Callback<String, bool>>,
 ) -> Element {
     let is_active = cursor_offset >= node.range.start && cursor_offset < node.range.end;
     if !is_active {
@@ -112,7 +117,8 @@ fn InlineBlockNode(
         rsx! {
             ActiveBlockEditor {
                 node: node,
-                on_active_block_input: on_active_block_input
+                on_active_block_input: on_active_block_input,
+                on_key_intercept: on_key_intercept,
             }
         }
     } else {
@@ -121,6 +127,7 @@ fn InlineBlockNode(
                 node: node,
                 cursor_offset: cursor_offset,
                 on_active_block_input: on_active_block_input,
+                on_key_intercept: on_key_intercept,
             }
         }
     }
@@ -250,6 +257,7 @@ fn TokenAwareBlockEditor(
     node: OwnedAstNode,
     cursor_offset: usize,
     on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
+    on_key_intercept: Option<Callback<String, bool>>,
 ) -> Element {
     let ctx = use_context::<MarkdownContext>();
     let cursor_ctx = try_use_context::<CursorContext>();
@@ -364,6 +372,14 @@ fn TokenAwareBlockEditor(
             style: "width:100%;min-width:100%;max-width:100%;box-sizing:border-box;outline:none;white-space:pre-wrap;word-break:break-word;",
             onkeydown: move |evt: KeyboardEvent| {
                 let key = evt.key().to_string();
+                // ── Key intercept (suggestion popover) ────────────────────
+                if let Some(ref interceptor) = on_key_intercept
+                    && interceptor.call(key.clone())
+                {
+                    evt.prevent_default();
+                    evt.stop_propagation();
+                    return;
+                }
                 if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
                     evt.prevent_default();
                     if let Some(mut cctx) = cursor_ctx {
@@ -800,6 +816,7 @@ fn spawn_token_editor_sync(
 fn ActiveBlockEditor(
     node: OwnedAstNode,
     on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
+    on_key_intercept: Option<Callback<String, bool>>,
 ) -> Element {
     let ctx = use_context::<MarkdownContext>();
     let cursor_ctx = try_use_context::<CursorContext>();
@@ -842,6 +859,14 @@ fn ActiveBlockEditor(
             // to a narrow measure and cause visual line-wrap jumps.
             style: "width:100%;min-width:100%;max-width:100%;box-sizing:border-box;resize:none;overflow:hidden;font:inherit;color:inherit;background:transparent;border:none;margin:0;padding:0;outline:none;line-height:inherit;display:block;",
             initial_value: "{initial_text}",
+            onkeydown: move |evt: KeyboardEvent| {
+                if let Some(ref interceptor) = on_key_intercept
+                    && interceptor.call(evt.key().to_string())
+                {
+                    evt.prevent_default();
+                    evt.stop_propagation();
+                }
+            },
             oninput: move |evt: FormEvent| {
                 let new_local = evt.value();
                 let current_global = ctx.raw_value();
