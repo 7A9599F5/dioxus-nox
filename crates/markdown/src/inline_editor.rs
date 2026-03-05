@@ -246,6 +246,7 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
             }
         }
         _ => {
+            let is_blank_line = matches!(node.node_type, NodeType::Paragraph) && node.children.is_empty();
             let block_id_for_click = block_id.clone();
             let node_for_click = node.clone();
             let node_for_render = node.clone();
@@ -253,6 +254,7 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
                 div {
                     id: "{block_id}",
                     "data-md-inline-block": "true",
+                    "data-md-blank-line": if is_blank_line { Some("true") } else { None },
                     onclick: move |_| {
                         handle_inactive_block_click(
                             cursor_ctx,
@@ -263,9 +265,13 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
                             safe_end,
                         );
                     },
-                    ViewportNode {
-                        node: node_for_render,
-                        overrides: vec![]
+                    if is_blank_line {
+                        p { br {} }
+                    } else {
+                        ViewportNode {
+                            node: node_for_render,
+                            overrides: vec![]
+                        }
                     }
                 }
             }
@@ -1758,11 +1764,9 @@ fn cursor_after_visible_edit(
 ///
 /// pulldown-cmark absorbs one trailing `\n` into each block's range. The minimum
 /// gap between two paragraphs is 1 byte (the second `\n` of the `\n\n` separator).
-/// Each additional `\n` in a gap represents a blank line the user intentionally
-/// created and should be able to cursor into.
-///
-/// For trailing gaps (after the last block), the first `\n` is the block's line
-/// ending; additional `\n`s become synthetic empty paragraphs.
+/// Every `\n` in a gap becomes a synthetic empty paragraph, so the standard `\n\n`
+/// separator produces 1 visible blank line. Each Backspace at a block boundary
+/// removes one `\n`, reducing synthetic paragraphs by 1 for immediate visual feedback.
 pub(crate) fn inject_gap_paragraphs(ast: &[OwnedAstNode], raw: &str) -> Vec<OwnedAstNode> {
     let mut result = Vec::with_capacity(ast.len() * 2);
     let mut prev_end: usize = 0;
@@ -1772,10 +1776,10 @@ pub(crate) fn inject_gap_paragraphs(ast: &[OwnedAstNode], raw: &str) -> Vec<Owne
         let gap_end = node.range.start;
         if gap_start < gap_end {
             let gap_bytes = &raw[gap_start..gap_end];
-            // Minimum separator between blocks is 1 `\n` (the gap).
-            // Each extra `\n` beyond the first becomes a synthetic empty paragraph.
+            // Every `\n` in the gap becomes a synthetic empty paragraph.
+            // Standard `\n\n` separator → 1 synthetic node (visible blank line).
             let newline_count = gap_bytes.bytes().filter(|&b| b == b'\n').count();
-            for i in 1..newline_count {
+            for i in 0..newline_count {
                 let byte_pos = gap_start + i;
                 result.push(OwnedAstNode {
                     node_type: NodeType::Paragraph,
@@ -1792,8 +1796,8 @@ pub(crate) fn inject_gap_paragraphs(ast: &[OwnedAstNode], raw: &str) -> Vec<Owne
     if prev_end < raw.len() {
         let trailing = &raw[prev_end..];
         let newline_count = trailing.bytes().filter(|&b| b == b'\n').count();
-        // First `\n` is the block's line ending; each additional becomes a synthetic node
-        for i in 1..newline_count {
+        // Every `\n` in the trailing gap becomes a synthetic node
+        for i in 0..newline_count {
             let byte_pos = prev_end + i;
             result.push(OwnedAstNode {
                 node_type: NodeType::Paragraph,
@@ -2113,8 +2117,8 @@ mod tests {
     #[test]
     fn inject_gap_paragraphs_minimal_gap() {
         // Standard \n\n separator: pulldown-cmark includes trailing \n in first block,
-        // so the gap is 1 byte (the second \n). 1 newline in gap = minimum separator,
-        // no synthetic nodes.
+        // so the gap is 1 byte (the second \n). 1 newline in gap → 1 synthetic node
+        // (visible blank line between blocks).
         let ast = vec![
             OwnedAstNode {
                 node_type: NodeType::Paragraph,
@@ -2129,14 +2133,18 @@ mod tests {
         ];
         let raw = "Hello\n\nWorld\n";
         let result = inject_gap_paragraphs(&ast, raw);
-        // Gap is raw[6..7] = "\n" → 1 newline → 0 synthetic nodes (loop 1..1 is empty)
-        assert_eq!(result.len(), 2);
+        // Gap is raw[6..7] = "\n" → 1 newline → 1 synthetic node (loop 0..1)
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].range, 0..6);
+        assert_eq!(result[1].range, 6..7); // synthetic blank-line paragraph
+        assert!(result[1].children.is_empty());
+        assert_eq!(result[2].range, 7..13);
     }
 
     #[test]
     fn inject_gap_paragraphs_single_extra_blank_line() {
         // "Hello\n\n\nWorld\n" — gap between blocks is 2 bytes ("\n\n"),
-        // which means 2 newlines in the gap → 1 synthetic node (loop 1..2)
+        // which means 2 newlines in the gap → 2 synthetic nodes (loop 0..2)
         let ast = vec![
             OwnedAstNode {
                 node_type: NodeType::Paragraph,
@@ -2151,18 +2159,20 @@ mod tests {
         ];
         let raw = "Hello\n\n\nWorld\n";
         let result = inject_gap_paragraphs(&ast, raw);
-        // Gap is raw[6..8] = "\n\n" → 2 newlines → 1 synthetic node
-        assert_eq!(result.len(), 3);
+        // Gap is raw[6..8] = "\n\n" → 2 newlines → 2 synthetic nodes
+        assert_eq!(result.len(), 4);
         assert_eq!(result[0].range, 0..6); // original first block
-        assert_eq!(result[1].range, 7..8); // synthetic empty paragraph
+        assert_eq!(result[1].range, 6..7); // first synthetic
+        assert_eq!(result[2].range, 7..8); // second synthetic
         assert!(result[1].children.is_empty());
-        assert_eq!(result[2].range, 8..14); // original second block
+        assert!(result[2].children.is_empty());
+        assert_eq!(result[3].range, 8..14); // original second block
     }
 
     #[test]
     fn inject_gap_paragraphs_multiple_extra_blank_lines() {
         // "Hello\n\n\n\nWorld\n" — gap is 3 bytes ("\n\n\n"),
-        // 3 newlines in gap → 2 synthetic nodes (loop 1..3)
+        // 3 newlines in gap → 3 synthetic nodes (loop 0..3)
         let ast = vec![
             OwnedAstNode {
                 node_type: NodeType::Paragraph,
@@ -2177,12 +2187,13 @@ mod tests {
         ];
         let raw = "Hello\n\n\n\nWorld\n";
         let result = inject_gap_paragraphs(&ast, raw);
-        // Gap is raw[6..9] = "\n\n\n" → 3 newlines → 2 synthetic nodes
-        assert_eq!(result.len(), 4);
+        // Gap is raw[6..9] = "\n\n\n" → 3 newlines → 3 synthetic nodes
+        assert_eq!(result.len(), 5);
         assert_eq!(result[0].range, 0..6);
-        assert_eq!(result[1].range, 7..8); // first synthetic
-        assert_eq!(result[2].range, 8..9); // second synthetic
-        assert_eq!(result[3].range, 9..15);
+        assert_eq!(result[1].range, 6..7); // first synthetic
+        assert_eq!(result[2].range, 7..8); // second synthetic
+        assert_eq!(result[3].range, 8..9); // third synthetic
+        assert_eq!(result[4].range, 9..15);
     }
 
     #[test]
@@ -2197,11 +2208,13 @@ mod tests {
         ];
         let raw = "Hello\n\n\n";
         let result = inject_gap_paragraphs(&ast, raw);
-        // Trailing is raw[6..8] = "\n\n" → 2 newlines → 1 synthetic node (loop 1..2)
-        assert_eq!(result.len(), 2);
+        // Trailing is raw[6..8] = "\n\n" → 2 newlines → 2 synthetic nodes (loop 0..2)
+        assert_eq!(result.len(), 3);
         assert_eq!(result[0].range, 0..6);
-        assert_eq!(result[1].range, 7..8); // synthetic trailing
+        assert_eq!(result[1].range, 6..7); // first synthetic trailing
+        assert_eq!(result[2].range, 7..8); // second synthetic trailing
         assert!(result[1].children.is_empty());
+        assert!(result[2].children.is_empty());
     }
 
     #[test]
