@@ -896,6 +896,102 @@ fn TokenAwareBlockEditor(
     }
 }
 
+/// Walk `visible_text` chars to find the UTF-16 position of the start of
+/// the character that ends at `caret_vis_utf16`. Returns `None` if already at
+/// position 0 (nothing to delete backwards).
+fn previous_visible_char_utf16(visible_text: &str, caret_vis_utf16: usize) -> Option<usize> {
+    if caret_vis_utf16 == 0 {
+        return None;
+    }
+    let mut pos = 0usize;
+    for ch in visible_text.chars() {
+        let prev_pos = pos;
+        pos += ch.len_utf16();
+        if pos >= caret_vis_utf16 {
+            return Some(prev_pos);
+        }
+    }
+    None
+}
+
+/// Walk `visible_text` chars to find the UTF-16 position after the character
+/// starting at `caret_vis_utf16`. Returns `None` if at or past end.
+fn next_visible_char_utf16(visible_text: &str, caret_vis_utf16: usize) -> Option<usize> {
+    let mut pos = 0usize;
+    for ch in visible_text.chars() {
+        if pos == caret_vis_utf16 {
+            return Some(pos + ch.len_utf16());
+        }
+        pos += ch.len_utf16();
+        if pos > caret_vis_utf16 {
+            // caret was in the middle of a multi-unit char — treat as this char end
+            return Some(pos);
+        }
+    }
+    None
+}
+
+/// Given a visible character spanning `[vis_start..vis_end)`, find the raw
+/// byte range it maps to. Resolves segment-boundary ambiguity by requiring
+/// the character to be fully contained within a single segment.
+fn visible_char_raw_range(
+    model: &TokenizedBlock,
+    vis_start: usize,
+    vis_end: usize,
+) -> Option<(usize, usize)> {
+    for seg in &model.segments {
+        if vis_start >= seg.visible_utf16_start && vis_end <= seg.visible_utf16_end {
+            let local_start = vis_start - seg.visible_utf16_start;
+            let local_end = vis_end - seg.visible_utf16_start;
+            let byte_start = utf16_to_byte_index(&seg.text, local_start)?;
+            let byte_end = utf16_to_byte_index(&seg.text, local_end)?;
+            return Some((
+                seg.raw_range.start + byte_start,
+                seg.raw_range.start + byte_end,
+            ));
+        }
+    }
+    None
+}
+
+/// For single-character collapsed deletions (`deleteContentBackward` /
+/// `deleteContentForward`), compute the exact raw byte range to delete
+/// using the render-time model and pre-edit caret position.
+///
+/// Returns `Some((raw_del_start, raw_del_end, new_cursor_vis_utf16))` on
+/// success, or `None` if this edit type is not handled (falls through to
+/// the existing diff path).
+fn direct_delete_from_beforeinput(
+    meta: &BeforeInputMeta,
+    model: &TokenizedBlock,
+    block_raw: &str,
+) -> Option<(usize, usize, usize)> {
+    if !meta.is_collapsed {
+        return None;
+    }
+    let caret = meta.pre_visible_caret_utf16;
+
+    match meta.input_type.as_str() {
+        "deleteContentBackward" => {
+            let prev = previous_visible_char_utf16(&model.visible_text, caret)?;
+            let (raw_start, raw_end) = visible_char_raw_range(model, prev, caret)?;
+            if raw_start >= raw_end || raw_end > block_raw.len() {
+                return None;
+            }
+            Some((raw_start, raw_end, prev))
+        }
+        "deleteContentForward" => {
+            let next = next_visible_char_utf16(&model.visible_text, caret)?;
+            let (raw_start, raw_end) = visible_char_raw_range(model, caret, next)?;
+            if raw_start >= raw_end || raw_end > block_raw.len() {
+                return None;
+            }
+            Some((raw_start, raw_end, caret))
+        }
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_token_editor_sync(
     block_id: String,
@@ -944,6 +1040,80 @@ fn spawn_token_editor_sync(
         let old_len = *len_sig.read();
         let end = (start + old_len).min(current_global.len());
         let block_raw_current = current_global[start..end].to_string();
+
+        // ── Direct-delete fast path ──────────────────────────────────
+        // For single-character collapsed deletions, bypass DOM text diffing
+        // entirely: use the render-time model + beforeinput caret to compute
+        // the exact raw byte range.
+        if let Some(ref meta) = before_input_meta
+            && let Some((raw_del_start, raw_del_end, new_cursor_vis)) =
+                direct_delete_from_beforeinput(meta, &model, &block_raw_current)
+        {
+            let rebuilt_local = format!(
+                "{}{}",
+                &block_raw_current[..raw_del_start],
+                &block_raw_current[raw_del_end..],
+            );
+            let rebuilt_global = format!(
+                "{}{}{}",
+                &current_global[..start],
+                rebuilt_local,
+                &current_global[end..],
+            );
+            len_sig.set(rebuilt_local.len());
+            ctx.handle_value_change(rebuilt_global.clone());
+            ctx.trigger_parse.call(());
+            applied_revision.set(captured_revision);
+
+            let raw_cursor_local =
+                raw_del_start.min(last_caret_offset(&(0..rebuilt_local.len())));
+
+            if let Some(mut cctx) = cursor_ctx_local {
+                cctx.cursor_position.set(CursorPosition {
+                    offset: start.saturating_add(raw_cursor_local),
+                    line: 0,
+                    column: 0,
+                });
+            }
+            pending_restore.set(Some(PendingCaretRestore::Visible(new_cursor_vis)));
+
+            if let Some(handler) = handler {
+                let mut fresh_node = node_local.clone();
+                fresh_node.range = start..start.saturating_add(rebuilt_local.len());
+                let fresh_tokens =
+                    collect_marker_tokens(&fresh_node, &rebuilt_local, start);
+                let fresh_visibility_flags = marker_visibility(
+                    &fresh_tokens,
+                    RevealContext {
+                        caret_raw_offset: raw_cursor_local,
+                        selection: None,
+                    },
+                );
+                let fresh_visibility = fresh_visibility_flags
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, visible)| MarkerVisibility {
+                        marker_idx: idx,
+                        visible: *visible,
+                    })
+                    .collect::<Vec<_>>();
+                let fresh_model =
+                    build_tokenized_block(&fresh_node, &rebuilt_global, &fresh_visibility);
+                handler.call(ActiveBlockInputEvent {
+                    raw_text: fresh_model.raw_text.clone(),
+                    visible_text: fresh_model.visible_text.clone(),
+                    cursor_raw_utf16: byte_to_utf16_index(
+                        &fresh_model.raw_text,
+                        raw_cursor_local,
+                    )
+                    .unwrap_or(0),
+                    cursor_visible_utf16: new_cursor_vis,
+                    block_start: start,
+                    block_end: start.saturating_add(fresh_model.raw_text.len()),
+                });
+            }
+            return;
+        }
 
         let mut candidate_models = vec![
             model.clone(),
@@ -1935,11 +2105,13 @@ mod tests {
     use super::{
         BeforeInputMeta, VisibleEdit, compute_post_visible_caret,
         NavDirection, adjacent_editable_offset, block_has_inline_markup,
-        cursor_within_inline_markup, inject_gap_paragraphs, is_latest_revision,
-        normalize_cursor_visible_for_edit, select_best_input_projection,
+        cursor_within_inline_markup, direct_delete_from_beforeinput,
+        inject_gap_paragraphs, is_latest_revision,
+        next_visible_char_utf16, normalize_cursor_visible_for_edit,
+        previous_visible_char_utf16, select_best_input_projection,
         snap_cursor_to_block, uses_token_aware_surface,
     };
-    use crate::inline_tokens::TokenizedBlock;
+    use crate::inline_tokens::{InlineSegment, SegmentKind, TokenizedBlock};
     use crate::types::{NodeType, OwnedAstNode};
 
     fn text_node(start: usize, end: usize, text: &str) -> OwnedAstNode {
@@ -2332,5 +2504,241 @@ mod tests {
         assert_eq!(snap_cursor_to_block(&ast, 8), 8);
         // Cursor at exact start of first block
         assert_eq!(snap_cursor_to_block(&ast, 0), 0);
+    }
+
+    // ── direct_delete_from_beforeinput tests ─────────────────────────
+
+    /// Helper: build a plain-text TokenizedBlock (no hidden markers).
+    fn plain_model(text: &str) -> TokenizedBlock {
+        let utf16_end: usize = text.chars().map(char::len_utf16).sum();
+        TokenizedBlock {
+            raw_text: text.to_string(),
+            block_start: 0,
+            block_end: text.len(),
+            segments: vec![InlineSegment {
+                raw_range: 0..text.len(),
+                text: text.to_string(),
+                marks: vec![],
+                kind: SegmentKind::Text,
+                visible_utf16_start: 0,
+                visible_utf16_end: utf16_end,
+            }],
+            visible_text: text.to_string(),
+        }
+    }
+
+    /// Helper: build a model with hidden markers (e.g. `**bold**` → visible `bold`).
+    /// `raw` = full raw text, `parts` = (raw_range, text, visible) segments.
+    fn model_with_segments(
+        raw: &str,
+        parts: Vec<(std::ops::Range<usize>, &str, bool)>,
+    ) -> TokenizedBlock {
+        let mut segments = Vec::new();
+        let mut vis_pos = 0usize;
+        let mut visible_text = String::new();
+        for (range, text, is_visible) in &parts {
+            if *is_visible {
+                let utf16_len: usize = text.chars().map(char::len_utf16).sum();
+                segments.push(InlineSegment {
+                    raw_range: range.clone(),
+                    text: text.to_string(),
+                    marks: vec![],
+                    kind: SegmentKind::Text,
+                    visible_utf16_start: vis_pos,
+                    visible_utf16_end: vis_pos + utf16_len,
+                });
+                visible_text.push_str(text);
+                vis_pos += utf16_len;
+            }
+            // Hidden markers are simply not in the segments list
+        }
+        TokenizedBlock {
+            raw_text: raw.to_string(),
+            block_start: 0,
+            block_end: raw.len(),
+            segments,
+            visible_text,
+        }
+    }
+
+    fn backspace_meta(caret: usize) -> BeforeInputMeta {
+        BeforeInputMeta {
+            input_type: "deleteContentBackward".to_string(),
+            data: String::new(),
+            pre_visible_caret_utf16: caret,
+            pre_visible_selection_end_utf16: caret,
+            is_collapsed: true,
+        }
+    }
+
+    fn forward_delete_meta(caret: usize) -> BeforeInputMeta {
+        BeforeInputMeta {
+            input_type: "deleteContentForward".to_string(),
+            data: String::new(),
+            pre_visible_caret_utf16: caret,
+            pre_visible_selection_end_utf16: caret,
+            is_collapsed: true,
+        }
+    }
+
+    #[test]
+    fn direct_backspace_in_plain_text() {
+        // "hello" → backspace at position 5 → delete 'o' (bytes 4..5)
+        let model = plain_model("hello");
+        let meta = backspace_meta(5);
+        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        assert_eq!(result, Some((4, 5, 4)));
+    }
+
+    #[test]
+    fn direct_backspace_adjacent_to_hidden_marker() {
+        // Raw: "**bold**" (8 bytes), visible: "bold" (4 chars)
+        // Hidden markers: ** at raw 0..2 and ** at raw 6..8
+        // Cursor at visible pos 4 (end of "bold") → should delete 'd' (raw 5..6)
+        let model = model_with_segments("**bold**", vec![
+            (0..2, "**", false),   // hidden opening **
+            (2..6, "bold", true),  // visible text
+            (6..8, "**", false),   // hidden closing **
+        ]);
+        let meta = backspace_meta(4); // end of visible "bold"
+        let result = direct_delete_from_beforeinput(&meta, &model, "**bold**");
+        assert_eq!(result, Some((5, 6, 3))); // delete raw 5..6 ('d'), cursor → vis 3
+    }
+
+    #[test]
+    fn direct_backspace_inside_revealed_marker() {
+        // Raw: "**bold**" (8 bytes), all markers revealed (visible = "**bold**")
+        // Cursor at visible pos 2 (after "**") → should delete '*' (raw 1..2)
+        let model = model_with_segments("**bold**", vec![
+            (0..2, "**", true),    // visible opening **
+            (2..6, "bold", true),  // visible text
+            (6..8, "**", true),    // visible closing **
+        ]);
+        let meta = backspace_meta(2); // after opening "**"
+        let result = direct_delete_from_beforeinput(&meta, &model, "**bold**");
+        assert_eq!(result, Some((1, 2, 1))); // delete raw 1..2 ('*'), cursor → vis 1
+    }
+
+    #[test]
+    fn direct_backspace_after_hidden_closing_marker() {
+        // Raw: "**bold** more" (13 bytes), visible: "bold more"
+        // Hidden markers: ** at raw 0..2 and ** at raw 6..8
+        // Cursor at visible pos 5 (the space after "bold") → maps to raw 8 (after hidden **)
+        // Should delete the last char of content before cursor in visible space = ' ' which
+        // is at raw 8. But wait — visible char before pos 5 is at pos 4 ("bold" ends).
+        // Actually visible "bold more": pos 4 = ' ', pos 5 = 'm'
+        // Let's put cursor at vis 4 (the space) → backspace deletes 'd' at vis 3
+        let model = model_with_segments("**bold** more", vec![
+            (0..2, "**", false),       // hidden opening **
+            (2..6, "bold", true),      // visible text
+            (6..8, "**", false),       // hidden closing **
+            (8..13, " more", true),    // visible text
+        ]);
+        let meta = backspace_meta(5); // cursor at vis 5 (space before "more")
+        let result = direct_delete_from_beforeinput(&meta, &model, "**bold** more");
+        // vis 5 = ' ' (raw 8), vis 4 = 'd' (raw 5) — wait, vis 4 is the start of " more" seg
+        // Actually: "bold" is vis 0..4, " more" is vis 4..9
+        // vis 5 maps to raw 9 (' ' is at raw 8, 'm' at raw 9 — vis 4 = raw 8)
+        // Backspace at vis 5: prev char is vis 4, so delete raw mapping of vis 4..vis 5
+        // vis 4 → raw 8, vis 5 → raw 9, so delete raw 8..9 = ' '
+        assert_eq!(result, Some((8, 9, 4)));
+    }
+
+    #[test]
+    fn direct_delete_forward_plain_text() {
+        // "hello" → Delete key at position 0 → delete 'h' (bytes 0..1)
+        let model = plain_model("hello");
+        let meta = forward_delete_meta(0);
+        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        assert_eq!(result, Some((0, 1, 0)));
+    }
+
+    #[test]
+    fn direct_backspace_with_emoji() {
+        // "a😀b" — '😀' is 4 bytes, 2 UTF-16 units
+        let model = plain_model("a😀b");
+        // Cursor at vis pos 3 (after 😀: 'a'=1 UTF-16, '😀'=2 UTF-16)
+        let meta = backspace_meta(3);
+        let result = direct_delete_from_beforeinput(&meta, &model, "a😀b");
+        // Should delete '😀' at raw bytes 1..5, cursor → vis 1
+        assert_eq!(result, Some((1, 5, 1)));
+    }
+
+    #[test]
+    fn direct_backspace_at_position_zero_returns_none() {
+        let model = plain_model("hello");
+        let meta = backspace_meta(0);
+        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn direct_delete_non_collapsed_returns_none() {
+        let model = plain_model("hello");
+        let meta = BeforeInputMeta {
+            input_type: "deleteContentBackward".to_string(),
+            data: String::new(),
+            pre_visible_caret_utf16: 2,
+            pre_visible_selection_end_utf16: 4,
+            is_collapsed: false,
+        };
+        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn direct_delete_insert_type_returns_none() {
+        let model = plain_model("hello");
+        let meta = BeforeInputMeta {
+            input_type: "insertText".to_string(),
+            data: "x".to_string(),
+            pre_visible_caret_utf16: 3,
+            pre_visible_selection_end_utf16: 3,
+            is_collapsed: true,
+        };
+        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn direct_backspace_with_strikethrough_hidden() {
+        // Raw: "~~strike~~" (10 bytes), visible: "strike" (6 chars)
+        // Cursor at visible pos 6 (end) → delete 'e' (raw 7..8)
+        let model = model_with_segments("~~strike~~", vec![
+            (0..2, "~~", false),       // hidden opening ~~
+            (2..8, "strike", true),    // visible text
+            (8..10, "~~", false),      // hidden closing ~~
+        ]);
+        let meta = backspace_meta(6);
+        let result = direct_delete_from_beforeinput(&meta, &model, "~~strike~~");
+        assert_eq!(result, Some((7, 8, 5)));
+    }
+
+    #[test]
+    fn previous_visible_char_utf16_basic() {
+        assert_eq!(previous_visible_char_utf16("hello", 0), None);
+        assert_eq!(previous_visible_char_utf16("hello", 1), Some(0));
+        assert_eq!(previous_visible_char_utf16("hello", 5), Some(4));
+    }
+
+    #[test]
+    fn previous_visible_char_utf16_emoji() {
+        // "a😀b" — UTF-16: a(1) 😀(2) b(1) = total 4
+        assert_eq!(previous_visible_char_utf16("a😀b", 3), Some(1)); // before 😀 = pos 1
+        assert_eq!(previous_visible_char_utf16("a😀b", 1), Some(0)); // before a = 0
+    }
+
+    #[test]
+    fn next_visible_char_utf16_basic() {
+        assert_eq!(next_visible_char_utf16("hello", 0), Some(1));
+        assert_eq!(next_visible_char_utf16("hello", 4), Some(5));
+        assert_eq!(next_visible_char_utf16("hello", 5), None); // past end
+    }
+
+    #[test]
+    fn next_visible_char_utf16_emoji() {
+        // "a😀b" — UTF-16: a(1) 😀(2) b(1)
+        assert_eq!(next_visible_char_utf16("a😀b", 1), Some(3)); // 😀 occupies 2 units
+        assert_eq!(next_visible_char_utf16("a😀b", 3), Some(4)); // 'b' is 1 unit
     }
 }
