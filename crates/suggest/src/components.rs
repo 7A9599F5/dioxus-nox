@@ -434,6 +434,13 @@ pub fn Item(
         div {
             "data-highlighted": (*is_highlighted.read()).then_some("true"),
             role: "option",
+            // Prevent mousedown from stealing focus away from the editor
+            // (contenteditable or textarea). Without this, clicking an item
+            // moves DOM focus to the popover, leaving the editor unfocused
+            // after the selection handler runs.
+            onmousedown: move |evt: MouseEvent| {
+                evt.prevent_default();
+            },
             onclick: move |_| {
                 let ac = *ctx.active_char.read();
                 let filter = ctx.filter.read().clone();

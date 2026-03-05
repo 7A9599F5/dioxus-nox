@@ -110,6 +110,7 @@ pub fn InlineEditor(
                         node: node.clone(),
                         cursor_offset: cursor_offset,
                         on_active_block_input: on_active_block_input,
+                        on_key_intercept: on_key_intercept,
                     }
                 }
             }
