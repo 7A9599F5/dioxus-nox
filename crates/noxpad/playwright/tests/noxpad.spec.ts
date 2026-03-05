@@ -508,6 +508,138 @@ test('closing ** via mouseup-then-type does not land caret inside delimiter', as
   expect(dragContextPanic2, `Runtime errors: ${allErrors.join('\n')}`).toBeUndefined();
 });
 
+test('Backspace at start of second paragraph removes one newline from gap', async ({
+  page,
+}) => {
+  const { consoleErrors, pageErrors } = attachErrorCollectors(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Source' }).click();
+
+  const sourceEditor = page.locator('textarea[id^="nox-md-"][id$="-editor"]');
+  await expect(sourceEditor).toBeVisible();
+  await sourceEditor.fill('First paragraph\n\nSecond paragraph');
+
+  await page.getByRole('button', { name: 'Inline' }).click();
+
+  const secondP = page.locator('[data-md-inline-editor="true"] p').nth(1);
+  await expect(secondP).toBeVisible();
+  await secondP.click({ position: { x: 2, y: 8 } });
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+
+  await page.getByRole('button', { name: 'Source' }).click();
+  const value = await sourceEditor.inputValue();
+  expect(value).toBe('First paragraph\nSecond paragraph');
+
+  const allErrors = [...consoleErrors, ...pageErrors];
+  expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
+});
+
+test('two Backspaces at start of second paragraph fully join paragraphs', async ({
+  page,
+}) => {
+  const { consoleErrors, pageErrors } = attachErrorCollectors(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Source' }).click();
+
+  const sourceEditor = page.locator('textarea[id^="nox-md-"][id$="-editor"]');
+  await expect(sourceEditor).toBeVisible();
+  await sourceEditor.fill('First paragraph\n\nSecond paragraph');
+
+  await page.getByRole('button', { name: 'Inline' }).click();
+
+  const secondP = page.locator('[data-md-inline-editor="true"] p').nth(1);
+  await expect(secondP).toBeVisible();
+  await secondP.click({ position: { x: 2, y: 8 } });
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(300);
+
+  // First Backspace: \n\n → \n
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+
+  // Second Backspace: \n removed by native browser (inside merged block)
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+
+  await page.getByRole('button', { name: 'Source' }).click();
+  const value = await sourceEditor.inputValue();
+  expect(value).toBe('First paragraphSecond paragraph');
+
+  const allErrors = [...consoleErrors, ...pageErrors];
+  expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
+});
+
+test('Backspace at start of first block is no-op', async ({ page }) => {
+  const { consoleErrors, pageErrors } = attachErrorCollectors(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Source' }).click();
+
+  const sourceEditor = page.locator('textarea[id^="nox-md-"][id$="-editor"]');
+  await expect(sourceEditor).toBeVisible();
+  await sourceEditor.fill('First paragraph\n\nSecond paragraph');
+
+  await page.getByRole('button', { name: 'Inline' }).click();
+
+  const firstP = page.locator('[data-md-inline-editor="true"] p').first();
+  await expect(firstP).toBeVisible();
+  await firstP.click({ position: { x: 2, y: 8 } });
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+
+  await page.getByRole('button', { name: 'Source' }).click();
+  const value = await sourceEditor.inputValue();
+  expect(value).toBe('First paragraph\n\nSecond paragraph');
+
+  const allErrors = [...consoleErrors, ...pageErrors];
+  expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
+});
+
+test('Backspace in middle of text does normal deletion', async ({ page }) => {
+  const { consoleErrors, pageErrors } = attachErrorCollectors(page);
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Source' }).click();
+
+  const sourceEditor = page.locator('textarea[id^="nox-md-"][id$="-editor"]');
+  await expect(sourceEditor).toBeVisible();
+  await sourceEditor.fill('Hello World\n\nSecond line');
+
+  await page.getByRole('button', { name: 'Inline' }).click();
+
+  const firstP = page.locator('[data-md-inline-editor="true"] p').first();
+  await expect(firstP).toBeVisible();
+  await firstP.click({ position: { x: 60, y: 8 } });
+  await page.waitForTimeout(300);
+
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(500);
+
+  await page.getByRole('button', { name: 'Source' }).click();
+  const value = await sourceEditor.inputValue();
+  // One character deleted, separator intact
+  expect(value).toContain('\n\n');
+  expect(value.length).toBe('Hello World\n\nSecond line'.length - 1);
+
+  const allErrors = [...consoleErrors, ...pageErrors];
+  expect(pageErrors, `Unhandled page errors: ${pageErrors.join('\n')}`).toEqual([]);
+});
+
 test('typing ** bold from scratch keeps caret after closing **', async ({ page }) => {
   // Regression: when NO pre-existing ** pair exists on the block, completing the
   // closing ** left the cursor between the two * chars (*#*) instead of after (**#).

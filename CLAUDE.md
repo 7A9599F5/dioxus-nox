@@ -16,6 +16,7 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 10 crates in `crates/`.
 | `dioxus-nox-suggest` | `crates/suggest` | 0.1.0 | Headless inline-trigger suggestion primitive (slash, @mentions, #hashtags) |
 | `dioxus-nox-tag-input` | `crates/tag-input` | 0.1.0 | Headless tag/multi-select input |
 | `dioxus-nox-markdown` | `crates/markdown` | 0.1.0 | Headless markdown editor/previewer/display |
+| `noxpad` | `crates/noxpad` | 0.1.0 | 7-crate integration demo app |
 
 @crates/cmdk/CLAUDE.md
 @crates/virtualize/CLAUDE.md
@@ -27,6 +28,7 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 10 crates in `crates/`.
 @crates/suggest/CLAUDE.md
 @crates/tag-input/CLAUDE.md
 @crates/markdown/CLAUDE.md
+@crates/noxpad/CLAUDE.md
 
 ### Cross-Crate Relationships
 

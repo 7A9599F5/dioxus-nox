@@ -2563,3 +2563,53 @@ fn parse_document_indented_code_block_no_language_label() {
     let html = dioxus_ssr::render(&vdom);
     assert!(!html.contains("data-md-code-header"), "indented code blocks should never show language header");
 }
+
+// ── pulldown-cmark AST range diagnostic tests ──────────────────────
+
+#[test]
+fn parser_ranges_two_paragraphs() {
+    // "Hello\n\nWorld" — two paragraphs separated by blank line
+    let md = "Hello\n\nWorld";
+    let doc = crate::parser::parse_document(&Rope::from(md));
+    // We expect two Paragraph nodes; inspect their ranges to confirm gap behavior
+    assert_eq!(doc.ast.len(), 2, "expected 2 top-level nodes, got {}", doc.ast.len());
+    let first = &doc.ast[0];
+    let second = &doc.ast[1];
+    assert!(matches!(first.node_type, crate::types::NodeType::Paragraph));
+    assert!(matches!(second.node_type, crate::types::NodeType::Paragraph));
+    // pulldown-cmark ranges: first paragraph includes trailing \n\n
+    // Verify there's a gap or overlap — this tells us how to build synthetic nodes
+    let gap_start = first.range.end;
+    let gap_end = second.range.start;
+    // Document: "Hello\n\nWorld" (bytes 0..12)
+    // Expected: first = 0..7 ("Hello\n\n"), second = 7..12 ("World")
+    // OR first = 0..5 ("Hello"), gap 5..7 ("\n\n"), second = 7..12
+    // The test captures the actual behavior:
+    assert!(
+        gap_start <= gap_end,
+        "ranges should not overlap: first.end={gap_start}, second.start={gap_end}"
+    );
+}
+
+#[test]
+fn parser_ranges_extra_blank_lines() {
+    // "Hello\n\n\n\nWorld" — four newlines between paragraphs
+    let md = "Hello\n\n\n\nWorld";
+    let doc = crate::parser::parse_document(&Rope::from(md));
+    assert_eq!(doc.ast.len(), 2, "expected 2 top-level nodes, got {}", doc.ast.len());
+    let first = &doc.ast[0];
+    let second = &doc.ast[1];
+    let gap = second.range.start.saturating_sub(first.range.end);
+    // With extra blank lines, the gap should be larger than with just \n\n
+    // This confirms whether pulldown-cmark absorbs extra newlines into node ranges
+    // or leaves them as gaps
+    assert!(
+        first.range.end <= second.range.start,
+        "ranges must not overlap"
+    );
+    // Print for diagnostic (visible in test output with --nocapture)
+    eprintln!(
+        "Extra blank lines: first={:?}, second={:?}, gap={}",
+        first.range, second.range, gap
+    );
+}

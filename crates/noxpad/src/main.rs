@@ -26,8 +26,8 @@ use dioxus_nox_dnd::{
     SortableGroup, SortableItem, FEEDBACK_STYLES, FUNCTIONAL_STYLES,
 };
 use dioxus_nox_markdown::markdown;
+use dioxus_nox_markdown::prelude::{Mode, generate_theme_css};
 use dioxus_nox_markdown::types::{ActiveBlockInputEvent, LivePreviewVariant};
-use dioxus_nox_markdown::prelude::Mode;
 use dioxus_nox_preview::{use_debounced_active, use_preview_cache};
 use dioxus_nox_shell::AppShell;
 use dioxus_nox_suggest::{TriggerConfig, TriggerSelectEvent, suggest, use_suggestion};
@@ -81,7 +81,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 .folder-count { margin-left: auto; font-size: 11px; color: #6f6f6f; }
 .folder-notes { padding: 4px; display: flex; flex-direction: column; gap: 2px; }
 .note-item { padding: 7px 8px; cursor: pointer; border-left: 2px solid transparent;
-    transition: background 0.12s; font-size: 13px; border-radius: 6px; }
+    transition: background 0.12s; font-size: 13px; border-radius: 6px;
+    display: flex; align-items: center; gap: 4px; }
+.drag-handle { cursor: grab; opacity: 0.3; font-size: 10px; flex-shrink: 0; }
+.drag-handle:hover { opacity: 0.7; }
 .note-item:hover { background: #202020; }
 .note-item[data-active="true"] { border-left-color: #7c6af7; background: #23203a; color: #fff; }
 .note-item-title { font-weight: 500; }
@@ -100,6 +103,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     border-radius: 6px 6px 0 0; border: 1px solid #2b2b2b; border-bottom: none;
     color: #999; background: #141414; cursor: pointer; white-space: nowrap; }
 .tab-item[data-active="true"] { color: #fff; background: #1d1d1d; border-color: #3a335f; }
+.tab-drag-handle { cursor: grab; opacity: 0.3; font-size: 10px; }
+.tab-drag-handle:hover { opacity: 0.7; }
 .tab-close { border: none; background: transparent; color: #666; cursor: pointer; font-size: 13px; }
 .tab-close:hover { color: #d97b7b; }
 
@@ -118,6 +123,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: #888; margin: 8px 0; }
 [data-md-inline-editor] ul, [data-md-inline-editor] ol { padding-left: 20px; margin: 4px 0; }
 [data-md-inline-editor] hr { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
+[role="article"][data-md-mode="read"] { flex: 1; padding: 12px 0; overflow-y: auto;
+    line-height: 1.7; font-size: 15px; }
+[data-md-mode="read"] h1 { font-size: 1.8em; font-weight: 700; margin: 0.8em 0 0.4em; }
+[data-md-mode="read"] h2 { font-size: 1.4em; font-weight: 600; margin: 0.7em 0 0.3em; }
+[data-md-mode="read"] h3 { font-size: 1.2em; font-weight: 600; margin: 0.6em 0 0.2em; }
+[data-md-mode="read"] p { margin: 0.4em 0; }
+[data-md-mode="read"] code { background: #222; padding: 1px 4px; border-radius: 3px;
+    font-family: monospace; font-size: 0.9em; }
+[data-md-mode="read"] pre { background: #1a1a1a; padding: 12px; border-radius: 6px; margin: 8px 0; }
+[data-md-mode="read"] blockquote { border-left: 3px solid #444; padding-left: 12px;
+    color: #888; margin: 8px 0; }
+[data-md-mode="read"] ul, [data-md-mode="read"] ol { padding-left: 20px; margin: 4px 0; }
+[data-md-mode="read"] hr { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
 [data-md-root] textarea { flex: 1; background: transparent; border: none; outline: none;
     color: #e0e0e0; font-family: 'Fira Code', monospace; font-size: 14px;
     line-height: 1.7; resize: none; padding: 12px 0; }
@@ -448,11 +466,15 @@ fn App() -> Element {
     let mode: Signal<Mode> = use_signal(|| Mode::LivePreview);
     let mut search_open: Signal<bool> = use_signal(|| false);
     let search_read: ReadSignal<bool> = search_open.into();
+    let highlight_css: &'static str = use_hook(|| {
+        &*Box::leak(generate_theme_css("base16-ocean.dark", "hl-").unwrap_or_default().into_boxed_str())
+    });
 
     rsx! {
         style { {FUNCTIONAL_STYLES} }
         style { {FEEDBACK_STYLES} }
         style { {CSS} }
+        style { {highlight_css} }
         AppShell {
             search_active: Some(search_read),
             on_search_change: move |v| {
@@ -594,6 +616,7 @@ fn NoteSidebar(
                                                                         key: "note-{note_idx}",
                                                                         id: note_drag_id(note_idx),
                                                                         drag_type: Some(DragType::new(NOTE_DRAG_TYPE)),
+                                                                        handle: Some("[data-drag-handle]".to_string()),
 
                                                                         div {
                                                                             class: "note-item",
@@ -603,6 +626,7 @@ fn NoteSidebar(
                                                                                 let mut tab_state = tabs.write();
                                                                                 ensure_tab_open(&mut tab_state, note_idx);
                                                                             },
+                                                                            span { "data-drag-handle": "", class: "drag-handle", "⠿" }
                                                                             div { class: "note-item-title", "{title}" }
                                                                             if !tags_preview.is_empty() {
                                                                                 div { class: "note-item-tags", "{tags_preview}" }
@@ -806,47 +830,48 @@ fn TabStrip(notes: Signal<Vec<Note>>, tabs: Signal<Vec<usize>>, active_idx: Sign
         .collect();
 
     rsx! {
-        div { class: "tab-strip",
-            SortableContext {
-                id: DragId::new(TAB_STRIP_ID),
-                items: tab_ids,
-                orientation: Orientation::Horizontal,
-                on_reorder: move |evt: ReorderEvent| {
-                    let mut tab_state = tabs.write();
-                    reorder_in_vec(&mut tab_state, evt.from_index, evt.to_index);
-                },
+        SortableContext {
+            id: DragId::new(TAB_STRIP_ID),
+            items: tab_ids,
+            orientation: Orientation::Horizontal,
+            class: "tab-strip",
+            on_reorder: move |evt: ReorderEvent| {
+                let mut tab_state = tabs.write();
+                reorder_in_vec(&mut tab_state, evt.from_index, evt.to_index);
+            },
 
-                for note_idx in tabs_snapshot.iter().copied() {
-                    {
-                        let title = note_by_index(&notes_snapshot, note_idx)
-                            .map(|note| note.title.clone())
-                            .unwrap_or_else(|| "Missing note".to_string());
-                        let is_active = (active_idx)() == Some(note_idx);
+            for note_idx in tabs_snapshot.iter().copied() {
+                {
+                    let title = note_by_index(&notes_snapshot, note_idx)
+                        .map(|note| note.title.clone())
+                        .unwrap_or_else(|| "Missing note".to_string());
+                    let is_active = (active_idx)() == Some(note_idx);
 
-                        rsx! {
-                            SortableItem {
-                                key: "tab-{note_idx}",
-                                id: tab_drag_id(note_idx),
+                    rsx! {
+                        SortableItem {
+                            key: "tab-{note_idx}",
+                            id: tab_drag_id(note_idx),
+                            handle: Some("[data-drag-handle]".to_string()),
 
-                                div {
-                                    class: "tab-item",
-                                    "data-active": if is_active { "true" } else { "false" },
-                                    onclick: move |_| {
-                                        active_idx.set(Some(note_idx));
+                            div {
+                                class: "tab-item",
+                                "data-active": if is_active { "true" } else { "false" },
+                                onclick: move |_| {
+                                    active_idx.set(Some(note_idx));
+                                    let mut tab_state = tabs.write();
+                                    ensure_tab_open(&mut tab_state, note_idx);
+                                },
+                                span { "data-drag-handle": "", class: "tab-drag-handle", "⠿" }
+                                span { "{title}" }
+                                button {
+                                    class: "tab-close",
+                                    onclick: move |evt: MouseEvent| {
+                                        evt.stop_propagation();
                                         let mut tab_state = tabs.write();
-                                        ensure_tab_open(&mut tab_state, note_idx);
+                                        let next_active = close_tab(&mut tab_state, (active_idx)(), note_idx);
+                                        active_idx.set(next_active);
                                     },
-                                    span { "{title}" }
-                                    button {
-                                        class: "tab-close",
-                                        onclick: move |evt: MouseEvent| {
-                                            evt.stop_propagation();
-                                            let mut tab_state = tabs.write();
-                                            let next_active = close_tab(&mut tab_state, (active_idx)(), note_idx);
-                                            active_idx.set(next_active);
-                                        },
-                                        "x"
-                                    }
+                                    "x"
                                 }
                             }
                         }

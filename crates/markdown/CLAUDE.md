@@ -43,6 +43,7 @@ Three opt-in/opt-out props on `Root` control code block rendering:
 | `data-md-code-header` | `<div>` inside `<pre>` | Language header container |
 | `data-md-code-language` | `<span>` inside header | Language text element |
 | `data-md-editor-gutter` | `<div>` | Editor line-number gutter container |
+| `data-md-blank-line` | `<div>` (InlineEditor block wrapper) | Present on synthetic blank-line paragraphs (extra `\n\n\n`+ gaps) |
 
 ### Line Number Non-selectability
 - Inline `style="user-select:none"` on gutter elements — FUNCTIONAL (copy-paste behavior)
