@@ -663,6 +663,7 @@ fn NoteEditor(
 
     let mut inline_input: Signal<(String, usize)> = use_signal(|| (String::new(), 0));
     let inline_input_read: ReadSignal<(String, usize)> = inline_input.into();
+    let mut pending_cursor: Signal<Option<usize>> = use_signal(|| None);
 
     use_effect(move || {
         if let Some(idx) = (active_idx)() {
@@ -753,6 +754,10 @@ fn NoteEditor(
                             &replacement,
                         );
 
+                        // Place cursor right after the inserted replacement text
+                        let cursor_pos = evt.trigger_offset + replacement.len();
+                        pending_cursor.set(Some(cursor_pos));
+
                         content.set(new_text.clone());
                         let idx = *current_idx.read();
                         let mut note_state = notes.write();
@@ -775,6 +780,7 @@ fn NoteEditor(
                             notes,
                             current_idx,
                             inline_input,
+                            pending_cursor,
                         }
                     }
 
@@ -898,6 +904,7 @@ fn SuggestMarkdownEditor(
     notes: Signal<Vec<Note>>,
     current_idx: Signal<usize>,
     inline_input: Signal<(String, usize)>,
+    pending_cursor: Signal<Option<usize>>,
 ) -> Element {
     let sg = use_suggestion();
     let key_intercept = Callback::new(move |key: String| sg.handle_keydown(&key));
@@ -907,6 +914,7 @@ fn SuggestMarkdownEditor(
             value: Some(content),
             mode: Some(mode),
             live_preview_variant: LivePreviewVariant::Inline,
+            pending_cursor: Some(pending_cursor),
             on_value_change: move |value: String| {
                 content.set(value.clone());
                 let idx = *current_idx.read();

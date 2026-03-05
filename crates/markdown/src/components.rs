@@ -4,8 +4,8 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::context::{
-    CursorContext, MarkdownContext, handle_set_content_js, make_instance_n,
-    read_cursor_and_selection,
+    CursorContext, MarkdownContext, handle_set_content_js, handle_set_content_with_cursor_js,
+    make_instance_n, read_cursor_and_selection,
 };
 use crate::hooks::{
     select_all_children_js, sync_editor_to_preview, sync_preview_to_editor, tab_indent_js,
@@ -118,6 +118,12 @@ pub fn Root(
     default_value: Option<String>,
     value: Option<Signal<String>>,
     on_value_change: Option<EventHandler<String>>,
+    /// Optional signal for setting cursor position after a programmatic content change.
+    ///
+    /// When `Some(signal)` and the inner value is `Some(byte_offset)`, the controlled
+    /// value effect will place the cursor at that byte offset after updating content.
+    /// The signal is reset to `None` after consumption.
+    pending_cursor: Option<Signal<Option<usize>>>,
     #[props(default = false)] disabled: bool,
     /// Layout orientation for split-pane mode.
     /// Sets `data-md-layout` attribute on the root div. Omitted when None.
@@ -218,6 +224,10 @@ pub fn Root(
     let raw_for_effect = state.raw_content;
     let trigger = state.trigger_parse;
     use_effect(move || {
+        // Read pending_cursor's inner signal BEFORE the early-return guard
+        // so the effect subscribes to it (Dioxus 0.7 subscription gotcha).
+        let pending_offset = pending_cursor.and_then(|sig| (sig)());
+
         if let Some(cv) = value {
             let text = cv();
             // SEC-004: Skip eval if content hasn't actually changed
@@ -229,11 +239,38 @@ pub fn Root(
             // Primary sync for Inline/Read modes where no textarea exists.
             *raw_for_effect.read().borrow_mut() = Rope::from(text.clone());
             trigger.call(());
+
+            // Update CursorContext if pending_cursor was provided.
+            // cursor_position + selection signals are captured from the component
+            // body (lines 181-182) — NOT via try_use_context inside the effect,
+            // which would be a rules-of-hooks violation in Dioxus 0.7.
+            if let Some(byte_offset) = pending_offset {
+                let clamped = byte_offset.min(text.len());
+                {
+                    let mut cp = cursor_position;
+                    cp.set(CursorPosition {
+                        offset: clamped,
+                        line: 0,
+                        column: 0,
+                    });
+                    let mut sel = selection;
+                    sel.set(None);
+                }
+                // Reset pending_cursor to None
+                if let Some(mut pc) = pending_cursor {
+                    pc.set(None);
+                }
+            }
+
             // Also sync textarea DOM value for Source mode.
             // No-op if textarea is absent (Inline/Read modes).
             let eid = format!("nox-md-{instance_n}-editor");
             spawn(async move {
-                let js = handle_set_content_js(&eid, &text);
+                let js = if let Some(byte_offset) = pending_offset {
+                    handle_set_content_with_cursor_js(&eid, &text, byte_offset)
+                } else {
+                    handle_set_content_js(&eid, &text)
+                };
                 interop::eval_void(&js).await;
             });
         }
