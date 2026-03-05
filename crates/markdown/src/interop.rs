@@ -116,6 +116,12 @@ impl CaretAdapter for WebviewCaretAdapter {
                         e.preventDefault();
                         dioxus.send("next");
                     }}
+                }} else if (e.key === 'Backspace') {{
+                    var pos = el.selectionStart;
+                    if (pos === 0 && el.selectionStart === el.selectionEnd) {{
+                        e.preventDefault();
+                        dioxus.send("backjoin");
+                    }}
                 }} else if (e.key === 'Enter') {{
                     if (!e.shiftKey) {{
                         e.preventDefault();

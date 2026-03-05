@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use dioxus::prelude::*;
 
 use crate::context::{CursorContext, MarkdownContext};
@@ -12,7 +10,7 @@ use crate::inline_tokens::{
 use crate::interop;
 use crate::reveal_engine::{RevealContext, marker_visibility};
 use crate::types::{ActiveBlockInputEvent, CursorPosition, NodeType, OwnedAstNode};
-use crate::viewport::{BlockOverride, EditorViewport, ViewportNode};
+use crate::viewport::ViewportNode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PendingCaretRestore {
@@ -58,21 +56,32 @@ pub fn InlineEditor(on_active_block_input: Option<EventHandler<ActiveBlockInputE
         goal_column: use_signal(|| None),
     });
 
-    let overrides = vec![BlockOverride {
-        matches: Rc::new(is_editable_block),
-        component: Rc::new(move |node: OwnedAstNode| {
-            rsx! {
-                InlineBlockNode {
-                    node: node,
-                    cursor_offset: cursor_offset,
-                    on_active_block_input: on_active_block_input
-                }
-            }
-        }),
-    }];
-
     let ctx = use_context::<MarkdownContext>();
     let inline_id = ctx.inline_editor_id();
+
+    let parsed = (ctx.parsed_doc)();
+    let raw = ctx.raw_value();
+    let augmented_ast = inject_gap_paragraphs(&parsed.ast, &raw);
+
+    // Cursor snapping: if cursor is in a gap between blocks, snap to nearest
+    use_effect(move || {
+        let offset = cursor_ctx
+            .map(|c| c.cursor_position.read().offset)
+            .unwrap_or(0);
+        let parsed = (ctx.parsed_doc)();
+        let raw = ctx.raw_value();
+        let augmented = inject_gap_paragraphs(&parsed.ast, &raw);
+        let snapped = snap_cursor_to_block(&augmented, offset);
+        if snapped != offset
+            && let Some(mut cctx) = cursor_ctx
+        {
+            cctx.cursor_position.set(CursorPosition {
+                offset: snapped,
+                line: 0,
+                column: 0,
+            });
+        }
+    });
 
     rsx! {
         div {
@@ -90,7 +99,17 @@ pub fn InlineEditor(on_active_block_input: Option<EventHandler<ActiveBlockInputE
                     });
                 }
             },
-            EditorViewport { overrides: overrides }
+            div {
+                class: "nox-md-viewport",
+                "data-md-viewport": "true",
+                for node in augmented_ast.into_iter() {
+                    InlineBlockNode {
+                        node: node.clone(),
+                        cursor_offset: cursor_offset,
+                        on_active_block_input: on_active_block_input,
+                    }
+                }
+            }
         }
     }
 }
@@ -227,6 +246,7 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
             }
         }
         _ => {
+            let is_blank_line = matches!(node.node_type, NodeType::Paragraph) && node.children.is_empty();
             let block_id_for_click = block_id.clone();
             let node_for_click = node.clone();
             let node_for_render = node.clone();
@@ -234,6 +254,7 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
                 div {
                     id: "{block_id}",
                     "data-md-inline-block": "true",
+                    "data-md-blank-line": if is_blank_line { Some("true") } else { None },
                     onclick: move |_| {
                         handle_inactive_block_click(
                             cursor_ctx,
@@ -244,9 +265,13 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
                             safe_end,
                         );
                     },
-                    ViewportNode {
-                        node: node_for_render,
-                        overrides: vec![]
+                    if is_blank_line {
+                        p { br {} }
+                    } else {
+                        ViewportNode {
+                            node: node_for_render,
+                            overrides: vec![]
+                        }
                     }
                 }
             }
@@ -282,12 +307,136 @@ fn TokenAwareBlockEditor(
     let block_id_input = block_id.clone();
     let block_id_comp_end = block_id.clone();
     let block_id_nav = block_id.clone();
+    let block_id_enter = block_id.clone();
     let block_id_keyup = block_id.clone();
     let block_id_mouseup = block_id.clone();
     let block_id_mount = block_id.clone();
     let block_id_effect = block_id.clone();
 
     let block_raw = raw[safe_start..safe_end].to_string();
+
+    // Empty block (synthetic gap paragraph): render minimal contenteditable with <br> placeholder
+    if block_raw.is_empty() {
+        let block_id_empty = block_id.clone();
+        let block_id_mount_empty = block_id.clone();
+        let empty_view = rsx! {
+            div {
+                id: "{block_id}",
+                "data-md-token-editor": "true",
+                "data-md-empty-block": "true",
+                contenteditable: "true",
+                style: "width:100%;min-width:100%;max-width:100%;box-sizing:border-box;outline:none;white-space:pre-wrap;word-break:break-word;",
+                onkeydown: move |evt: KeyboardEvent| {
+                    let key = evt.key().to_string();
+                    if key == "Backspace" {
+                        evt.prevent_default();
+                        perform_block_join(ctx, cursor_ctx, safe_start);
+                        return;
+                    }
+                    if key == "Enter" && !evt.modifiers().shift() {
+                        evt.prevent_default();
+                        let mut len_enter = current_len;
+                        perform_block_split(
+                            ctx,
+                            cursor_ctx,
+                            safe_start,
+                            &mut len_enter,
+                            0,
+                        );
+                        return;
+                    }
+                    // Arrow navigation for empty blocks
+                    if key == "ArrowUp" || key == "ArrowDown" {
+                        evt.prevent_default();
+                        if let Some(mut cctx) = cursor_ctx {
+                            let parsed = (ctx.parsed_doc)();
+                            let raw_nav = ctx.raw_value();
+                            let augmented = inject_gap_paragraphs(&parsed.ast, &raw_nav);
+                            let direction = if key == "ArrowUp" {
+                                NavDirection::Prev
+                            } else {
+                                NavDirection::Next
+                            };
+                            let mut nodes = Vec::new();
+                            collect_editable_nodes(&augmented, &mut nodes);
+                            let target = match direction {
+                                NavDirection::Prev => nodes
+                                    .iter()
+                                    .rev()
+                                    .find(|n| n.range.start < safe_start)
+                                    .map(|n| n.range.start),
+                                NavDirection::Next => nodes
+                                    .iter()
+                                    .find(|n| n.range.start > safe_start)
+                                    .map(|n| n.range.start),
+                            };
+                            if let Some(target_offset) = target {
+                                cctx.cursor_position.set(CursorPosition {
+                                    offset: target_offset,
+                                    line: 0,
+                                    column: 0,
+                                });
+                            }
+                        }
+                    }
+                },
+                oninput: move |_| {
+                    // When user types into empty block, read the input and update raw content
+                    let block_id_inp = block_id_empty.clone();
+                    let cursor_ctx_local = cursor_ctx;
+                    let mut len_sig = current_len;
+                    spawn(async move {
+                        let new_text = {
+                            let js = interop::caret_adapter().read_contenteditable_text_js(&block_id_inp);
+                            let mut eval = interop::start_eval(&js);
+                            interop::recv_string(&mut eval).await.unwrap_or_default()
+                        };
+                        let current_global = ctx.raw_value();
+                        let start = safe_start.min(current_global.len());
+                        let old_len = *len_sig.read();
+                        let end = (start + old_len).min(current_global.len());
+                        let rebuilt = format!(
+                            "{}{}{}",
+                            &current_global[..start],
+                            new_text,
+                            &current_global[end..]
+                        );
+                        len_sig.set(new_text.len());
+                        ctx.handle_value_change(rebuilt);
+                        ctx.trigger_parse.call(());
+                        if let Some(mut cctx) = cursor_ctx_local {
+                            cctx.cursor_position.set(CursorPosition {
+                                offset: start + new_text.len(),
+                                line: 0,
+                                column: 0,
+                            });
+                        }
+                    });
+                },
+                onmounted: move |_| {
+                    let set_js = interop::caret_adapter()
+                        .set_contenteditable_selection_js(&block_id_mount_empty, 0);
+                    spawn(async move {
+                        interop::eval_void(&set_js).await;
+                    });
+                },
+                br {}
+            }
+        };
+
+        return match &node.node_type {
+            NodeType::Heading(1) => rsx! { h1 { {empty_view} } },
+            NodeType::Heading(2) => rsx! { h2 { {empty_view} } },
+            NodeType::Heading(3) => rsx! { h3 { {empty_view} } },
+            NodeType::Heading(4) => rsx! { h4 { {empty_view} } },
+            NodeType::Heading(5) => rsx! { h5 { {empty_view} } },
+            NodeType::Heading(6) => rsx! { h6 { {empty_view} } },
+            NodeType::BlockQuote => rsx! { blockquote { {empty_view} } },
+            NodeType::Item => rsx! { li { {empty_view} } },
+            _ => rsx! { p { {empty_view} } },
+        };
+    }
+
     let mut model_node = node.clone();
     model_node.range = safe_start..safe_end;
     let marker_tokens = collect_marker_tokens(&model_node, &block_raw, safe_start);
@@ -311,6 +460,7 @@ fn TokenAwareBlockEditor(
     let model_for_comp_end = model.clone();
     let model_for_effect = model.clone();
     let model_for_nav = model.clone();
+    let model_for_enter = model.clone();
     let model_for_keyup = model.clone();
     let model_for_mouseup = model.clone();
     let node_for_input = model_node.clone();
@@ -374,6 +524,49 @@ fn TokenAwareBlockEditor(
             style: "width:100%;min-width:100%;max-width:100%;box-sizing:border-box;outline:none;white-space:pre-wrap;word-break:break-word;",
             onkeydown: move |evt: KeyboardEvent| {
                 let key = evt.key().to_string();
+                // ── Enter key: split block ──
+                if key == "Enter" && !evt.modifiers().shift() {
+                    evt.prevent_default();
+                    if let Some(nc) = nav_ctx {
+                        let mut gc = nc.goal_column;
+                        gc.set(None);
+                    }
+                    let block_id_enter = block_id_enter.clone();
+                    let model_enter = model_for_enter.clone();
+                    let mut len_enter = current_len;
+                    let cursor_ctx_enter = cursor_ctx;
+                    spawn(async move {
+                        let visible_now = {
+                            let js = interop::caret_adapter()
+                                .read_contenteditable_selection_js(&block_id_enter);
+                            let mut eval = interop::start_eval(&js);
+                            interop::recv_string(&mut eval)
+                                .await
+                                .and_then(|s| s.parse::<usize>().ok())
+                                .unwrap_or(0)
+                        };
+                        let local_raw = visible_utf16_to_raw_offset(&model_enter, visible_now)
+                            .min(last_caret_offset(&(0..model_enter.raw_text.len())));
+                        perform_block_split(
+                            ctx,
+                            cursor_ctx_enter,
+                            safe_start,
+                            &mut len_enter,
+                            local_raw,
+                        );
+                    });
+                    return;
+                }
+                // ── Backspace at start of block: join with previous ──
+                if key == "Backspace" && target_visible_cursor == 0 && safe_start > 0 {
+                    evt.prevent_default();
+                    if let Some(nc) = nav_ctx {
+                        let mut gc = nc.goal_column;
+                        gc.set(None);
+                    }
+                    perform_block_join(ctx, cursor_ctx, safe_start);
+                    return;
+                }
                 if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
                     evt.prevent_default();
                     if let Some(mut cctx) = cursor_ctx {
@@ -1045,6 +1238,10 @@ fn ActiveBlockEditor(
                                 });
                                 continue;
                             }
+                            if msg == "backjoin" {
+                                perform_block_join(ctx, Some(cctx), safe_start);
+                                continue;
+                            }
                             if let Some(rest) = msg.strip_prefix("split:")
                                 && let Ok(split_utf16) = rest.parse::<usize>()
                             {
@@ -1052,22 +1249,15 @@ fn ActiveBlockEditor(
                                 let start = safe_start.min(current_global.len());
                                 let old_len = *len_sig.read();
                                 let end = (start + old_len).min(current_global.len());
-                                let before = &current_global[..start];
                                 let block = &current_global[start..end];
-                                let after = &current_global[end..];
                                 let split_byte = utf16_to_byte_index(block, split_utf16).unwrap_or(block.len());
-                                let split_at = split_byte.min(block.len());
-                                let left = &block[..split_at];
-                                let right = &block[split_at..];
-                                let rebuilt = format!("{before}{left}\n\n{right}{after}");
-                                ctx.handle_value_change(rebuilt);
-                                ctx.trigger_parse.call(());
-                                len_sig.set(left.len());
-                                cctx.cursor_position.set(CursorPosition {
-                                    offset: start + split_at + 2,
-                                    line: 0,
-                                    column: 0,
-                                });
+                                perform_block_split(
+                                    ctx,
+                                    Some(cctx),
+                                    safe_start,
+                                    &mut len_sig,
+                                    split_byte,
+                                );
                             }
                         }
                     });
@@ -1570,13 +1760,159 @@ fn cursor_after_visible_edit(
     (old_raw_cursor as isize + raw_delta).max(0) as usize
 }
 
+/// Inject synthetic empty `Paragraph` nodes for blank-line gaps between AST blocks.
+///
+/// pulldown-cmark absorbs one trailing `\n` into each block's range. The minimum
+/// gap between two paragraphs is 1 byte (the second `\n` of the `\n\n` separator).
+/// Every `\n` in a gap becomes a synthetic empty paragraph, so the standard `\n\n`
+/// separator produces 1 visible blank line. Each Backspace at a block boundary
+/// removes one `\n`, reducing synthetic paragraphs by 1 for immediate visual feedback.
+pub(crate) fn inject_gap_paragraphs(ast: &[OwnedAstNode], raw: &str) -> Vec<OwnedAstNode> {
+    let mut result = Vec::with_capacity(ast.len() * 2);
+    let mut prev_end: usize = 0;
+
+    for node in ast {
+        let gap_start = prev_end;
+        let gap_end = node.range.start;
+        if gap_start < gap_end {
+            let gap_bytes = &raw[gap_start..gap_end];
+            // Every `\n` in the gap becomes a synthetic empty paragraph.
+            // Standard `\n\n` separator → 1 synthetic node (visible blank line).
+            let newline_count = gap_bytes.bytes().filter(|&b| b == b'\n').count();
+            for i in 0..newline_count {
+                let byte_pos = gap_start + i;
+                result.push(OwnedAstNode {
+                    node_type: NodeType::Paragraph,
+                    range: byte_pos..byte_pos + 1,
+                    children: vec![],
+                });
+            }
+        }
+        result.push(node.clone());
+        prev_end = node.range.end;
+    }
+
+    // Trailing gap: after the last block
+    if prev_end < raw.len() {
+        let trailing = &raw[prev_end..];
+        let newline_count = trailing.bytes().filter(|&b| b == b'\n').count();
+        // Every `\n` in the trailing gap becomes a synthetic node
+        for i in 0..newline_count {
+            let byte_pos = prev_end + i;
+            result.push(OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: byte_pos..byte_pos + 1,
+                children: vec![],
+            });
+        }
+    }
+
+    result
+}
+
+/// Snap a cursor byte offset to the nearest block range if it falls in a gap.
+///
+/// - If cursor is within any block's range -> return unchanged
+/// - If cursor is between blocks -> snap to next block's start
+/// - If cursor is past all blocks -> snap to last block's end (or 0 if empty)
+pub(crate) fn snap_cursor_to_block(ast: &[OwnedAstNode], cursor: usize) -> usize {
+    if ast.is_empty() {
+        return 0;
+    }
+    for node in ast {
+        if cursor >= node.range.start && cursor < node.range.end {
+            return cursor; // within a block
+        }
+    }
+    // Cursor is in a gap — find the next block
+    for node in ast {
+        if node.range.start > cursor {
+            return node.range.start;
+        }
+    }
+    // Past all blocks — snap to last block's range
+    let last = &ast[ast.len() - 1];
+    if last.range.end > last.range.start {
+        last.range.end.saturating_sub(1)
+    } else {
+        last.range.start
+    }
+}
+
+/// Perform a block split: insert `\n\n` at the cursor position within a block.
+///
+/// Shared between `TokenAwareBlockEditor` (Enter key) and `ActiveBlockEditor`
+/// (textarea split message). Updates raw content, triggers reparse, and sets
+/// cursor to the start of the new paragraph.
+fn perform_block_split(
+    ctx: MarkdownContext,
+    cursor_ctx: Option<CursorContext>,
+    safe_start: usize,
+    len_sig: &mut Signal<usize>,
+    split_byte: usize,
+) {
+    let current_global = ctx.raw_value();
+    let start = safe_start.min(current_global.len());
+    let old_len = *len_sig.read();
+    let end = (start + old_len).min(current_global.len());
+    let before = &current_global[..start];
+    let block = &current_global[start..end];
+    let after = &current_global[end..];
+    let split_at = split_byte.min(block.len());
+    let left = &block[..split_at];
+    let right = &block[split_at..];
+    let rebuilt = format!("{before}{left}\n\n{right}{after}");
+    ctx.handle_value_change(rebuilt);
+    ctx.trigger_parse.call(());
+    len_sig.set(left.len());
+    if let Some(mut cctx) = cursor_ctx {
+        cctx.cursor_position.set(CursorPosition {
+            offset: start + split_at + 2,
+            line: 0,
+            column: 0,
+        });
+    }
+}
+
+/// Remove exactly ONE `\n` before `block_start`.
+///
+/// Symmetric inverse of `perform_block_split` (which inserts `\n\n`).
+/// Two paragraphs (`\n\n` gap): first Backspace → `\n` (soft break).
+/// Multiple blank lines (`\n\n\n\n`): each Backspace removes one `\n`.
+fn perform_block_join(
+    ctx: MarkdownContext,
+    cursor_ctx: Option<CursorContext>,
+    block_start: usize,
+) {
+    if block_start == 0 {
+        return;
+    }
+    let current_global = ctx.raw_value();
+    let pos = block_start.min(current_global.len());
+    if pos == 0 || current_global.as_bytes()[pos - 1] != b'\n' {
+        return;
+    }
+    let join_point = pos - 1;
+    let rebuilt = format!("{}{}", &current_global[..join_point], &current_global[pos..]);
+    ctx.handle_value_change(rebuilt);
+    ctx.trigger_parse.call(());
+    if let Some(mut cctx) = cursor_ctx {
+        cctx.cursor_position.set(CursorPosition {
+            offset: join_point,
+            line: 0,
+            column: 0,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         BeforeInputMeta, VisibleEdit, compute_post_visible_caret,
         NavDirection, adjacent_editable_offset, block_has_inline_markup,
-        cursor_within_inline_markup, is_latest_revision, normalize_cursor_visible_for_edit,
-        select_best_input_projection, uses_token_aware_surface,
+        cursor_within_inline_markup, inject_gap_paragraphs, is_latest_revision,
+        normalize_cursor_visible_for_edit, select_best_input_projection,
+        snap_cursor_to_block, uses_token_aware_surface,
     };
     use crate::inline_tokens::TokenizedBlock;
     use crate::types::{NodeType, OwnedAstNode};
@@ -1754,5 +2090,222 @@ mod tests {
         };
         let post = compute_post_visible_caret(Some(&meta), &edit, 12, 80);
         assert_eq!(post, 11);
+    }
+
+    // ── inject_gap_paragraphs tests ──────────────────────────────────
+
+    #[test]
+    fn inject_gap_paragraphs_no_gap() {
+        // Two adjacent blocks with no gap between them
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 6..12,
+                children: vec![text_node(6, 11, "World")],
+            },
+        ];
+        let raw = "Hello\nWorld\n";
+        let result = inject_gap_paragraphs(&ast, raw);
+        assert_eq!(result.len(), 2); // No synthetic nodes
+    }
+
+    #[test]
+    fn inject_gap_paragraphs_minimal_gap() {
+        // Standard \n\n separator: pulldown-cmark includes trailing \n in first block,
+        // so the gap is 1 byte (the second \n). 1 newline in gap → 1 synthetic node
+        // (visible blank line between blocks).
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6, // "Hello\n"
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 7..13, // "World\n"
+                children: vec![text_node(7, 12, "World")],
+            },
+        ];
+        let raw = "Hello\n\nWorld\n";
+        let result = inject_gap_paragraphs(&ast, raw);
+        // Gap is raw[6..7] = "\n" → 1 newline → 1 synthetic node (loop 0..1)
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].range, 0..6);
+        assert_eq!(result[1].range, 6..7); // synthetic blank-line paragraph
+        assert!(result[1].children.is_empty());
+        assert_eq!(result[2].range, 7..13);
+    }
+
+    #[test]
+    fn inject_gap_paragraphs_single_extra_blank_line() {
+        // "Hello\n\n\nWorld\n" — gap between blocks is 2 bytes ("\n\n"),
+        // which means 2 newlines in the gap → 2 synthetic nodes (loop 0..2)
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6, // "Hello\n"
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 8..14, // "World\n"
+                children: vec![text_node(8, 13, "World")],
+            },
+        ];
+        let raw = "Hello\n\n\nWorld\n";
+        let result = inject_gap_paragraphs(&ast, raw);
+        // Gap is raw[6..8] = "\n\n" → 2 newlines → 2 synthetic nodes
+        assert_eq!(result.len(), 4);
+        assert_eq!(result[0].range, 0..6); // original first block
+        assert_eq!(result[1].range, 6..7); // first synthetic
+        assert_eq!(result[2].range, 7..8); // second synthetic
+        assert!(result[1].children.is_empty());
+        assert!(result[2].children.is_empty());
+        assert_eq!(result[3].range, 8..14); // original second block
+    }
+
+    #[test]
+    fn inject_gap_paragraphs_multiple_extra_blank_lines() {
+        // "Hello\n\n\n\nWorld\n" — gap is 3 bytes ("\n\n\n"),
+        // 3 newlines in gap → 3 synthetic nodes (loop 0..3)
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6, // "Hello\n"
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 9..15, // "World\n"
+                children: vec![text_node(9, 14, "World")],
+            },
+        ];
+        let raw = "Hello\n\n\n\nWorld\n";
+        let result = inject_gap_paragraphs(&ast, raw);
+        // Gap is raw[6..9] = "\n\n\n" → 3 newlines → 3 synthetic nodes
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0].range, 0..6);
+        assert_eq!(result[1].range, 6..7); // first synthetic
+        assert_eq!(result[2].range, 7..8); // second synthetic
+        assert_eq!(result[3].range, 8..9); // third synthetic
+        assert_eq!(result[4].range, 9..15);
+    }
+
+    #[test]
+    fn inject_gap_paragraphs_trailing_blank_lines() {
+        // "Hello\n\n\n" — one block, then trailing newlines after the block
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6, // "Hello\n"
+                children: vec![text_node(0, 5, "Hello")],
+            },
+        ];
+        let raw = "Hello\n\n\n";
+        let result = inject_gap_paragraphs(&ast, raw);
+        // Trailing is raw[6..8] = "\n\n" → 2 newlines → 2 synthetic nodes (loop 0..2)
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].range, 0..6);
+        assert_eq!(result[1].range, 6..7); // first synthetic trailing
+        assert_eq!(result[2].range, 7..8); // second synthetic trailing
+        assert!(result[1].children.is_empty());
+        assert!(result[2].children.is_empty());
+    }
+
+    #[test]
+    fn inject_gap_paragraphs_empty_ast() {
+        let ast: Vec<OwnedAstNode> = vec![];
+        let raw = "";
+        let result = inject_gap_paragraphs(&ast, raw);
+        assert!(result.is_empty());
+    }
+
+    // ── snap_cursor_to_block tests ───────────────────────────────────
+
+    #[test]
+    fn snap_cursor_within_block_unchanged() {
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 8..14,
+                children: vec![text_node(8, 13, "World")],
+            },
+        ];
+        // Cursor at position 3 is inside first block (0..6)
+        assert_eq!(snap_cursor_to_block(&ast, 3), 3);
+        // Cursor at position 10 is inside second block (8..14)
+        assert_eq!(snap_cursor_to_block(&ast, 10), 10);
+    }
+
+    #[test]
+    fn snap_cursor_in_gap_to_next_block() {
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 8..14,
+                children: vec![text_node(8, 13, "World")],
+            },
+        ];
+        // Cursor at 7 is in gap between blocks (6..8), snaps to next block start
+        assert_eq!(snap_cursor_to_block(&ast, 7), 8);
+    }
+
+    #[test]
+    fn snap_cursor_past_end_to_last_block() {
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 8..14,
+                children: vec![text_node(8, 13, "World")],
+            },
+        ];
+        // Cursor at 20 is past all blocks, snaps to last block end - 1
+        assert_eq!(snap_cursor_to_block(&ast, 20), 13);
+    }
+
+    #[test]
+    fn snap_cursor_empty_ast_returns_zero() {
+        let ast: Vec<OwnedAstNode> = vec![];
+        assert_eq!(snap_cursor_to_block(&ast, 5), 0);
+    }
+
+    #[test]
+    fn snap_cursor_at_block_start_unchanged() {
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 8..14,
+                children: vec![text_node(8, 13, "World")],
+            },
+        ];
+        // Cursor at exact start of second block
+        assert_eq!(snap_cursor_to_block(&ast, 8), 8);
+        // Cursor at exact start of first block
+        assert_eq!(snap_cursor_to_block(&ast, 0), 0);
     }
 }
