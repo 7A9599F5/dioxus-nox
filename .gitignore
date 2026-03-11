@@ -5,6 +5,7 @@ node_modules/
 *.orig
 lancedb/
 test-results/
+**/playwright/
 tmp/
 .claude/
 .context/
