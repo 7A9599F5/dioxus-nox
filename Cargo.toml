@@ -16,6 +16,7 @@ members = [
     "crates/cmdk/examples/command_palette_mobile",
     "crates/cmdk/examples/command_palette_pages",
     "crates/noxpad",
+    "crates/suggest/examples/suggest-demo",
 ]
 resolver = "2"
 
