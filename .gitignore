@@ -10,4 +10,4 @@ tmp/
 .context/
 **/.context/
 .pi/
-.pi/lib/widget-helpers.ts
+.planning/
