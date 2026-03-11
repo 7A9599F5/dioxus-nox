@@ -144,9 +144,42 @@ impl TriggerContext {
         ar.set(None);
     }
 
-    // ── Internal navigation ───────────────────────────────────────────────
+    /// Handle a keydown event when the suggestion popover is open.
+    ///
+    /// Returns `true` if the key was consumed (caller should `prevent_default`
+    /// and `stop_propagation`), `false` if the key should pass through.
+    pub fn handle_keydown(&self, key: &str) -> bool {
+        if self.active_char.read().is_none() {
+            return false;
+        }
+        match key {
+            "ArrowDown" => {
+                self.select_next();
+                true
+            }
+            "ArrowUp" => {
+                self.select_prev();
+                true
+            }
+            "Enter" => {
+                if self.highlighted_index.read().is_some() {
+                    self.confirm_selection();
+                    true
+                } else {
+                    false
+                }
+            }
+            "Escape" | "Tab" => {
+                self.close();
+                true
+            }
+            _ => false,
+        }
+    }
 
-    pub(crate) fn select_next(&self) {
+    // ── Navigation ───────────────────────────────────────────────────────
+
+    pub fn select_next(&self) {
         let count = self.items.read().len();
         if count == 0 {
             return;
@@ -159,7 +192,7 @@ impl TriggerContext {
         hi.set(new);
     }
 
-    pub(crate) fn select_prev(&self) {
+    pub fn select_prev(&self) {
         let count = self.items.read().len();
         if count == 0 {
             return;
@@ -173,7 +206,7 @@ impl TriggerContext {
         hi.set(new);
     }
 
-    pub(crate) fn confirm_selection(&self) {
+    pub fn confirm_selection(&self) {
         let hi = *self.highlighted_index.read();
         let ac = *self.active_char.read();
         let (Some(idx), Some(trigger_char)) = (hi, ac) else {

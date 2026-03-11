@@ -687,6 +687,7 @@ fn NoteEditor(
 
     let mut inline_input: Signal<(String, usize)> = use_signal(|| (String::new(), 0));
     let inline_input_read: ReadSignal<(String, usize)> = inline_input.into();
+    let mut pending_cursor: Signal<Option<usize>> = use_signal(|| None);
 
     use_effect(move || {
         if let Some(idx) = (active_idx)() {
@@ -777,6 +778,10 @@ fn NoteEditor(
                             &replacement,
                         );
 
+                        // Place cursor right after the inserted replacement text
+                        let cursor_pos = evt.trigger_offset + replacement.len();
+                        pending_cursor.set(Some(cursor_pos));
+
                         content.set(new_text.clone());
                         let idx = *current_idx.read();
                         let mut note_state = notes.write();
@@ -793,31 +798,13 @@ fn NoteEditor(
                         },
                         style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
 
-                        markdown::Root {
-                            value: Some(content),
-                            mode: Some(mode),
-                            live_preview_variant: LivePreviewVariant::Inline,
-                            on_value_change: move |value: String| {
-                                content.set(value.clone());
-                                let idx = *current_idx.read();
-                                let mut note_state = notes.write();
-                                if let Some(note) = note_state.get_mut(idx) {
-                                    note.content = value;
-                                }
-                            },
-
-                            markdown::Editor {
-                                on_active_block_input: move |evt: ActiveBlockInputEvent| {
-                                    // Pass full document text + absolute cursor to
-                                    // suggest::Trigger so line_start_only detection
-                                    // works correctly in inline mode.
-                                    let full_raw = content.read().clone();
-                                    let prefix_len = evt.block_start.min(full_raw.len());
-                                    let prefix_utf16 = full_raw[..prefix_len].encode_utf16().count();
-                                    let abs_cursor_utf16 = prefix_utf16 + evt.cursor_raw_utf16;
-                                    inline_input.set((full_raw, abs_cursor_utf16));
-                                }
-                            }
+                        SuggestMarkdownEditor {
+                            content,
+                            mode,
+                            notes,
+                            current_idx,
+                            inline_input,
+                            pending_cursor,
                         }
                     }
 
@@ -925,6 +912,55 @@ fn ModeBar(mode: Signal<Mode>) -> Element {
                     mode.set(Mode::Read);
                 },
                 "Read"
+            }
+        }
+    }
+}
+
+// ── SuggestMarkdownEditor ─────────────────────────────────────────────────────
+
+/// Renders the markdown editor with suggestion popover key interception.
+///
+/// Must be a child of `suggest::Root` so `use_suggestion()` can access the context.
+#[component]
+fn SuggestMarkdownEditor(
+    content: Signal<String>,
+    mode: Signal<Mode>,
+    notes: Signal<Vec<Note>>,
+    current_idx: Signal<usize>,
+    inline_input: Signal<(String, usize)>,
+    pending_cursor: Signal<Option<usize>>,
+) -> Element {
+    let sg = use_suggestion();
+    let key_intercept = Callback::new(move |key: String| sg.handle_keydown(&key));
+
+    rsx! {
+        markdown::Root {
+            value: Some(content),
+            mode: Some(mode),
+            live_preview_variant: LivePreviewVariant::Inline,
+            pending_cursor: Some(pending_cursor),
+            on_value_change: move |value: String| {
+                content.set(value.clone());
+                let idx = *current_idx.read();
+                let mut note_state = notes.write();
+                if let Some(note) = note_state.get_mut(idx) {
+                    note.content = value;
+                }
+            },
+
+            markdown::Editor {
+                on_active_block_input: move |evt: ActiveBlockInputEvent| {
+                    // Pass full document text + absolute cursor to
+                    // suggest::Trigger so line_start_only detection
+                    // works correctly in inline mode.
+                    let full_raw = content.read().clone();
+                    let prefix_len = evt.block_start.min(full_raw.len());
+                    let prefix_utf16 = full_raw[..prefix_len].encode_utf16().count();
+                    let abs_cursor_utf16 = prefix_utf16 + evt.cursor_raw_utf16;
+                    inline_input.set((full_raw, abs_cursor_utf16));
+                },
+                on_key_intercept: key_intercept,
             }
         }
     }

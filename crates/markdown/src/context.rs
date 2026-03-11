@@ -316,6 +316,34 @@ pub(crate) fn handle_set_content_js(editor_id: &str, text: &str) -> String {
     )
 }
 
+/// Generates JS that sets the textarea value to `text`, positions the cursor
+/// at the given byte offset (converted to UTF-16), and dispatches a synthetic
+/// `input` event.
+pub(crate) fn handle_set_content_with_cursor_js(
+    editor_id: &str,
+    text: &str,
+    cursor_byte_offset: usize,
+) -> String {
+    let text_escaped = escape_js(text);
+    // Convert byte offset to UTF-16 code-unit offset for JS selectionStart/End
+    let clamped = cursor_byte_offset.min(text.len());
+    let cursor_utf16: usize = text[..clamped].encode_utf16().count();
+    format!(
+        r#"(function() {{
+    var el = document.getElementById('{editor_id}');
+    if (!el) return null;
+    el.value = '{text}';
+    el.setSelectionRange({cursor}, {cursor});
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    el.focus();
+    return null;
+}})();"#,
+        editor_id = editor_id,
+        text = text_escaped,
+        cursor = cursor_utf16,
+    )
+}
+
 // ── MarkdownHandle imperative API ───────────────────────────────────
 
 /// Imperative handle for programmatic control of the markdown editor.
