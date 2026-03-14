@@ -21,7 +21,13 @@
 
 mod viewport;
 
+#[cfg(feature = "hooks")]
+mod hook;
+
 pub use viewport::VirtualViewport;
+
+#[cfg(feature = "hooks")]
+pub use hook::*;
 
 #[cfg(test)]
 mod tests {
@@ -141,5 +147,33 @@ mod tests {
         let vp1 = VirtualViewport::new(50, 30, 300);
         let vp2 = vp1.clone();
         assert_eq!(vp1, vp2);
+    }
+
+    #[test]
+    fn is_near_end_empty_list() {
+        let vp = VirtualViewport::new(0, 40, 400);
+        assert!(!vp.is_near_end(5));
+    }
+
+    #[test]
+    fn is_near_end_single_item() {
+        let vp = VirtualViewport::new(1, 40, 400);
+        // Entire list visible, 1 + 5 >= 1 → true
+        assert!(vp.is_near_end(5));
+    }
+
+    #[test]
+    fn is_near_end_exactly_at_threshold() {
+        let mut vp = VirtualViewport::new(100, 40, 400);
+        // Scroll far enough that visible end is within threshold of item_count
+        vp.scroll_top = 80 * 40; // first_visible=80, end clamped to 100
+        assert!(vp.is_near_end(5));
+    }
+
+    #[test]
+    fn is_near_end_beyond_threshold() {
+        let vp = VirtualViewport::new(100, 40, 400);
+        // At top: end ≈ 16, threshold=5: 16+5=21 < 100 → false
+        assert!(!vp.is_near_end(5));
     }
 }

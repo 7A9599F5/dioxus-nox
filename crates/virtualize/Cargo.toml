@@ -9,3 +9,7 @@ keywords = ["dioxus", "virtual-list", "virtualize", "wasm"]
 categories = ["gui", "wasm", "web-programming"]
 
 [dependencies]
+dioxus = { workspace = true, optional = true }
+
+[features]
+hooks = ["dep:dioxus"]
