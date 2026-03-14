@@ -82,6 +82,19 @@ impl VirtualViewport {
         let rendered_end_offset = self.offset_for_idx(end);
         self.total_height().saturating_sub(rendered_end_offset)
     }
+
+    /// Returns `true` when the visible range's end index is within
+    /// `threshold` items of `item_count`.
+    ///
+    /// Useful for triggering data fetches for infinite scroll / load-more.
+    /// Returns `false` for empty lists.
+    pub fn is_near_end(&self, threshold: usize) -> bool {
+        if self.item_count == 0 {
+            return false;
+        }
+        let (_, end) = self.visible_range();
+        end + threshold >= self.item_count
+    }
 }
 
 impl Default for VirtualViewport {
