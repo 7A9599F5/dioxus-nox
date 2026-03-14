@@ -428,7 +428,12 @@ pub fn Draggable(props: DraggableProps) -> Element {
     let merged_class = consumer_class.unwrap_or_default();
 
     // Library styles are FUNCTIONAL and REQUIRED for drag behavior
-    let library_style = "touch-action: none; user-select: none; cursor: grab;";
+    let has_handle = props.handle.is_some();
+    let library_style = if has_handle {
+        "touch-action: auto; user-select: none;"
+    } else {
+        "touch-action: none; user-select: none; cursor: grab;"
+    };
     let merged_style = merge_styles(library_style, consumer_style.as_deref());
 
     // Filter out class/style from attributes (already handled above)
@@ -526,6 +531,7 @@ pub fn Draggable(props: DraggableProps) -> Element {
             aria_grabbed: "{aria_grabbed}",
 
             "data-dnd-draggable": "",
+            "data-dnd-handle-mode": if has_handle { "true" },
             "data-state": "{dnd_state}",
             "data-disabled": "{dnd_disabled}",
 
@@ -746,5 +752,15 @@ mod tests {
         assert!(merged.contains("user-select: none"));
         assert!(merged.contains("cursor: grab"));
         assert!(merged.contains("background: red"));
+    }
+
+    #[test]
+    fn test_draggable_handle_mode_style_allows_touch_scroll() {
+        // When a handle is specified, touch-action should be auto to allow scrolling
+        let library_style = "touch-action: auto; user-select: none;";
+        let merged = merge_styles(library_style, Some("background: red;"));
+        assert!(merged.contains("touch-action: auto"));
+        assert!(merged.contains("user-select: none"));
+        assert!(!merged.contains("cursor: grab"));
     }
 }

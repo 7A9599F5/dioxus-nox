@@ -648,8 +648,12 @@ pub fn SortableItem(props: SortableItemProps) -> Element {
     };
 
     // Append functional drag styles to displacement style
-    let full_style =
-        format!("{displacement_style}; touch-action: none; user-select: none; cursor: grab;");
+    let has_handle = props.handle.is_some();
+    let full_style = if has_handle {
+        format!("{displacement_style}; touch-action: auto; user-select: none;")
+    } else {
+        format!("{displacement_style}; touch-action: none; user-select: none; cursor: grab;")
+    };
     let instructions_id = ctx.instructions_id();
 
     rsx! {
@@ -676,6 +680,7 @@ pub fn SortableItem(props: SortableItemProps) -> Element {
             "data-drop-adjacent": "{dnd_adjacent}",
             "data-displacement-mode": "{dnd_mode}",
             "data-keyboard-drag": if is_keyboard_dragging { "true" },
+            "data-dnd-handle-mode": if has_handle { "true" },
             // Pointer handlers (inlined from Draggable)
             onpointerdown: start_drag,
             onkeydown: onkeydown,

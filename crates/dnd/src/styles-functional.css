@@ -29,6 +29,12 @@
     -webkit-touch-callout: none;
 }
 
+/* When a drag handle is specified, allow native touch scrolling on the item body.
+   Only the handle element itself should have touch-action: none. */
+[data-dnd-draggable][data-dnd-handle-mode] {
+    touch-action: auto;
+}
+
 [data-dnd-draggable][data-state="dragging"] {
     opacity: 0;
     /* Default to hidden for cleaner sortable UX, overrides below if needed */
@@ -77,6 +83,12 @@
     -webkit-user-select: none;
     /* Crucial for touch dragging */
     touch-action: none;
+}
+
+/* When a drag handle is specified, allow native touch scrolling on sortable items.
+   Only the handle element itself should block touch gestures. */
+[data-dnd-item][data-dnd-handle-mode] {
+    touch-action: auto;
 }
 
 /* Hide user content while dragging (the "Ghost") — indicators/previews stay visible */
