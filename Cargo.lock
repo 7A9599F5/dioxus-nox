@@ -1311,6 +1311,9 @@ dependencies = [
 [[package]]
 name = "dioxus-nox-virtualize"
 version = "0.1.0"
+dependencies = [
+ "dioxus",
+]
 
 [[package]]
 name = "dioxus-router"
