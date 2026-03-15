@@ -98,11 +98,11 @@ fn app() -> Element {
                     };
 
                     // Add to target container
-                    if let Some(item) = item {
-                        if let Some(target_col) = cols.get_mut(&e.to_container.0) {
-                            let insert_idx = e.to_index.min(target_col.len());
-                            target_col.insert(insert_idx, item);
-                        }
+                    if let Some(item) = item
+                        && let Some(target_col) = cols.get_mut(&e.to_container.0)
+                    {
+                        let insert_idx = e.to_index.min(target_col.len());
+                        target_col.insert(insert_idx, item);
                     }
                 },
                 on_reorder: move |e: ReorderEvent| {

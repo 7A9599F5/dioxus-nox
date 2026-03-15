@@ -1868,29 +1868,29 @@ fn compute_post_visible_caret(
 ) -> usize {
     let inserted_utf16 = utf16_len(&edit.replacement);
 
-    if let Some(meta) = meta {
-        if meta.is_collapsed {
-            if meta.input_type == "insertText" {
-                let typed_utf16 = utf16_len(&meta.data);
-                if typed_utf16 > 0 {
-                    return meta
-                        .pre_visible_caret_utf16
-                        .saturating_add(typed_utf16)
-                        .min(new_visible_utf16_len);
-                }
-            }
-            if meta.input_type.starts_with("deleteContent") {
-                return edit
-                    .old_start_utf16
-                    .saturating_add(inserted_utf16)
+    if let Some(meta) = meta
+        && meta.is_collapsed
+    {
+        if meta.input_type == "insertText" {
+            let typed_utf16 = utf16_len(&meta.data);
+            if typed_utf16 > 0 {
+                return meta
+                    .pre_visible_caret_utf16
+                    .saturating_add(typed_utf16)
                     .min(new_visible_utf16_len);
             }
-        } else {
+        }
+        if meta.input_type.starts_with("deleteContent") {
             return edit
                 .old_start_utf16
                 .saturating_add(inserted_utf16)
                 .min(new_visible_utf16_len);
         }
+    } else {
+        return edit
+            .old_start_utf16
+            .saturating_add(inserted_utf16)
+            .min(new_visible_utf16_len);
     }
 
     normalize_cursor_visible_for_edit(fallback_cursor_visible_utf16, edit, new_visible_utf16_len)

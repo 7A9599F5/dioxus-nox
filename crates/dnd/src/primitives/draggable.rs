@@ -377,10 +377,10 @@ pub fn Draggable(props: DraggableProps) -> Element {
         }
 
         // If a handle selector is specified, check if the event target matches
-        if let Some(ref selector) = handle_selector {
-            if !pointer_event_matches_handle(&e, selector) {
-                return; // Event didn't originate from the handle
-            }
+        if let Some(ref selector) = handle_selector
+            && !pointer_event_matches_handle(&e, selector)
+        {
+            return; // Event didn't originate from the handle
         }
 
         // Prevent default browser drag behavior

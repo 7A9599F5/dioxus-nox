@@ -254,24 +254,24 @@ pub fn partition_grouped_items<T: GroupedItem>(items: &[T]) -> Vec<TopLevelEntry
     let mut i = 0;
 
     while i < items.len() {
-        if items[i].is_group_header() {
-            if let Some(group_id) = items[i].group_id().cloned() {
-                let mut group_items = vec![items[i].clone()];
-                i += 1;
-                while i < items.len() {
-                    if items[i].group_id() == Some(&group_id) && !items[i].is_group_header() {
-                        group_items.push(items[i].clone());
-                        i += 1;
-                    } else {
-                        break;
-                    }
+        if items[i].is_group_header()
+            && let Some(group_id) = items[i].group_id().cloned()
+        {
+            let mut group_items = vec![items[i].clone()];
+            i += 1;
+            while i < items.len() {
+                if items[i].group_id() == Some(&group_id) && !items[i].is_group_header() {
+                    group_items.push(items[i].clone());
+                    i += 1;
+                } else {
+                    break;
                 }
-                result.push(TopLevelEntry::Group {
-                    group_id,
-                    items: group_items,
-                });
-                continue;
             }
+            result.push(TopLevelEntry::Group {
+                group_id,
+                items: group_items,
+            });
+            continue;
         }
         result.push(TopLevelEntry::Standalone(items[i].clone()));
         i += 1;
@@ -360,37 +360,37 @@ pub fn grouped_move<T: GroupedItem<GroupId = String> + 'static>(
     };
 
     // Group header drag → move entire group block
-    if items[from].is_group_header() {
-        if let Some(group_id) = items[from].group_id().cloned() {
-            // Collect all items in this group (header + members)
-            let mut group_items = Vec::new();
-            let mut indices_to_remove = Vec::new();
-            for (i, item) in items.iter().enumerate() {
-                if item.group_id() == Some(&group_id) {
-                    group_items.push(item.clone());
-                    indices_to_remove.push(i);
-                }
+    if items[from].is_group_header()
+        && let Some(group_id) = items[from].group_id().cloned()
+    {
+        // Collect all items in this group (header + members)
+        let mut group_items = Vec::new();
+        let mut indices_to_remove = Vec::new();
+        for (i, item) in items.iter().enumerate() {
+            if item.group_id() == Some(&group_id) {
+                group_items.push(item.clone());
+                indices_to_remove.push(i);
             }
-
-            // Remove all group items (reverse to preserve indices)
-            for index in indices_to_remove.into_iter().rev() {
-                items.remove(index);
-            }
-
-            // Insert entire group at new position.
-            // Derive container items from remaining flat list to map to_index.
-            let container_items: Vec<DragId> = partition_grouped_items(&items)
-                .iter()
-                .map(|e| e.drag_id())
-                .collect();
-            let to = find_flat_insert_position(&items, &container_items, event.to_index)
-                .min(items.len());
-
-            for (offset, item) in group_items.into_iter().enumerate() {
-                items.insert(to + offset, item);
-            }
-            return true;
         }
+
+        // Remove all group items (reverse to preserve indices)
+        for index in indices_to_remove.into_iter().rev() {
+            items.remove(index);
+        }
+
+        // Insert entire group at new position.
+        // Derive container items from remaining flat list to map to_index.
+        let container_items: Vec<DragId> = partition_grouped_items(&items)
+            .iter()
+            .map(|e| e.drag_id())
+            .collect();
+        let to =
+            find_flat_insert_position(&items, &container_items, event.to_index).min(items.len());
+
+        for (offset, item) in group_items.into_iter().enumerate() {
+            items.insert(to + offset, item);
+        }
+        return true;
     }
 
     // Regular item cross-container move
@@ -573,16 +573,15 @@ impl<'a, T: GroupedItem> GroupedList<'a, T> {
             existing_group
         } else {
             let new_group_id = make_group_id();
-            if let Some(target_idx) = self.find_index(&event.target_id) {
-                if let Some(header) = self
+            if let Some(target_idx) = self.find_index(&event.target_id)
+                && let Some(header) = self
                     .items
                     .get(target_idx)
                     .map(|item| item.make_group_header_with(new_group_id.clone()))
-                {
-                    self.items.insert(target_idx, header);
-                    if let Some(target_item) = self.items.get_mut(target_idx + 1) {
-                        target_item.set_group_id(Some(new_group_id.clone()));
-                    }
+            {
+                self.items.insert(target_idx, header);
+                if let Some(target_item) = self.items.get_mut(target_idx + 1) {
+                    target_item.set_group_id(Some(new_group_id.clone()));
                 }
             }
             new_group_id
@@ -643,12 +642,11 @@ impl<'a, T: GroupedItem> GroupedList<'a, T> {
             .collect();
 
         for item in self.items.iter() {
-            if item.is_group_header() {
-                if let Some(group_id) = item.group_id() {
-                    if !group_counts.contains_key(group_id) {
-                        orphaned.push(group_id.clone());
-                    }
-                }
+            if item.is_group_header()
+                && let Some(group_id) = item.group_id()
+                && !group_counts.contains_key(group_id)
+            {
+                orphaned.push(group_id.clone());
             }
         }
 
@@ -791,11 +789,11 @@ impl<'a, T: GroupedItem<GroupId = String>> GroupedList<'a, T> {
 
         // Snap to group block boundary if the target position lands inside
         // another group's block.
-        if let Some((target_group_id, range)) = self.group_block_for_insert_index(to_index) {
-            if target_group_id != group_id {
-                // Snap to start of the group block (before the group)
-                to_index = *range.start();
-            }
+        if let Some((target_group_id, range)) = self.group_block_for_insert_index(to_index)
+            && target_group_id != group_id
+        {
+            // Snap to start of the group block (before the group)
+            to_index = *range.start();
         }
 
         for (offset, item) in group_items.into_iter().enumerate() {

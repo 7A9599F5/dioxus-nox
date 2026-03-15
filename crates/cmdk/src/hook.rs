@@ -1169,14 +1169,14 @@ pub fn use_router_sync(param: &'static str) -> RouterSyncHandle {
                     // location is like "?q=hello%20world"
                     let qs = location.trim_start_matches('?');
                     for pair in qs.split('&') {
-                        if let Some((key, val)) = pair.split_once('=') {
-                            if key == param {
-                                // Percent-decode spaces
-                                let decoded = val.replace('+', " ").replace("%20", " ");
-                                let mut s = search;
-                                s.set(decoded);
-                                break;
-                            }
+                        if let Some((key, val)) = pair.split_once('=')
+                            && key == param
+                        {
+                            // Percent-decode spaces
+                            let decoded = val.replace('+', " ").replace("%20", " ");
+                            let mut s = search;
+                            s.set(decoded);
+                            break;
                         }
                     }
                 }
