@@ -2,6 +2,7 @@
 name = "command-palette-example"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 dioxus = { workspace = true, features = ["web"] }

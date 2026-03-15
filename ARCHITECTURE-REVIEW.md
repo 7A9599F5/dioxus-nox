@@ -190,11 +190,13 @@ While inline CSS is a legitimate pattern for headless components (zero-dependenc
 
 ---
 
-### [PRIORITY: Low]
+### [IMPLEMENTED] ~~[PRIORITY: Low]~~
 **Area:** Code Quality — `crate-type = ["cdylib", "rlib"]` on Library Crate
 **Problem:** `crates/dnd/Cargo.toml` specifies `crate-type = ["cdylib", "rlib"]`. The `cdylib` target is only needed for the final WASM binary, not for library crates consumed by other Rust code. This causes `cargo build` to produce an unnecessary `.wasm` file for the library itself and can cause issues with `cargo test`.
 
-**Suggestion:** Remove `cdylib` from `crate-type`. Only the final binary crate (noxpad or consumer apps) needs `cdylib`. Library crates should only be `rlib`.
+**Suggestion:** ~~Remove `cdylib` from `crate-type`. Only the final binary crate (noxpad or consumer apps) needs `cdylib`. Library crates should only be `rlib`.~~
+
+**IMPLEMENTED**: Removed the entire `[lib]` section from `crates/dnd/Cargo.toml`. The `rlib` crate-type is Cargo's default for library crates, so no explicit specification is needed. Also prepared the workspace for crates.io publishing: added `version = "=0.13.0"` to all workspace dependency entries, added `publish = false` to all 7 example/demo crates, and added `readme` to the umbrella crate.
 
 **Expected Impact:** Cleaner build output; faster compilation; avoids potential test runner issues.
 
