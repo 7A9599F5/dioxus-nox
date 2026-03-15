@@ -50,28 +50,28 @@ nucleo-matcher = "0.3"
 keyboard-types = "0.7"
 getrandom = "0.3"
 tracing = "0.1"
-dioxus-nox-virtualize = { path = "crates/virtualize", version = "=0.13.0" }
-dioxus-nox-dnd = { path = "crates/dnd", version = "=0.13.0" }
-dioxus-nox-cmdk = { path = "crates/cmdk", version = "=0.13.0", default-features = false }
-dioxus-nox-shell = { path = "crates/shell", version = "=0.13.0" }
-dioxus-nox-markdown = { path = "crates/markdown", version = "=0.13.0" }
-dioxus-nox-suggest = { path = "crates/suggest", version = "=0.13.0" }
-dioxus-nox-tag-input = { path = "crates/tag-input", version = "=0.13.0" }
-dioxus-nox-preview = { path = "crates/preview", version = "=0.13.0" }
-dioxus-nox-extensions = { path = "crates/extensions", version = "=0.13.0" }
-dioxus-nox-gestures = { path = "crates/gestures", version = "=0.13.0" }
-dioxus-nox-tabs = { path = "crates/tabs", version = "=0.13.0" }
-dioxus-nox-core = { path = "crates/core", version = "=0.13.0" }
-dioxus-nox-timer = { path = "crates/timer", version = "=0.13.0" }
-dioxus-nox-modal = { path = "crates/modal", version = "=0.13.0" }
-dioxus-nox-drawer = { path = "crates/drawer", version = "=0.13.0" }
-dioxus-nox-toast = { path = "crates/toast", version = "=0.13.0" }
-dioxus-nox-master-detail = { path = "crates/master-detail", version = "=0.13.0" }
-dioxus-nox-cycle = { path = "crates/cycle", version = "=0.13.0" }
-dioxus-nox-inline-confirm = { path = "crates/inline-confirm", version = "=0.13.0" }
-dioxus-nox-toggle-group = { path = "crates/toggle-group", version = "=0.13.0" }
-dioxus-nox-password-strength = { path = "crates/password-strength", version = "=0.13.0" }
-dioxus-nox-select = { path = "crates/select", version = "=0.13.0" }
-dioxus-nox = { path = "crates/dioxus-nox", version = "=0.13.0" }
+dioxus-nox-virtualize = { path = "crates/virtualize", version = "0.13" }
+dioxus-nox-dnd = { path = "crates/dnd", version = "0.13" }
+dioxus-nox-cmdk = { path = "crates/cmdk", version = "0.13", default-features = false }
+dioxus-nox-shell = { path = "crates/shell", version = "0.13" }
+dioxus-nox-markdown = { path = "crates/markdown", version = "0.13" }
+dioxus-nox-suggest = { path = "crates/suggest", version = "0.13" }
+dioxus-nox-tag-input = { path = "crates/tag-input", version = "0.13" }
+dioxus-nox-preview = { path = "crates/preview", version = "0.13" }
+dioxus-nox-extensions = { path = "crates/extensions", version = "0.13" }
+dioxus-nox-gestures = { path = "crates/gestures", version = "0.13" }
+dioxus-nox-tabs = { path = "crates/tabs", version = "0.13" }
+dioxus-nox-core = { path = "crates/core", version = "0.13" }
+dioxus-nox-timer = { path = "crates/timer", version = "0.13" }
+dioxus-nox-modal = { path = "crates/modal", version = "0.13" }
+dioxus-nox-drawer = { path = "crates/drawer", version = "0.13" }
+dioxus-nox-toast = { path = "crates/toast", version = "0.13" }
+dioxus-nox-master-detail = { path = "crates/master-detail", version = "0.13" }
+dioxus-nox-cycle = { path = "crates/cycle", version = "0.13" }
+dioxus-nox-inline-confirm = { path = "crates/inline-confirm", version = "0.13" }
+dioxus-nox-toggle-group = { path = "crates/toggle-group", version = "0.13" }
+dioxus-nox-password-strength = { path = "crates/password-strength", version = "0.13" }
+dioxus-nox-select = { path = "crates/select", version = "0.13" }
+dioxus-nox = { path = "crates/dioxus-nox", version = "0.13" }
 syntect = { version = "5.3", default-features = false }
 uuid = "1"
