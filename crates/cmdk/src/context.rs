@@ -12,7 +12,9 @@ use nucleo_matcher::{Config, Matcher};
 use gloo_timers::future::TimeoutFuture;
 
 use crate::helpers::scroll_item_into_view;
-use crate::navigation::{find_next, find_next_by, find_next_group, find_prev, find_prev_by, find_prev_group};
+use crate::navigation::{
+    find_next, find_next_by, find_next_group, find_prev, find_prev_by, find_prev_group,
+};
 use crate::scoring::score_items;
 use crate::types::{
     ActionPanelState, ActionRegistration, CustomFilter, GroupRegistration, ItemRegistration,
@@ -478,8 +480,10 @@ impl CommandContext {
 
     /// Open the action panel for the item with the given ID.
     pub fn open_action_panel(&mut self, item_id: String) {
-        self.action_panel
-            .set(Some(ActionPanelState { item_id, active_idx: 0 }));
+        self.action_panel.set(Some(ActionPanelState {
+            item_id,
+            active_idx: 0,
+        }));
     }
 
     /// Close the action panel.
@@ -520,9 +524,7 @@ impl CommandContext {
         let panel_state = self.action_panel.read().clone();
         let Some(state) = panel_state else { return };
         let items = self.action_items.read();
-        let handler = items
-            .get(state.active_idx)
-            .and_then(|reg| reg.on_action);
+        let handler = items.get(state.active_idx).and_then(|reg| reg.on_action);
         let has_action = items.get(state.active_idx).is_some();
         drop(items);
         if let Some(h) = handler {
@@ -756,7 +758,11 @@ pub(crate) fn init_command_context(
             return all_items
                 .into_iter()
                 .filter(|i| !i.hidden && mode_matches(i))
-                .map(|i| ScoredItem { id: i.id.clone(), score: None, match_indices: None })
+                .map(|i| ScoredItem {
+                    id: i.id.clone(),
+                    score: None,
+                    match_indices: None,
+                })
                 .collect();
         }
 
@@ -768,8 +774,10 @@ pub(crate) fn init_command_context(
         };
 
         // Filter items by mode before scoring (Rc clones only)
-        let mode_items: Vec<Rc<ItemRegistration>> =
-            all_items.into_iter().filter(|item| mode_matches(item)).collect();
+        let mode_items: Vec<Rc<ItemRegistration>> = all_items
+            .into_iter()
+            .filter(|item| mode_matches(item))
+            .collect();
 
         let filter_fn = custom_filter_sig.read().clone();
         let strategy = scoring_strategy_sig.read();
@@ -809,7 +817,13 @@ pub(crate) fn init_command_context(
         // P-017: force_mount groups are always included
         let mut result: HashSet<String> = groups_list
             .iter()
-            .filter_map(|g| if g.force_mount { Some(g.id.clone()) } else { None })
+            .filter_map(|g| {
+                if g.force_mount {
+                    Some(g.id.clone())
+                } else {
+                    None
+                }
+            })
             .collect();
         // Add groups that have at least one visible item
         for item in all.iter() {

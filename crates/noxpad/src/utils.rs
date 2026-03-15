@@ -141,7 +141,11 @@ pub(crate) fn ensure_tab_open(tabs: &mut Vec<usize>, note_idx: usize) {
     }
 }
 
-pub(crate) fn close_tab(tabs: &mut Vec<usize>, active: Option<usize>, closing: usize) -> Option<usize> {
+pub(crate) fn close_tab(
+    tabs: &mut Vec<usize>,
+    active: Option<usize>,
+    closing: usize,
+) -> Option<usize> {
     let Some(closing_pos) = tabs.iter().position(|idx| *idx == closing) else {
         return active;
     };

@@ -331,11 +331,7 @@ pub fn DropZone(props: DropZoneProps) -> Element {
 
     let dnd_state = if is_over { "over" } else { "" };
     let dnd_can_drop = if is_over {
-        if can_drop {
-            "true"
-        } else {
-            "false"
-        }
+        if can_drop { "true" } else { "false" }
     } else {
         ""
     };
@@ -471,11 +467,7 @@ mod tests {
         let is_over = true;
         let can_drop = true;
         let val = if is_over {
-            if can_drop {
-                "true"
-            } else {
-                "false"
-            }
+            if can_drop { "true" } else { "false" }
         } else {
             ""
         };
@@ -483,11 +475,7 @@ mod tests {
 
         let can_drop = false;
         let val = if is_over {
-            if can_drop {
-                "true"
-            } else {
-                "false"
-            }
+            if can_drop { "true" } else { "false" }
         } else {
             ""
         };
@@ -495,11 +483,7 @@ mod tests {
 
         let is_over = false;
         let val = if is_over {
-            if can_drop {
-                "true"
-            } else {
-                "false"
-            }
+            if can_drop { "true" } else { "false" }
         } else {
             ""
         };

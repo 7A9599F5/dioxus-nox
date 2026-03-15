@@ -17,7 +17,7 @@ use web_sys::wasm_bindgen::JsCast;
 use crate::context::DragContext;
 use crate::sortable_projection::{compute_displacement_offset, to_filtered_index};
 use crate::types::{
-    combine_drag_types, DragData, DragId, DragType, DropLocation, Orientation, Position, Rect,
+    DragData, DragId, DragType, DropLocation, Orientation, Position, Rect, combine_drag_types,
 };
 use crate::utils::{extract_attribute, filter_class_style};
 

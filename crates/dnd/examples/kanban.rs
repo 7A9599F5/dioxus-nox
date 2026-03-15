@@ -7,8 +7,8 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_dnd::{
-    DragId, DragOverlay, MoveEvent, ReorderEvent, SortableContext, SortableGroup, SortableItem,
-    FUNCTIONAL_STYLES, THEME_STYLES,
+    DragId, DragOverlay, FUNCTIONAL_STYLES, MoveEvent, ReorderEvent, SortableContext,
+    SortableGroup, SortableItem, THEME_STYLES,
 };
 
 fn main() {

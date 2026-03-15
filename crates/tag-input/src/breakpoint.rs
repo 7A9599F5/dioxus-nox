@@ -46,8 +46,8 @@ fn use_breakpoint_default() -> Signal<Breakpoint> {
 
 #[cfg(target_arch = "wasm32")]
 fn use_breakpoint_wasm() -> Signal<Breakpoint> {
-    use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
 
     let mut breakpoint = use_signal(|| {
         let width = get_window_width();

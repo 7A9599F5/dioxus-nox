@@ -170,7 +170,11 @@ pub(crate) fn NoteEditor(
 }
 
 #[component]
-fn TabStrip(notes: Signal<Vec<Note>>, tabs: Signal<Vec<usize>>, active_idx: Signal<Option<usize>>) -> Element {
+fn TabStrip(
+    notes: Signal<Vec<Note>>,
+    tabs: Signal<Vec<usize>>,
+    active_idx: Signal<Option<usize>>,
+) -> Element {
     let tabs_snapshot = tabs.read().clone();
     let notes_snapshot = notes.read().clone();
     let tab_ids: Vec<DragId> = tabs_snapshot

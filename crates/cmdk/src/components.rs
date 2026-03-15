@@ -8,8 +8,8 @@ use keyboard_types::Modifiers;
 
 use crate::context::{CommandContext, init_command_context};
 use crate::helpers::{make_input_id, make_item_dom_id, make_listbox_id, scroll_item_into_view};
-use crate::hook::{CommandHistoryContext, CommandPaletteHandle};
 use crate::hook::use_is_mobile;
+use crate::hook::{CommandHistoryContext, CommandPaletteHandle};
 use crate::shortcut::Hotkey;
 use crate::types::sheet_math;
 use crate::types::{
@@ -130,7 +130,8 @@ pub fn CommandRoot(
         let is_open = (ctx.is_open)();
         let was_open = prev_open_eff.get();
         prev_open_eff.set(is_open);
-        if was_open && !is_open
+        if was_open
+            && !is_open
             && let Some(h) = on_close
         {
             h.call(());
@@ -223,10 +224,9 @@ pub fn CommandRoot(
                     .and_then(|d| d.active_element());
 
                 let current_idx = active_el.and_then(|ae| {
-                    focusables.iter().position(|fe| {
-                        fe.dyn_ref::<web_sys::Element>()
-                            .is_some_and(|el| el == &ae)
-                    })
+                    focusables
+                        .iter()
+                        .position(|fe| fe.dyn_ref::<web_sys::Element>().is_some_and(|el| el == &ae))
                 });
 
                 let next_idx = match (current_idx, shift) {
@@ -234,7 +234,11 @@ pub fn CommandRoot(
                     (None, true) => focusables.len() - 1,
                     (Some(i), false) => (i + 1) % focusables.len(),
                     (Some(i), true) => {
-                        if i == 0 { focusables.len() - 1 } else { i - 1 }
+                        if i == 0 {
+                            focusables.len() - 1
+                        } else {
+                            i - 1
+                        }
                     }
                 };
 
@@ -345,7 +349,8 @@ pub fn CommandInput(
             return;
         }
         // Vim bindings: Ctrl+N/J -> next, Ctrl+P/K -> prev
-        if (ctx.vim_bindings)() && event.modifiers().contains(Modifiers::CONTROL)
+        if (ctx.vim_bindings)()
+            && event.modifiers().contains(Modifiers::CONTROL)
             && let Key::Character(ref c) = event.key()
         {
             match c.to_lowercase().as_str() {
@@ -363,152 +368,152 @@ pub fn CommandInput(
             }
         }
         match event.key() {
-        // Group navigation: Alt+Shift+Arrow (Alt+Arrow is reserved for history navigation)
-        Key::ArrowDown
-            if event.modifiers().contains(Modifiers::ALT)
-                && event.modifiers().contains(Modifiers::SHIFT) =>
-        {
-            event.prevent_default();
-            ctx.select_next_group();
-        }
-        Key::ArrowUp
-            if event.modifiers().contains(Modifiers::ALT)
-                && event.modifiers().contains(Modifiers::SHIFT) =>
-        {
-            event.prevent_default();
-            ctx.select_prev_group();
-        }
-        // Alt+ArrowUp → history prev (must appear before unguarded ArrowUp)
-        Key::ArrowUp if event.modifiers().contains(Modifiers::ALT) => {
-            event.prevent_default();
-            if let Some(hist) = try_use_context::<CommandHistoryContext>() {
-                let h = hist.handle;
-                if !h.is_navigating() {
-                    let search_val = ctx.search.read();
-                    h.save_draft(&search_val);
-                }
-                if let Some(entry) = h.prev() {
-                    let mut search = ctx.search;
-                    search.set(entry);
-                }
+            // Group navigation: Alt+Shift+Arrow (Alt+Arrow is reserved for history navigation)
+            Key::ArrowDown
+                if event.modifiers().contains(Modifiers::ALT)
+                    && event.modifiers().contains(Modifiers::SHIFT) =>
+            {
+                event.prevent_default();
+                ctx.select_next_group();
             }
-        }
-        // Alt+ArrowDown → history next (must appear before unguarded ArrowDown)
-        Key::ArrowDown if event.modifiers().contains(Modifiers::ALT) => {
-            event.prevent_default();
-            if let Some(hist) = try_use_context::<CommandHistoryContext>() {
-                let h = hist.handle;
-                match h.next() {
-                    Some(entry) => {
+            Key::ArrowUp
+                if event.modifiers().contains(Modifiers::ALT)
+                    && event.modifiers().contains(Modifiers::SHIFT) =>
+            {
+                event.prevent_default();
+                ctx.select_prev_group();
+            }
+            // Alt+ArrowUp → history prev (must appear before unguarded ArrowUp)
+            Key::ArrowUp if event.modifiers().contains(Modifiers::ALT) => {
+                event.prevent_default();
+                if let Some(hist) = try_use_context::<CommandHistoryContext>() {
+                    let h = hist.handle;
+                    if !h.is_navigating() {
+                        let search_val = ctx.search.read();
+                        h.save_draft(&search_val);
+                    }
+                    if let Some(entry) = h.prev() {
                         let mut search = ctx.search;
                         search.set(entry);
                     }
-                    None => {
-                        if let Some(draft) = h.take_draft() {
+                }
+            }
+            // Alt+ArrowDown → history next (must appear before unguarded ArrowDown)
+            Key::ArrowDown if event.modifiers().contains(Modifiers::ALT) => {
+                event.prevent_default();
+                if let Some(hist) = try_use_context::<CommandHistoryContext>() {
+                    let h = hist.handle;
+                    match h.next() {
+                        Some(entry) => {
                             let mut search = ctx.search;
-                            search.set(draft);
+                            search.set(entry);
                         }
-                        h.reset_navigation();
+                        None => {
+                            if let Some(draft) = h.take_draft() {
+                                let mut search = ctx.search;
+                                search.set(draft);
+                            }
+                            h.reset_navigation();
+                        }
                     }
                 }
             }
-        }
-        // P-039: Action panel navigation — when panel is open, intercept arrow/enter/escape
-        Key::ArrowDown if ctx.action_panel.read().is_some() => {
-            event.prevent_default();
-            let mut ctx = ctx;
-            ctx.select_next_action();
-        }
-        Key::ArrowUp if ctx.action_panel.read().is_some() => {
-            event.prevent_default();
-            let mut ctx = ctx;
-            ctx.select_prev_action();
-        }
-        Key::Enter if ctx.action_panel.read().is_some() => {
-            event.prevent_default();
-            let mut ctx = ctx;
-            ctx.confirm_action();
-        }
-        // P-039: Escape or ArrowLeft closes the action panel (without closing the palette)
-        Key::Escape | Key::ArrowLeft if ctx.action_panel.read().is_some() => {
-            event.prevent_default();
-            let mut ctx = ctx;
-            ctx.close_action_panel();
-        }
-        // P-039: Tab or ArrowRight opens the action panel if the active item has actions registered
-        Key::Tab | Key::ArrowRight
-            if ctx.action_panel.read().is_none()
-                && !ctx.action_items.read().is_empty()
-                && ctx.active_item.read().is_some() =>
-        {
-            event.prevent_default();
-            if let Some(active_id) = ctx.active_item.read().clone() {
+            // P-039: Action panel navigation — when panel is open, intercept arrow/enter/escape
+            Key::ArrowDown if ctx.action_panel.read().is_some() => {
+                event.prevent_default();
                 let mut ctx = ctx;
-                ctx.open_action_panel(active_id);
+                ctx.select_next_action();
             }
-        }
-        Key::ArrowDown => {
-            event.prevent_default();
-            ctx.select_next();
-        }
-        Key::ArrowUp => {
-            event.prevent_default();
-            ctx.select_prev();
-        }
-        Key::PageDown => {
-            event.prevent_default();
-            let steps = (ctx.page_size)();
-            ctx.select_next_by(steps);
-        }
-        Key::PageUp => {
-            event.prevent_default();
-            let steps = (ctx.page_size)();
-            ctx.select_prev_by(steps);
-        }
-        Key::Enter => {
-            event.prevent_default();
-            if let Some(hist) = try_use_context::<CommandHistoryContext>()
-                && let Some(data) = ctx.active_item_data()
+            Key::ArrowUp if ctx.action_panel.read().is_some() => {
+                event.prevent_default();
+                let mut ctx = ctx;
+                ctx.select_prev_action();
+            }
+            Key::Enter if ctx.action_panel.read().is_some() => {
+                event.prevent_default();
+                let mut ctx = ctx;
+                ctx.confirm_action();
+            }
+            // P-039: Escape or ArrowLeft closes the action panel (without closing the palette)
+            Key::Escape | Key::ArrowLeft if ctx.action_panel.read().is_some() => {
+                event.prevent_default();
+                let mut ctx = ctx;
+                ctx.close_action_panel();
+            }
+            // P-039: Tab or ArrowRight opens the action panel if the active item has actions registered
+            Key::Tab | Key::ArrowRight
+                if ctx.action_panel.read().is_none()
+                    && !ctx.action_items.read().is_empty()
+                    && ctx.active_item.read().is_some() =>
             {
-                let value = data.value.clone().unwrap_or_else(|| data.id.clone());
-                hist.handle.push(&value);
-            }
-            ctx.confirm_selection();
-        }
-        Key::Escape => {
-            event.prevent_default();
-            let mut is_open = ctx.is_open;
-            is_open.set(false);
-        }
-        Key::Home => {
-            event.prevent_default();
-            let visible = ctx.visible_item_ids.read();
-            if let Some(first) = visible.first() {
-                scroll_item_into_view(ctx.instance_id, first);
-                let mut active = ctx.active_item;
-                active.set(Some(first.clone()));
-            }
-        }
-        Key::End => {
-            event.prevent_default();
-            let visible = ctx.visible_item_ids.read();
-            if let Some(last) = visible.last() {
-                scroll_item_into_view(ctx.instance_id, last);
-                let mut active = ctx.active_item;
-                active.set(Some(last.clone()));
-            }
-        }
-        Key::Backspace => {
-            if ctx.search.read().is_empty() && !ctx.page_stack.read().is_empty() {
                 event.prevent_default();
-                ctx.pop_page();
+                if let Some(active_id) = ctx.active_item.read().clone() {
+                    let mut ctx = ctx;
+                    ctx.open_action_panel(active_id);
+                }
             }
-        }
-        _ => {
-            if ctx.try_execute_shortcut(&event.key(), event.modifiers()) {
+            Key::ArrowDown => {
                 event.prevent_default();
+                ctx.select_next();
             }
-        }
+            Key::ArrowUp => {
+                event.prevent_default();
+                ctx.select_prev();
+            }
+            Key::PageDown => {
+                event.prevent_default();
+                let steps = (ctx.page_size)();
+                ctx.select_next_by(steps);
+            }
+            Key::PageUp => {
+                event.prevent_default();
+                let steps = (ctx.page_size)();
+                ctx.select_prev_by(steps);
+            }
+            Key::Enter => {
+                event.prevent_default();
+                if let Some(hist) = try_use_context::<CommandHistoryContext>()
+                    && let Some(data) = ctx.active_item_data()
+                {
+                    let value = data.value.clone().unwrap_or_else(|| data.id.clone());
+                    hist.handle.push(&value);
+                }
+                ctx.confirm_selection();
+            }
+            Key::Escape => {
+                event.prevent_default();
+                let mut is_open = ctx.is_open;
+                is_open.set(false);
+            }
+            Key::Home => {
+                event.prevent_default();
+                let visible = ctx.visible_item_ids.read();
+                if let Some(first) = visible.first() {
+                    scroll_item_into_view(ctx.instance_id, first);
+                    let mut active = ctx.active_item;
+                    active.set(Some(first.clone()));
+                }
+            }
+            Key::End => {
+                event.prevent_default();
+                let visible = ctx.visible_item_ids.read();
+                if let Some(last) = visible.last() {
+                    scroll_item_into_view(ctx.instance_id, last);
+                    let mut active = ctx.active_item;
+                    active.set(Some(last.clone()));
+                }
+            }
+            Key::Backspace => {
+                if ctx.search.read().is_empty() && !ctx.page_stack.read().is_empty() {
+                    event.prevent_default();
+                    ctx.pop_page();
+                }
+            }
+            _ => {
+                if ctx.try_execute_shortcut(&event.key(), event.modifiers()) {
+                    event.prevent_default();
+                }
+            }
         } // close match
     };
 
@@ -605,7 +610,8 @@ pub fn CommandQuickInput(
             return;
         }
         // Vim bindings: Ctrl+N/J -> next, Ctrl+P/K -> prev
-        if (ctx.vim_bindings)() && event.modifiers().contains(Modifiers::CONTROL)
+        if (ctx.vim_bindings)()
+            && event.modifiers().contains(Modifiers::CONTROL)
             && let Key::Character(ref c) = event.key()
         {
             match c.to_lowercase().as_str() {
@@ -623,44 +629,44 @@ pub fn CommandQuickInput(
             }
         }
         match event.key() {
-        Key::ArrowDown => {
-            event.prevent_default();
-            ctx.select_next();
-        }
-        Key::ArrowUp => {
-            event.prevent_default();
-            ctx.select_prev();
-        }
-        Key::Enter => {
-            event.prevent_default();
-            ctx.confirm_selection();
-            let mut search = ctx.search;
-            search.set(String::new());
-        }
-        Key::Escape => {
-            event.prevent_default();
-            let mut search = ctx.search;
-            search.set(String::new());
-        }
-        Key::Home => {
-            event.prevent_default();
-            let visible = ctx.visible_item_ids.read();
-            if let Some(first) = visible.first() {
-                scroll_item_into_view(ctx.instance_id, first);
-                let mut active = ctx.active_item;
-                active.set(Some(first.clone()));
+            Key::ArrowDown => {
+                event.prevent_default();
+                ctx.select_next();
             }
-        }
-        Key::End => {
-            event.prevent_default();
-            let visible = ctx.visible_item_ids.read();
-            if let Some(last) = visible.last() {
-                scroll_item_into_view(ctx.instance_id, last);
-                let mut active = ctx.active_item;
-                active.set(Some(last.clone()));
+            Key::ArrowUp => {
+                event.prevent_default();
+                ctx.select_prev();
             }
-        }
-        _ => {}
+            Key::Enter => {
+                event.prevent_default();
+                ctx.confirm_selection();
+                let mut search = ctx.search;
+                search.set(String::new());
+            }
+            Key::Escape => {
+                event.prevent_default();
+                let mut search = ctx.search;
+                search.set(String::new());
+            }
+            Key::Home => {
+                event.prevent_default();
+                let visible = ctx.visible_item_ids.read();
+                if let Some(first) = visible.first() {
+                    scroll_item_into_view(ctx.instance_id, first);
+                    let mut active = ctx.active_item;
+                    active.set(Some(first.clone()));
+                }
+            }
+            Key::End => {
+                event.prevent_default();
+                let visible = ctx.visible_item_ids.read();
+                if let Some(last) = visible.last() {
+                    scroll_item_into_view(ctx.instance_id, last);
+                    let mut active = ctx.active_item;
+                    active.set(Some(last.clone()));
+                }
+            }
+            _ => {}
         } // close match
     };
 
@@ -714,10 +720,7 @@ pub fn CommandQuickInput(
 /// Renders a single `<div data-cmdk-anchor>` wrapper. Add `class: "contents"` (or
 /// equivalent) if you need the wrapper to be layout-transparent.
 #[component]
-pub fn CommandAnchor(
-    children: Element,
-    #[props(default)] class: Option<String>,
-) -> Element {
+pub fn CommandAnchor(children: Element, #[props(default)] class: Option<String>) -> Element {
     let ctx = use_context::<CommandContext>();
 
     let onmounted = move |event: MountedEvent| {
@@ -827,13 +830,11 @@ pub fn CommandList(
         let pref = preferred_side;
         let offset = side_offset;
         spawn(async move {
-            let Ok(rect) = data.get_client_rect().await else { return };
+            let Ok(rect) = data.get_client_rect().await else {
+                return;
+            };
             let vp_h = crate::helpers::get_viewport_height();
-            let side = crate::placement::compute_side(
-                pref,
-                rect.min_y(),
-                vp_h - rect.max_y(),
-            );
+            let side = crate::placement::compute_side(pref, rect.min_y(), vp_h - rect.max_y());
             let style = crate::placement::compute_float_style(
                 side,
                 rect.min_x(),
@@ -952,7 +953,9 @@ pub fn CommandItem(
             // spawn() schedules after the current render cycle.
             if entering() {
                 let mut e = entering;
-                spawn(async move { e.set(false); });
+                spawn(async move {
+                    e.set(false);
+                });
             }
         });
     }
@@ -1660,7 +1663,11 @@ pub fn CommandDialog(
                     && let Some(active) = doc.active_element()
                 {
                     let id_val = active.id();
-                    let stored_id = if id_val.is_empty() { None } else { Some(id_val) };
+                    let stored_id = if id_val.is_empty() {
+                        None
+                    } else {
+                        Some(id_val)
+                    };
                     let mut fb = ctx.focused_before_id;
                     fb.set(stored_id);
                 }
@@ -1739,17 +1746,23 @@ pub fn CommandDialog(
             if !crate::helpers::prefers_reduced_motion() {
                 let mut e = dialog_entering;
                 e.set(true);
-                spawn(async move { e.set(false); });
+                spawn(async move {
+                    e.set(false);
+                });
             }
             if let Some(ref handler) = on_open_animation_end {
                 let h = *handler;
-                spawn(async move { h.call(()); });
+                spawn(async move {
+                    h.call(());
+                });
             }
         } else {
             // Closing: defer unmount if animation_duration_ms > 0
             if let Some(ref handler) = on_close_animation_end {
                 let h = *handler;
-                spawn(async move { h.call(()); });
+                spawn(async move {
+                    h.call(());
+                });
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -2021,7 +2034,11 @@ pub fn CommandSheet(
                     // REVIEW(web_sys): no Dioxus 0.7 API to query currently-focused element
                     if let Some(ref ctx_ref) = ctx {
                         let id_val = html_el.id();
-                        let stored_id = if id_val.is_empty() { None } else { Some(id_val) };
+                        let stored_id = if id_val.is_empty() {
+                            None
+                        } else {
+                            Some(id_val)
+                        };
                         let mut fb = ctx_ref.focused_before_id;
                         fb.set(stored_id);
                     }
@@ -2296,17 +2313,23 @@ pub fn CommandSheet(
             if !crate::helpers::prefers_reduced_motion() {
                 let mut e = sheet_entering;
                 e.set(true);
-                spawn(async move { e.set(false); });
+                spawn(async move {
+                    e.set(false);
+                });
             }
             if let Some(ref handler) = on_open_animation_end {
                 let h = *handler;
-                spawn(async move { h.call(()); });
+                spawn(async move {
+                    h.call(());
+                });
             }
         } else {
             // Closing: defer unmount if animation_duration_ms > 0
             if let Some(ref handler) = on_close_animation_end {
                 let h = *handler;
-                spawn(async move { h.call(()); });
+                spawn(async move {
+                    h.call(());
+                });
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -2891,11 +2914,9 @@ pub fn CommandFormField(
                 crate::types::FormFieldType::Text => crate::types::FormValue::Text(String::new()),
                 crate::types::FormFieldType::Number { .. } => crate::types::FormValue::Number(0.0),
                 crate::types::FormFieldType::Bool => crate::types::FormValue::Bool(false),
-                crate::types::FormFieldType::Select { options } => {
-                    crate::types::FormValue::Select(
-                        options.first().map(|o| o.value.clone()).unwrap_or_default(),
-                    )
-                }
+                crate::types::FormFieldType::Select { options } => crate::types::FormValue::Select(
+                    options.first().map(|o| o.value.clone()).unwrap_or_default(),
+                ),
             };
             form_ctx.values.write().insert(field_id, default_val);
             idx

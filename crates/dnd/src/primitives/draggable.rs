@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use web_sys::wasm_bindgen::JsCast;
 
 use crate::context::DragContext;
-use crate::types::{combine_drag_types, DragData, DragId, DragType, Position};
+use crate::types::{DragData, DragId, DragType, Position, combine_drag_types};
 use crate::utils::{extract_attribute, filter_class_style, merge_styles};
 
 /// Best-effort handle selector matching.

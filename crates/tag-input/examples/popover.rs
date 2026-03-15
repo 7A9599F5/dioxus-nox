@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{extract_clipboard_text, use_tag_input, TagInputState, TagLike};
+use dioxus_nox_tag_input::{TagInputState, TagLike, extract_clipboard_text, use_tag_input};
 
 fn main() {
     dioxus::launch(App);
@@ -67,14 +67,62 @@ impl TagLike for SkillTag {
 
 fn skill_data() -> Vec<SkillTag> {
     vec![
-        SkillTag::new("rust", "Rust", "Systems programming with memory safety guarantees. Zero-cost abstractions and fearless concurrency.", 4, "Systems"),
-        SkillTag::new("ts", "TypeScript", "Typed superset of JavaScript for scalable web applications.", 3, "Web"),
-        SkillTag::new("python", "Python", "Versatile language for scripting, data science, and automation.", 3, "Scripting"),
-        SkillTag::new("go", "Go", "Fast compiled language with built-in concurrency primitives.", 2, "Systems"),
-        SkillTag::new("react", "React", "Component-based UI library with virtual DOM and hooks.", 4, "Frontend"),
-        SkillTag::new("docker", "Docker", "Container platform for building, shipping, and running applications.", 3, "DevOps"),
-        SkillTag::new("postgres", "PostgreSQL", "Advanced open-source relational database with JSON support.", 3, "Database"),
-        SkillTag::new("redis", "Redis", "In-memory data store used as cache, message broker, and queue.", 2, "Database"),
+        SkillTag::new(
+            "rust",
+            "Rust",
+            "Systems programming with memory safety guarantees. Zero-cost abstractions and fearless concurrency.",
+            4,
+            "Systems",
+        ),
+        SkillTag::new(
+            "ts",
+            "TypeScript",
+            "Typed superset of JavaScript for scalable web applications.",
+            3,
+            "Web",
+        ),
+        SkillTag::new(
+            "python",
+            "Python",
+            "Versatile language for scripting, data science, and automation.",
+            3,
+            "Scripting",
+        ),
+        SkillTag::new(
+            "go",
+            "Go",
+            "Fast compiled language with built-in concurrency primitives.",
+            2,
+            "Systems",
+        ),
+        SkillTag::new(
+            "react",
+            "React",
+            "Component-based UI library with virtual DOM and hooks.",
+            4,
+            "Frontend",
+        ),
+        SkillTag::new(
+            "docker",
+            "Docker",
+            "Container platform for building, shipping, and running applications.",
+            3,
+            "DevOps",
+        ),
+        SkillTag::new(
+            "postgres",
+            "PostgreSQL",
+            "Advanced open-source relational database with JSON support.",
+            3,
+            "Database",
+        ),
+        SkillTag::new(
+            "redis",
+            "Redis",
+            "In-memory data store used as cache, message broker, and queue.",
+            2,
+            "Database",
+        ),
     ]
 }
 
@@ -263,8 +311,20 @@ fn ClickAndKeyboard() -> Element {
     let mut state = use_tag_input(
         skill_data(),
         vec![
-            SkillTag::new("rust", "Rust", "Systems programming with memory safety guarantees. Zero-cost abstractions and fearless concurrency.", 4, "Systems"),
-            SkillTag::new("react", "React", "Component-based UI library with virtual DOM and hooks.", 4, "Frontend"),
+            SkillTag::new(
+                "rust",
+                "Rust",
+                "Systems programming with memory safety guarantees. Zero-cost abstractions and fearless concurrency.",
+                4,
+                "Systems",
+            ),
+            SkillTag::new(
+                "react",
+                "React",
+                "Component-based UI library with virtual DOM and hooks.",
+                4,
+                "Frontend",
+            ),
         ],
     );
 

@@ -16,7 +16,11 @@ pub fn score_items(
     matcher: &mut Matcher,
 ) -> Vec<ScoredItem> {
     // Exclude hidden items before any scoring
-    let active_items: Vec<&ItemRegistration> = items.iter().map(|i| i.as_ref()).filter(|i| !i.hidden).collect();
+    let active_items: Vec<&ItemRegistration> = items
+        .iter()
+        .map(|i| i.as_ref())
+        .filter(|i| !i.hidden)
+        .collect();
 
     if query.is_empty() {
         return active_items
@@ -51,8 +55,12 @@ pub fn score_items(
     }
 
     // Nucleo fuzzy matching with reused buffers
-    let pattern =
-        Pattern::new(query, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy);
+    let pattern = Pattern::new(
+        query,
+        CaseMatching::Ignore,
+        Normalization::Smart,
+        AtomKind::Fuzzy,
+    );
 
     let mut buf: Vec<char> = Vec::new();
 
@@ -111,13 +119,13 @@ pub fn score_items(
         results = results
             .into_iter()
             .filter_map(|si| match si.score {
-                Some(raw) => strategy.adjust_score(&si.id, raw, query).map(|adjusted| {
-                    ScoredItem {
+                Some(raw) => strategy
+                    .adjust_score(&si.id, raw, query)
+                    .map(|adjusted| ScoredItem {
                         id: si.id,
                         score: Some(adjusted),
                         match_indices: si.match_indices,
-                    }
-                }),
+                    }),
                 None => Some(si), // force_mount / empty query — pass through
             })
             .collect();

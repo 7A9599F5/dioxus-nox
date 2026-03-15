@@ -11,7 +11,7 @@
 //!   dx serve --example basic --platform ios
 
 use dioxus::prelude::*;
-use dioxus_nox_shell::{use_shell_context, AppShell, MobileSidebarBackdrop, ShellLayout};
+use dioxus_nox_shell::{AppShell, MobileSidebarBackdrop, ShellLayout, use_shell_context};
 
 fn main() {
     dioxus::launch(App);
