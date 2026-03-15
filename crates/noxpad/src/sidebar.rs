@@ -8,7 +8,7 @@ use dioxus_nox_dnd::{
     DragId, DragOverlay, DragType, MoveEvent, ReorderEvent, SortableContext, SortableGroup,
     SortableItem,
 };
-use dioxus_nox_gestures::{swipe_actions, SwipeConfig};
+use dioxus_nox_gestures::{SwipeConfig, swipe_actions};
 
 #[component]
 pub(crate) fn NoteSidebar(

@@ -87,7 +87,7 @@ This makes the demo — which serves as the primary showcase for 6+ library crat
 **Area:** Architecture — Memory Leaks via `Box::leak`
 **Problem:** Two instances of `Box::leak`:
 1. `crates/markdown/src/highlight.rs:47` — Leaks prefix strings into a `PREFIX_CACHE`. Documented as intentional since "only 1-2 prefixes are used per app."
-2. ~~`crates/noxpad/src/main.rs:470` — Leaks the entire syntax theme CSS string on every app mount: `Box::leak(generate_theme_css(...).into_boxed_str())`~~ **IMPLEMENTED**: Replaced `Box::leak` with a module-level `LazyLock<String>` — the CSS is computed once on first access, owned by the static, and never leaked. No per-component allocation.
+2. ~~`crates/noxpad/src/main.rs:470` — Leaks the entire syntax theme CSS string on every app mount: `Box::leak(generate_theme_css(...).into_boxed_str())`~~ **IMPLEMENTED**: Replaced `Box::leak` with `use_memo` — the CSS string is now owned by the memo, computed once and cached. No memory leak on remount.
 
 The highlight.rs usage is acceptable (bounded, cached). ~~The noxpad usage leaks memory on each `App` component remount — though in practice this is likely once per session, it's still a code smell and poor pattern for a demo that teaches.~~ Added explicit bounded-leak documentation comment in highlight.rs.
 

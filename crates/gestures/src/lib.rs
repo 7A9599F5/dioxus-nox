@@ -13,25 +13,23 @@
 //! Use the math layer directly for custom gesture detection, or reach for the
 //! hooks and compound components for ready-made swipe-to-reveal and long-press.
 
-mod math;
-mod types;
-mod swipe;
-mod long_press;
 mod components;
+mod long_press;
+mod math;
+mod swipe;
+mod types;
 
 #[cfg(test)]
 mod tests;
 
 // Pure math — no Dioxus dependency
 pub use math::{
-    distance, gesture_angle_degrees, is_horizontal_gesture, next_swipe_phase, velocity,
-    SwipeDecision,
+    SwipeDecision, distance, gesture_angle_degrees, is_horizontal_gesture, next_swipe_phase,
+    velocity,
 };
 
 // Types
-pub use types::{
-    LongPressHandle, LongPressPhase, SwipeConfig, SwipeHandle, SwipePhase,
-};
+pub use types::{LongPressHandle, LongPressPhase, SwipeConfig, SwipeHandle, SwipePhase};
 
 // Hooks
 pub use long_press::use_long_press;

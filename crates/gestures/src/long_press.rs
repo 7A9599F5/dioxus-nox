@@ -46,8 +46,7 @@ fn do_cancel(
 /// ```
 pub fn use_long_press(duration_ms: u32, on_press: EventHandler<()>) -> LongPressHandle {
     let mut phase = use_signal(|| LongPressPhase::Idle);
-    let task_ref: Rc<RefCell<Option<dioxus_core::Task>>> =
-        use_hook(|| Rc::new(RefCell::new(None)));
+    let task_ref: Rc<RefCell<Option<dioxus_core::Task>>> = use_hook(|| Rc::new(RefCell::new(None)));
     let start_x: Rc<Cell<f64>> = use_hook(|| Rc::new(Cell::new(0.0)));
     let start_y: Rc<Cell<f64>> = use_hook(|| Rc::new(Cell::new(0.0)));
     let active_pointer: Rc<Cell<Option<i32>>> = use_hook(|| Rc::new(Cell::new(None)));

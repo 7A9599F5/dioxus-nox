@@ -63,13 +63,12 @@ pub fn Content(
     let phase = (handle.phase)();
 
     // Only apply transition when closing (spring-back animation), not while dragging.
-    let transition = if phase == crate::types::SwipePhase::Closing
-        || phase == crate::types::SwipePhase::Open
-    {
-        "transform 0.2s ease"
-    } else {
-        "none"
-    };
+    let transition =
+        if phase == crate::types::SwipePhase::Closing || phase == crate::types::SwipePhase::Open {
+            "transform 0.2s ease"
+        } else {
+            "none"
+        };
 
     rsx! {
         div {
