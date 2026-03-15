@@ -2227,6 +2227,47 @@ mod html_policy_tests {
         assert!(html.contains("<b>"));
         assert!(html.contains("</b>"));
     }
+
+    #[cfg(feature = "sanitize")]
+    #[test]
+    fn sanitized_policy_strips_script_tags() {
+        let rope = crop::Rope::from("text <script>alert('xss')</script> end");
+        let doc = parse_document_with_policy(&rope, HtmlRenderPolicy::Sanitized);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        assert!(!html.contains("<script>"), "script tags should be stripped");
+    }
+
+    #[cfg(feature = "sanitize")]
+    #[test]
+    fn sanitized_policy_preserves_safe_html() {
+        let rope = crop::Rope::from("before <b>bold</b> after");
+        let doc = parse_document_with_policy(&rope, HtmlRenderPolicy::Sanitized);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        assert!(html.contains("<b>"), "safe tags should be preserved");
+        assert!(html.contains("</b>"), "safe closing tags should be preserved");
+    }
+
+    #[cfg(not(feature = "sanitize"))]
+    #[test]
+    fn sanitized_policy_falls_back_to_escape_without_feature() {
+        let rope = crop::Rope::from("before <b>bold</b> after");
+        let doc = parse_document_with_policy(&rope, HtmlRenderPolicy::Sanitized);
+
+        let mut vdom = VirtualDom::new_with_props(|props: Element| props, doc.element);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+
+        // Without the sanitize feature, Sanitized falls back to Escape behavior
+        assert!(html.contains("&#60;b&#62;"));
+    }
 }
 
 // ── Syntax highlighting tests ────────────────────────────────────────

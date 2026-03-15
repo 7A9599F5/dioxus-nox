@@ -27,7 +27,7 @@ These crates are published in the workspace and importable but contain zero func
 
 ---
 
-### [PRIORITY: High]
+### [IMPLEMENTED] ~~[PRIORITY: High]~~
 **Area:** Security — `dangerous_inner_html` with User Content
 **Problem:** The markdown crate uses `dangerous_inner_html` in three locations (`crates/markdown/src/parser.rs:330,423,442` and `crates/markdown/src/viewport.rs:163`). While code highlighting output from syntect is generated server-side and is relatively safe, the raw HTML rendering path at `parser.rs:330` is gated only by `HtmlRenderPolicy::Trusted`:
 
@@ -70,7 +70,7 @@ This makes the demo — which serves as the primary showcase for 6+ library crat
 
 ---
 
-### [PRIORITY: High]
+### [IMPLEMENTED] ~~[PRIORITY: High]~~
 **Area:** Developer Experience — No CI/CD
 **Problem:** No GitHub Actions, no CI configuration of any kind. The project has 492+ tests across 6 crates but no automated way to verify they pass on PRs. No clippy, no rustfmt enforcement, no WASM build validation.
 

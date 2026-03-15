@@ -326,10 +326,19 @@ fn render_node(node: &AstNode, config: &RenderConfig) -> Element {
         }
         CustomEvent::Standard(Event::Html(h)) | CustomEvent::Standard(Event::InlineHtml(h)) => {
             let html = h.to_string();
-            if config.html_render_policy == HtmlRenderPolicy::Trusted {
-                rsx! { span { dangerous_inner_html: "{html}" } }
-            } else {
-                rsx! { span { "{html}" } }
+            match config.html_render_policy {
+                HtmlRenderPolicy::Trusted => {
+                    rsx! { span { dangerous_inner_html: "{html}" } }
+                }
+                #[cfg(feature = "sanitize")]
+                HtmlRenderPolicy::Sanitized => {
+                    let clean = ammonia::clean(&html);
+                    rsx! { span { dangerous_inner_html: "{clean}" } }
+                }
+                // Escape (default) — and Sanitized fallback when feature is disabled
+                _ => {
+                    rsx! { span { "{html}" } }
+                }
             }
         }
         CustomEvent::Standard(Event::TaskListMarker(checked)) => {

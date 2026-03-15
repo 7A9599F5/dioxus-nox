@@ -1,3 +1,20 @@
+//! # Security
+//!
+//! Raw HTML in markdown is a potential XSS vector. This crate provides three
+//! rendering policies via [`HtmlRenderPolicy`](types::HtmlRenderPolicy):
+//!
+//! - **`Escape`** (default) — HTML tags are rendered as visible text. Safe for
+//!   all inputs including untrusted user content.
+//! - **`Sanitized`** — HTML is cleaned with the [`ammonia`](https://docs.rs/ammonia)
+//!   crate, stripping `<script>`, `<iframe>`, event handlers, etc. while keeping
+//!   safe formatting tags. Requires the `sanitize` Cargo feature.
+//! - **`Trusted`** — HTML is injected directly into the DOM with **no sanitization**.
+//!   Only use when you fully control the markdown source. **This is an XSS vector
+//!   if used with user-generated content.**
+//!
+//! When in doubt, use the default `Escape` policy. If you need HTML rendering
+//! with user content, enable the `sanitize` feature and use `Sanitized`.
+
 pub mod components;
 pub mod context;
 pub mod highlight;
