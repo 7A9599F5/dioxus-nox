@@ -49,6 +49,6 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use context::{use_extension_context, ExtensionContext};
-pub use hook::{use_extensions, ExtensionHandle};
+pub use context::{ExtensionContext, use_extension_context};
+pub use hook::{ExtensionHandle, use_extensions};
 pub use types::{CommandSelectCallback, Extension, ExtensionInfo, PluginCommand};

@@ -101,8 +101,7 @@ fn test_plugin_command_builder() {
 
 #[test]
 fn test_plugin_command_keywords_cached_lowercase() {
-    let cmd =
-        PluginCommand::new("c", "C").with_keywords(vec!["FOO".into(), "Bar".into()]);
+    let cmd = PluginCommand::new("c", "C").with_keywords(vec!["FOO".into(), "Bar".into()]);
     assert_eq!(cmd.keywords_cached, "foo bar");
 }
 
@@ -172,12 +171,13 @@ fn test_extension_lifecycle_tracking() {
 
 #[test]
 fn test_extension_info_from_extension() {
-    let ext: Rc<dyn Extension> =
-        Rc::new(TestExtension::new("info-ext", "Info Extension").with_commands(vec![
+    let ext: Rc<dyn Extension> = Rc::new(
+        TestExtension::new("info-ext", "Info Extension").with_commands(vec![
             PluginCommand::new("c1", "C1"),
             PluginCommand::new("c2", "C2"),
             PluginCommand::new("c3", "C3"),
-        ]));
+        ]),
+    );
 
     let info = ExtensionInfo::from(&ext);
     assert_eq!(info.id, "info-ext");
