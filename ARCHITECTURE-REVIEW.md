@@ -155,7 +155,7 @@ The comments reference optimization tickets (P-050, P-051, P-052) indicating awa
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Maintainability — Inline CSS Constants
 **Problem:** Multiple crates embed CSS as large `const &str` blocks:
 - `crates/noxpad/src/main.rs` — 210+ lines of CSS in a const
@@ -164,6 +164,8 @@ The comments reference optimization tickets (P-050, P-051, P-052) indicating awa
 While inline CSS is a legitimate pattern for headless components (zero-dependency styling), the noxpad demo mixes component library CSS (`FUNCTIONAL_STYLES`) with application CSS in one massive const. There's no separation between structural CSS (needed for functionality) and decorative CSS (app-specific theming).
 
 **Suggestion:** For noxpad, extract app CSS to a `.css` file loaded via `include_str!` or Dioxus asset system. Keep the library's `FUNCTIONAL_STYLES` pattern — it's appropriate for headless components.
+
+**IMPLEMENTED**: Extracted noxpad app CSS from inline raw string literal in `css.rs` to `noxpad.css`, loaded via `include_str!()` — matching the dnd crate's existing pattern. Library CSS (`FUNCTIONAL_STYLES`, `FEEDBACK_STYLES`) remains unchanged.
 
 **Expected Impact:** Clearer separation of library vs. application concerns in the demo.
 
