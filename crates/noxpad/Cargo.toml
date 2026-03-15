@@ -12,3 +12,4 @@ dioxus-nox-suggest = { workspace = true }
 dioxus-nox-tag-input = { workspace = true }
 dioxus-nox-dnd    = { workspace = true }
 dioxus-nox-preview = { workspace = true }
+dioxus-nox-gestures = { workspace = true }
