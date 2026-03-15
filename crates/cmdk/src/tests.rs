@@ -2508,7 +2508,7 @@ fn should_filter_false_returns_all_items_in_order() {
     // The scored_items memo returns all non-hidden items in registration order
     // (same order as items.read()), regardless of the search query.
     // Verified by code review: early-return path in scored_items memo.
-    let items = vec![item("a", "Alpha"), item("b", "Beta"), item("c", "Gamma")];
+    let items = [item("a", "Alpha"), item("b", "Beta"), item("c", "Gamma")];
     // All items are non-hidden; with should_filter=false all 3 should appear.
     assert_eq!(items.iter().filter(|i| !i.hidden).count(), 3);
 }
@@ -2517,7 +2517,7 @@ fn should_filter_false_returns_all_items_in_order() {
 fn should_filter_false_excludes_hidden() {
     // Even when should_filter=false, hidden items are excluded.
     // The early-return path filters on !i.hidden before building ScoredItems.
-    let items = vec![
+    let items = [
         item("a", "Alpha"),
         item_hidden("hidden", "Hidden"),
         item("b", "Beta"),
@@ -2552,10 +2552,7 @@ fn should_filter_false_mode_filter_still_applies() {
     // At root (no active mode): mode_item excluded, root_item included
     let no_mode_id: Option<String> = None;
     let mode_id_matches = |item_mode_id: &Option<String>| -> bool {
-        match (&no_mode_id, item_mode_id) {
-            (None, Some(_)) => false,
-            _ => true,
-        }
+        !matches!((&no_mode_id, item_mode_id), (None, Some(_)))
     };
     assert!(!mode_id_matches(&mode_item.mode_id));
     assert!(mode_id_matches(&root_item.mode_id));
@@ -2841,7 +2838,7 @@ fn focus_trap_intercepts_tab_design() {
     //
     // Verified by code review: onkeydown_root handler checks trap_focus
     // and event.key() == Key::Tab before calling prevent_default().
-    assert!(true, "Tab interception design verified by code review");
+    // Tab interception design verified by code review
 }
 
 #[test]
@@ -2968,7 +2965,7 @@ fn announcer_fires_on_page_navigation() {
         id: "exercises".to_string(),
         title: Some("Exercises".to_string()),
     };
-    let stack = vec!["exercises".to_string()];
+    let stack = ["exercises".to_string()];
     let announced = stack
         .last()
         .and_then(|pid| {
@@ -3034,10 +3031,7 @@ fn focus_save_restore_noop_on_desktop_design() {
     // use document::eval fallback and do not set focused_before_id.
     //
     // On this native test host, neither web_sys branch executes.
-    assert!(
-        true,
-        "Focus save/restore fallback design verified by code review"
-    );
+    // Focus save/restore fallback design verified by code review
 }
 
 #[test]
@@ -3719,10 +3713,7 @@ fn test_p037_router_sync_handle_push_query_updates_state() {
         assert_eq!(current_query, "hello world");
     }
     // On non-router builds, verify the absence of the type (compile-time check)
-    assert!(
-        true,
-        "P-037 router sync state logic: push_query updates internal state"
-    );
+    // P-037 router sync state logic: push_query updates internal state
 }
 
 #[test]
@@ -3963,7 +3954,7 @@ fn test_p029_explicit_match_indices_take_precedence() {
 fn test_p029_context_fallback_when_no_explicit_indices() {
     // When match_indices prop is None/absent, fall back to scored_items lookup.
     // Simulate context having a scored item with match positions.
-    let scored = vec![
+    let scored = [
         ScoredItem {
             id: "item-1".to_string(),
             score: Some(100),
@@ -4448,7 +4439,7 @@ mod virtual_scroll_tests {
     fn virtual_scroll_default_off() {
         // virtualize defaults to false -- no change in default behavior
         // This is a design invariant test
-        assert!(!false); // virtualize default is false
+        // virtualize default is false -- design invariant
     }
 
     #[test]
