@@ -20,11 +20,7 @@ pub fn distance(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
 #[inline]
 pub fn gesture_angle_degrees(dx: f64, dy: f64) -> f64 {
     let angle = dy.atan2(dx).to_degrees();
-    if angle < 0.0 {
-        angle + 360.0
-    } else {
-        angle
-    }
+    if angle < 0.0 { angle + 360.0 } else { angle }
 }
 
 /// Returns `true` when the gesture vector (dx, dy) is primarily horizontal,

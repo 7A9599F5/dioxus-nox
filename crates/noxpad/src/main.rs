@@ -21,6 +21,8 @@ mod panels;
 mod sidebar;
 mod utils;
 
+use std::sync::LazyLock;
+
 use dioxus::prelude::*;
 use dioxus_nox_dnd::{FEEDBACK_STYLES, FUNCTIONAL_STYLES};
 use dioxus_nox_markdown::prelude::{Mode, generate_theme_css};
@@ -32,6 +34,10 @@ use crate::models::{seed_folders, seed_notes};
 use crate::palette::CmdkPalette;
 use crate::panels::{PreviewPane, StatusBar};
 use crate::sidebar::NoteSidebar;
+
+/// Syntax-highlighting theme CSS, computed once on first access.
+static HIGHLIGHT_CSS: LazyLock<String> =
+    LazyLock::new(|| generate_theme_css("base16-ocean.dark", "hl-").unwrap_or_default());
 
 fn main() {
     dioxus::launch(App);
@@ -46,19 +52,11 @@ fn App() -> Element {
     let mode: Signal<Mode> = use_signal(|| Mode::LivePreview);
     let mut search_open: Signal<bool> = use_signal(|| false);
     let search_read: ReadSignal<bool> = search_open.into();
-    let highlight_css: &'static str = use_hook(|| {
-        &*Box::leak(
-            generate_theme_css("base16-ocean.dark", "hl-")
-                .unwrap_or_default()
-                .into_boxed_str(),
-        )
-    });
-
     rsx! {
         style { {FUNCTIONAL_STYLES} }
         style { {FEEDBACK_STYLES} }
         style { {CSS} }
-        style { {highlight_css} }
+        style { {HIGHLIGHT_CSS.as_str()} }
         AppShell {
             search_active: Some(search_read),
             on_search_change: move |v| {
