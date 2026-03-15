@@ -115,11 +115,17 @@ With a workspace-level edition of 2024 and pinned `dioxus = "=0.7.3"`, the versi
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Maintainability — DnD Collision Detection Complexity
 **Problem:** `crates/dnd/src/collision/sortable.rs` is 4,825 lines — the single largest file in the project. It contains the sortable collision algorithm with extensive test coverage (most of the file is tests), but the production logic portion is still very dense with multiple nested match arms and complex geometric calculations.
 
 **Suggestion:** Extract the test module into a separate `tests/` directory. Consider splitting the algorithm into sub-modules: `boundary_detection.rs`, `traversal.rs`, `projection.rs`. The tests themselves are thorough and well-structured, which is a strength.
+
+**IMPLEMENTED**: Converted `sortable.rs` into a `sortable/` directory module with two focused files:
+- `mod.rs` (~800 lines) — Production collision detection algorithm: `detect_sortable()` entry point, `SortableCollisionDetector` struct with zone classification, displacement computation, overshoot detection, nested container edge zones, zone splitting, and container/gap detection
+- `tests.rs` (~4,023 lines) — All 104+ test functions covering zone splitting, displacement-aware detection, cross-container behavior, nested containers, merge logic, overshoot tolerance, direction sensing, and reverse drag stability
+
+No public API changes — all re-exports from `lib.rs` remain valid. All 272 tests pass.
 
 **Expected Impact:** Easier navigation and maintenance; clearer separation of algorithm phases.
 
