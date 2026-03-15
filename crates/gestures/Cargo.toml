@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-nox-gestures"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 description = "Touch gesture primitives (swipe-left reveal, long-press) for Dioxus WASM apps"
 license.workspace = true

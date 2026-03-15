@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "command-palette-adaptive"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -436,7 +436,7 @@ dependencies = [
 
 [[package]]
 name = "command-palette-example"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "command-palette-floating-example"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "command-palette-mobile"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "command-palette-pages"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-dnd"
-version = "0.2.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "gloo-timers",
@@ -1273,14 +1273,14 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-extensions"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
 ]
 
 [[package]]
 name = "dioxus-nox-gestures"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "gloo-timers",
@@ -1291,7 +1291,7 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-markdown"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "ammonia",
  "crop",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-preview"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "gloo-timers",
@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-shell"
-version = "0.2.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -1321,14 +1321,14 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-suggest"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
 ]
 
 [[package]]
 name = "dioxus-nox-tag-input"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-dnd",
@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-virtualize"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
 ]
@@ -3151,7 +3151,7 @@ checksum = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 
 [[package]]
 name = "noxpad"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-cmdk",
@@ -4651,7 +4651,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "suggest-demo"
-version = "0.1.0"
+version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-suggest",

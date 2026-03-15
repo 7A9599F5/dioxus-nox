@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-nox-tag-input"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 description = "Headless tag/multi-select input primitive for Dioxus"
 license.workspace = true

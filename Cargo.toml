@@ -21,6 +21,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
+version = "0.13.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/7A9599F5/dioxus-nox"

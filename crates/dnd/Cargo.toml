@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-nox-dnd"
-version = "0.2.0"
+version.workspace = true
 edition.workspace = true
 description = "A composable drag-and-drop component library for Dioxus"
 license.workspace = true
