@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Umbrella crate for the dioxus-nox headless component library"
 license.workspace = true
 repository.workspace = true
+readme = "../../README.md"
 keywords = ["dioxus", "components", "wasm", "ui"]
 categories = ["gui", "wasm", "web-programming"]
 

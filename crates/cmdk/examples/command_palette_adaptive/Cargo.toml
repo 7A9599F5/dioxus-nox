@@ -2,6 +2,7 @@
 name = "command-palette-adaptive"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 dioxus = { workspace = true, features = ["web"] }

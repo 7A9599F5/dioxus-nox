@@ -2,6 +2,7 @@
 name = "command-palette-mobile"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 dioxus = { workspace = true, features = ["web"] }

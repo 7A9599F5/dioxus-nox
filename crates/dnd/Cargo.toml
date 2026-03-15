@@ -9,9 +9,6 @@ repository.workspace = true
 keywords = ["dioxus", "drag-and-drop", "wasm", "sortable", "dnd"]
 categories = ["gui", "wasm", "web-programming"]
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [features]
 default = ["web", "styles"]
 web = ["dioxus/web"]

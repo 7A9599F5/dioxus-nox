@@ -2,6 +2,7 @@
 name = "suggest-demo"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [[bin]]
 name = "suggest-demo"
