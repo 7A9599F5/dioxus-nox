@@ -201,24 +201,24 @@ pub fn DropZone(props: DropZoneProps) -> Element {
         }
 
         let task = spawn(async move {
-            if let Some(mounted) = node_ref.read().as_ref() {
-                if let Ok(rect) = mounted.get_client_rect().await {
-                    // Convert euclid Rect to our owned Rect immediately
-                    let owned_rect = Rect::new(
-                        rect.origin.x,
-                        rect.origin.y,
-                        rect.size.width,
-                        rect.size.height,
-                    );
+            if let Some(mounted) = node_ref.read().as_ref()
+                && let Ok(rect) = mounted.get_client_rect().await
+            {
+                // Convert euclid Rect to our owned Rect immediately
+                let owned_rect = Rect::new(
+                    rect.origin.x,
+                    rect.origin.y,
+                    rect.size.width,
+                    rect.size.height,
+                );
 
-                    ctx.register_drop_zone(
-                        id.clone(),
-                        id.clone(), // Container is self for standalone drop zones
-                        owned_rect,
-                        accepts.clone(),
-                        orientation,
-                    );
-                }
+                ctx.register_drop_zone(
+                    id.clone(),
+                    id.clone(), // Container is self for standalone drop zones
+                    owned_rect,
+                    accepts.clone(),
+                    orientation,
+                );
             }
         });
         rect_task.set(Some(task));
@@ -331,11 +331,7 @@ pub fn DropZone(props: DropZoneProps) -> Element {
 
     let dnd_state = if is_over { "over" } else { "" };
     let dnd_can_drop = if is_over {
-        if can_drop {
-            "true"
-        } else {
-            "false"
-        }
+        if can_drop { "true" } else { "false" }
     } else {
         ""
     };
@@ -471,11 +467,7 @@ mod tests {
         let is_over = true;
         let can_drop = true;
         let val = if is_over {
-            if can_drop {
-                "true"
-            } else {
-                "false"
-            }
+            if can_drop { "true" } else { "false" }
         } else {
             ""
         };
@@ -483,11 +475,7 @@ mod tests {
 
         let can_drop = false;
         let val = if is_over {
-            if can_drop {
-                "true"
-            } else {
-                "false"
-            }
+            if can_drop { "true" } else { "false" }
         } else {
             ""
         };
@@ -495,11 +483,7 @@ mod tests {
 
         let is_over = false;
         let val = if is_over {
-            if can_drop {
-                "true"
-            } else {
-                "false"
-            }
+            if can_drop { "true" } else { "false" }
         } else {
             ""
         };

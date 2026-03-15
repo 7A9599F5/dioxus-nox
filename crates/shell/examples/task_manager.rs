@@ -14,10 +14,13 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_cmdk::{
-    CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-    CommandRoot, CommandSeparator, Hotkey, use_global_shortcuts,
+    CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandRoot,
+    CommandSeparator, Hotkey, use_global_shortcuts,
 };
-use dioxus_nox_shell::{AppShell, BreakpointConfig, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout, use_shell_context};
+use dioxus_nox_shell::{
+    AppShell, BreakpointConfig, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout,
+    use_shell_context,
+};
 
 fn main() {
     dioxus::launch(App);
@@ -187,18 +190,18 @@ fn IssueList(
                         span { class: "mobile-nav-title", "{issue_id}" }
                     }
                 }
-                if let Some(issue_id) = (selected_issue)() {
-                    if let Some((id, title, _, status)) = find_issue(issue_id) {
-                        div { class: "mobile-detail",
-                            h1 { "{title}" }
-                            div { class: "issue-meta",
-                                span { class: "issue-id", "{id}" }
-                                span { class: "badge {status_css(status)}", "{status}" }
-                            }
-                            p { class: "detail-body",
-                                "Issue detail view. On desktop this pane sits beside the list. "
-                                "On mobile, stack navigation replaces the list with this screen."
-                            }
+                if let Some(issue_id) = (selected_issue)()
+                    && let Some((id, title, _, status)) = find_issue(issue_id)
+                {
+                    div { class: "mobile-detail",
+                        h1 { "{title}" }
+                        div { class: "issue-meta",
+                            span { class: "issue-id", "{id}" }
+                            span { class: "badge {status_css(status)}", "{status}" }
+                        }
+                        p { class: "detail-body",
+                            "Issue detail view. On desktop this pane sits beside the list. "
+                            "On mobile, stack navigation replaces the list with this screen."
                         }
                     }
                 }

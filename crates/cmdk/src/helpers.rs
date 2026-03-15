@@ -59,7 +59,11 @@ pub(crate) fn now_ms() -> f64 {
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn prefers_reduced_motion() -> bool {
     web_sys::window()
-        .and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten())
+        .and_then(|w| {
+            w.match_media("(prefers-reduced-motion: reduce)")
+                .ok()
+                .flatten()
+        })
         .is_some_and(|mq| mq.matches())
 }
 
@@ -108,9 +112,8 @@ pub(crate) fn scroll_item_into_view(instance_id: u32, item_id: &str) {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let js = format!(
-            r#"document.getElementById("{dom_id}")?.scrollIntoView({{block:"nearest"}})"#
-        );
+        let js =
+            format!(r#"document.getElementById("{dom_id}")?.scrollIntoView({{block:"nearest"}})"#);
         dioxus::prelude::document::eval(&js);
     }
 }
@@ -151,8 +154,12 @@ fn set_siblings_inert_wasm(palette_root_id: &str, inert: bool) {
     // REVIEW(web_sys): no Dioxus 0.7 native equivalent for setting `inert` on DOM siblings.
     use wasm_bindgen::JsCast;
 
-    let Some(window) = web_sys::window() else { return };
-    let Some(document) = window.document() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(document) = window.document() else {
+        return;
+    };
     let Some(body) = document.body() else { return };
 
     // Cast body to Element to access .children() (HtmlBodyElement doesn't have it directly)
@@ -164,10 +171,14 @@ fn set_siblings_inert_wasm(palette_root_id: &str, inert: bool) {
     let children = body_el.children();
     let len = children.length();
     for i in 0..len {
-        let Some(child) = children.item(i) else { continue };
+        let Some(child) = children.item(i) else {
+            continue;
+        };
 
         // Skip the element that contains (or IS) the palette root.
-        let skip = palette_el.as_ref().is_some_and(|pe| child.contains(Some(pe)));
+        let skip = palette_el
+            .as_ref()
+            .is_some_and(|pe| child.contains(Some(pe)));
         if skip {
             continue;
         }
@@ -203,8 +214,7 @@ pub(crate) fn get_focusable_elements_in_container(
     let window = web_sys::window()?;
     let document = window.document()?;
     let container = document.get_element_by_id(container_id)?;
-    let selector =
-        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), \
+    let selector = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), \
          textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
     let node_list = container.query_selector_all(selector).ok()?;
     let len = node_list.length();
@@ -222,9 +232,7 @@ pub(crate) fn get_focusable_elements_in_container(
 /// Stub for non-wasm: returns `None` (no-op, tab guards handle focus cycling on native).
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
-pub(crate) fn get_focusable_elements_in_container(
-    _container_id: &str,
-) -> Option<Vec<()>> {
+pub(crate) fn get_focusable_elements_in_container(_container_id: &str) -> Option<Vec<()>> {
     // Intentional no-op: Dioxus native focus management is handled by platform.
     None
 }

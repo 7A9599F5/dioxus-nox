@@ -12,7 +12,7 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_shell::{
-    use_shell_context, AppShell, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout,
+    AppShell, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout, use_shell_context,
 };
 
 fn main() {

@@ -3,7 +3,9 @@ use nucleo_matcher::{Config, Matcher};
 
 use crate::helpers::{make_input_id, make_item_dom_id, make_listbox_id};
 use crate::hook::CommandHistoryState;
-use crate::navigation::{find_next, find_next_by, find_next_group, find_prev, find_prev_by, find_prev_group};
+use crate::navigation::{
+    find_next, find_next_by, find_next_group, find_prev, find_prev_by, find_prev_group,
+};
 use crate::scoring::score_items;
 use crate::shortcut::{Hotkey, HotkeyParseError};
 use crate::types::{
@@ -150,7 +152,12 @@ fn item_on_page(id: &str, label: &str, page: &str) -> _TestRc<ItemRegistration> 
     })
 }
 
-fn item_on_page_in_group(id: &str, label: &str, page: &str, group: &str) -> _TestRc<ItemRegistration> {
+fn item_on_page_in_group(
+    id: &str,
+    label: &str,
+    page: &str,
+    group: &str,
+) -> _TestRc<ItemRegistration> {
     _TestRc::new(ItemRegistration {
         id: id.to_string(),
         label: label.to_string(),
@@ -351,7 +358,11 @@ fn empty_items_empty_query_returns_empty() {
 
 #[test]
 fn hidden_items_excluded_from_scoring() {
-    let items = vec![item("a", "Alpha"), item_hidden("h", "Hidden"), item("b", "Beta")];
+    let items = vec![
+        item("a", "Alpha"),
+        item_hidden("h", "Hidden"),
+        item("b", "Beta"),
+    ];
     let mut matcher = Matcher::new(Config::DEFAULT);
     let results = score_items(&items, "", None, None, &mut matcher);
     assert_eq!(results.len(), 2);
@@ -844,7 +855,11 @@ fn find_next_no_loop_from_middle() {
 #[test]
 fn find_next_no_loop_all_disabled_returns_none() {
     let visible = ids(&["a", "b", "c"]);
-    let items = vec![item("a", "A"), item_disabled("b", "B"), item_disabled("c", "C")];
+    let items = vec![
+        item("a", "A"),
+        item_disabled("b", "B"),
+        item_disabled("c", "C"),
+    ];
     // From index 0, all items after are disabled → None
     assert_eq!(find_next(&visible, 0, &items, false), None);
 }
@@ -877,7 +892,11 @@ fn find_prev_no_loop_from_middle() {
 #[test]
 fn find_prev_no_loop_all_disabled_returns_none() {
     let visible = ids(&["a", "b", "c"]);
-    let items = vec![item_disabled("a", "A"), item_disabled("b", "B"), item("c", "C")];
+    let items = vec![
+        item_disabled("a", "A"),
+        item_disabled("b", "B"),
+        item("c", "C"),
+    ];
     // From index 2, all items before are disabled → None
     assert_eq!(find_prev(&visible, 2, &items, false), None);
 }
@@ -924,9 +943,7 @@ fn custom_filter_new_with_fn_pointer() {
 
 #[test]
 fn custom_filter_new_with_closure() {
-    let cf = CustomFilter::new(|q, l, _kw| {
-        if l.starts_with(q) { Some(42) } else { None }
-    });
+    let cf = CustomFilter::new(|q, l, _kw| if l.starts_with(q) { Some(42) } else { None });
     assert_eq!((cf.0)("he", "hello", ""), Some(42));
     assert_eq!((cf.0)("xx", "hello", ""), None);
 }
@@ -935,7 +952,11 @@ fn custom_filter_new_with_closure() {
 fn custom_filter_closure_captures_state() {
     let threshold = 3;
     let cf = CustomFilter::new(move |_q, l, _kw| {
-        if l.len() >= threshold { Some(l.len() as u32) } else { None }
+        if l.len() >= threshold {
+            Some(l.len() as u32)
+        } else {
+            None
+        }
     });
     assert_eq!((cf.0)("", "ab", ""), None);
     assert_eq!((cf.0)("", "abc", ""), Some(3));
@@ -1320,7 +1341,10 @@ fn hotkey_try_parse_returns_option() {
 
 #[test]
 fn hotkey_parse_error_display() {
-    assert_eq!(HotkeyParseError::EmptyInput.to_string(), "hotkey string is empty");
+    assert_eq!(
+        HotkeyParseError::EmptyInput.to_string(),
+        "hotkey string is empty"
+    );
     assert_eq!(
         HotkeyParseError::UnknownModifier("foo".into()).to_string(),
         "unknown modifier: foo"
@@ -1329,7 +1353,10 @@ fn hotkey_parse_error_display() {
         HotkeyParseError::UnknownKey("bar".into()).to_string(),
         "unknown key: bar"
     );
-    assert_eq!(HotkeyParseError::MissingKey.to_string(), "no key provided after modifiers");
+    assert_eq!(
+        HotkeyParseError::MissingKey.to_string(),
+        "no key provided after modifiers"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -1404,7 +1431,12 @@ fn item_with_shortcut(id: &str, label: &str, shortcut_str: &str) -> _TestRc<Item
     })
 }
 
-fn item_with_shortcut_and_value(id: &str, label: &str, shortcut_str: &str, value: &str) -> _TestRc<ItemRegistration> {
+fn item_with_shortcut_and_value(
+    id: &str,
+    label: &str,
+    shortcut_str: &str,
+    value: &str,
+) -> _TestRc<ItemRegistration> {
     _TestRc::new(ItemRegistration {
         id: id.to_string(),
         label: label.to_string(),
@@ -1423,7 +1455,11 @@ fn item_with_shortcut_and_value(id: &str, label: &str, shortcut_str: &str, value
     })
 }
 
-fn item_disabled_with_shortcut(id: &str, label: &str, shortcut_str: &str) -> _TestRc<ItemRegistration> {
+fn item_disabled_with_shortcut(
+    id: &str,
+    label: &str,
+    shortcut_str: &str,
+) -> _TestRc<ItemRegistration> {
     _TestRc::new(ItemRegistration {
         id: id.to_string(),
         label: label.to_string(),
@@ -1448,13 +1484,16 @@ fn find_shortcut_match<'a>(
     key: &Key,
     modifiers: Modifiers,
 ) -> Option<&'a ItemRegistration> {
-    items.iter().find(|item| {
-        !item.disabled
-            && item
-                .shortcut
-                .as_ref()
-                .is_some_and(|hk| hk.matches(key, modifiers))
-    }).map(|rc| rc.as_ref())
+    items
+        .iter()
+        .find(|item| {
+            !item.disabled
+                && item
+                    .shortcut
+                    .as_ref()
+                    .is_some_and(|hk| hk.matches(key, modifiers))
+        })
+        .map(|rc| rc.as_ref())
 }
 
 #[test]
@@ -1487,7 +1526,12 @@ fn find_shortcut_no_match_returns_none() {
 
 #[test]
 fn find_shortcut_resolves_value() {
-    let items = vec![item_with_shortcut_and_value("settings", "Settings", "ctrl+s", "/settings")];
+    let items = vec![item_with_shortcut_and_value(
+        "settings",
+        "Settings",
+        "ctrl+s",
+        "/settings",
+    )];
     let matched = find_shortcut_match(&items, &Key::Character("s".into()), Modifiers::CONTROL);
     let resolved = matched
         .and_then(|it| it.value.clone())
@@ -2032,7 +2076,10 @@ fn mode_resolution_forced_sheet_ignores_desktop() {
 // -----------------------------------------------------------------------
 
 /// Simulate the value-resolution logic from the on_active_change use_effect.
-fn resolve_active_value(active_id: Option<&str>, items: &[_TestRc<ItemRegistration>]) -> Option<String> {
+fn resolve_active_value(
+    active_id: Option<&str>,
+    items: &[_TestRc<ItemRegistration>],
+) -> Option<String> {
     active_id.map(|id| {
         items
             .iter()
@@ -2176,7 +2223,11 @@ fn quick_input_backspace_empty_no_page_pop() {
     if search.is_empty() {
         // Do nothing (QuickInput omits the pop_page call)
     }
-    assert_eq!(page_stack.len(), 1, "page stack must not be popped by QuickInput");
+    assert_eq!(
+        page_stack.len(),
+        1,
+        "page stack must not be popped by QuickInput"
+    );
     let _ = page_stack.pop(); // suppress unused warning
 }
 
@@ -2457,11 +2508,7 @@ fn should_filter_false_returns_all_items_in_order() {
     // The scored_items memo returns all non-hidden items in registration order
     // (same order as items.read()), regardless of the search query.
     // Verified by code review: early-return path in scored_items memo.
-    let items = vec![
-        item("a", "Alpha"),
-        item("b", "Beta"),
-        item("c", "Gamma"),
-    ];
+    let items = [item("a", "Alpha"), item("b", "Beta"), item("c", "Gamma")];
     // All items are non-hidden; with should_filter=false all 3 should appear.
     assert_eq!(items.iter().filter(|i| !i.hidden).count(), 3);
 }
@@ -2470,7 +2517,11 @@ fn should_filter_false_returns_all_items_in_order() {
 fn should_filter_false_excludes_hidden() {
     // Even when should_filter=false, hidden items are excluded.
     // The early-return path filters on !i.hidden before building ScoredItems.
-    let items = vec![item("a", "Alpha"), item_hidden("hidden", "Hidden"), item("b", "Beta")];
+    let items = [
+        item("a", "Alpha"),
+        item_hidden("hidden", "Hidden"),
+        item("b", "Beta"),
+    ];
     let visible: Vec<_> = items.iter().filter(|i| !i.hidden).collect();
     assert_eq!(visible.len(), 2);
     assert!(visible.iter().all(|i| i.id != "hidden"));
@@ -2481,7 +2532,11 @@ fn should_filter_false_no_match_indices() {
     // Items returned under should_filter=false have score=None and match_indices=None.
     // Verified by code review of early-return:
     // ScoredItem { id, score: None, match_indices: None }
-    let si = ScoredItem { id: "x".into(), score: None, match_indices: None };
+    let si = ScoredItem {
+        id: "x".into(),
+        score: None,
+        match_indices: None,
+    };
     assert!(si.score.is_none());
     assert!(si.match_indices.is_none());
 }
@@ -2497,10 +2552,7 @@ fn should_filter_false_mode_filter_still_applies() {
     // At root (no active mode): mode_item excluded, root_item included
     let no_mode_id: Option<String> = None;
     let mode_id_matches = |item_mode_id: &Option<String>| -> bool {
-        match (&no_mode_id, item_mode_id) {
-            (None, Some(_)) => false,
-            _ => true,
-        }
+        !matches!((&no_mode_id, item_mode_id), (None, Some(_)))
     };
     assert!(!mode_id_matches(&mode_item.mode_id));
     assert!(mode_id_matches(&root_item.mode_id));
@@ -2720,7 +2772,10 @@ fn inert_activates_on_open_design() {
     // The signal transitions: false → true when is_open becomes true.
     let initial_state = false;
     let after_open = true;
-    assert_ne!(initial_state, after_open, "inert_background must change on open");
+    assert_ne!(
+        initial_state, after_open,
+        "inert_background must change on open"
+    );
 }
 
 #[test]
@@ -2742,7 +2797,7 @@ fn inert_noop_on_desktop_design() {
     // explicit no-op with a documentation comment explaining the rationale.
     //
     // On this native test host, set_siblings_inert does nothing:
-    crate::helpers::set_siblings_inert("any-id", true);  // must not panic
+    crate::helpers::set_siblings_inert("any-id", true); // must not panic
     crate::helpers::set_siblings_inert("any-id", false); // must not panic
 }
 
@@ -2783,7 +2838,7 @@ fn focus_trap_intercepts_tab_design() {
     //
     // Verified by code review: onkeydown_root handler checks trap_focus
     // and event.key() == Key::Tab before calling prevent_default().
-    assert!(true, "Tab interception design verified by code review");
+    // Tab interception design verified by code review
 }
 
 #[test]
@@ -2795,8 +2850,15 @@ fn focus_trap_shift_tab_wraps_design() {
     //   Shift+Tab at index 0 → focusables.len() - 1
     let focusables_len = 3usize;
     let current_idx = 0usize;
-    let next_idx = if current_idx == 0 { focusables_len - 1 } else { current_idx - 1 };
-    assert_eq!(next_idx, 2, "Shift+Tab at index 0 should wrap to last element");
+    let next_idx = if current_idx == 0 {
+        focusables_len - 1
+    } else {
+        current_idx - 1
+    };
+    assert_eq!(
+        next_idx, 2,
+        "Shift+Tab at index 0 should wrap to last element"
+    );
 }
 
 #[test]
@@ -2830,7 +2892,10 @@ fn focus_trap_no_focusables_design() {
     //   if focusables.is_empty() { event.prevent_default(); return; }
     let focusables: Vec<()> = vec![];
     let would_skip = focusables.is_empty();
-    assert!(would_skip, "Empty focusables → should not attempt to focus any element");
+    assert!(
+        would_skip,
+        "Empty focusables → should not attempt to focus any element"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -2845,7 +2910,10 @@ fn announcer_signal_default_empty() {
     // Verified by code review in use_command_context:
     //   let announcer: Signal<String> = use_signal(String::new);
     let default_val = String::new();
-    assert!(default_val.is_empty(), "announcer signal starts as empty string");
+    assert!(
+        default_val.is_empty(),
+        "announcer signal starts as empty string"
+    );
 }
 
 #[test]
@@ -2873,7 +2941,11 @@ fn announcer_fires_on_filter_cleared() {
     // Verified by code review:
     //   if query.is_empty() { ann.set("Filter cleared".to_string()); }
     let query = "";
-    let expected = if query.is_empty() { "Filter cleared" } else { "No change" };
+    let expected = if query.is_empty() {
+        "Filter cleared"
+    } else {
+        "No change"
+    };
     assert_eq!(expected, "Filter cleared");
 }
 
@@ -2893,10 +2965,17 @@ fn announcer_fires_on_page_navigation() {
         id: "exercises".to_string(),
         title: Some("Exercises".to_string()),
     };
-    let stack = vec!["exercises".to_string()];
-    let announced = stack.last().and_then(|pid| {
-        if pid == &page.id { page.title.clone() } else { None }
-    }).unwrap_or_default();
+    let stack = ["exercises".to_string()];
+    let announced = stack
+        .last()
+        .and_then(|pid| {
+            if pid == &page.id {
+                page.title.clone()
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
     assert_eq!(announced, "Exercises");
 }
 
@@ -2952,7 +3031,7 @@ fn focus_save_restore_noop_on_desktop_design() {
     // use document::eval fallback and do not set focused_before_id.
     //
     // On this native test host, neither web_sys branch executes.
-    assert!(true, "Focus save/restore fallback design verified by code review");
+    // Focus save/restore fallback design verified by code review
 }
 
 #[test]
@@ -2966,11 +3045,22 @@ fn focus_save_design_wasm_only() {
     //   let stored_id = if id_val.is_empty() { None } else { Some(id_val) };
     //   ctx.focused_before_id.set(stored_id);
     let id_val = "";
-    let stored_id: Option<String> = if id_val.is_empty() { None } else { Some(id_val.to_string()) };
-    assert!(stored_id.is_none(), "Empty id string must be stored as None");
+    let stored_id: Option<String> = if id_val.is_empty() {
+        None
+    } else {
+        Some(id_val.to_string())
+    };
+    assert!(
+        stored_id.is_none(),
+        "Empty id string must be stored as None"
+    );
 
     let id_val2 = "my-button";
-    let stored_id2: Option<String> = if id_val2.is_empty() { None } else { Some(id_val2.to_string()) };
+    let stored_id2: Option<String> = if id_val2.is_empty() {
+        None
+    } else {
+        Some(id_val2.to_string())
+    };
     assert_eq!(stored_id2, Some("my-button".to_string()));
 }
 
@@ -3008,7 +3098,10 @@ fn focused_before_id_cleared_after_restore() {
         // would call html_el.focus()
         stored = None;
     }
-    assert!(stored.is_none(), "focused_before_id is cleared after restore");
+    assert!(
+        stored.is_none(),
+        "focused_before_id is cleared after restore"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -3051,7 +3144,8 @@ fn sheet_close_button_label_custom() {
 #[test]
 fn page_down_moves_by_page_size() {
     // find_next_by advances `steps` positions forward.
-    let items: Vec<_TestRc<ItemRegistration>> = (0..15).map(|i| item(&format!("i{i}"), "x")).collect();
+    let items: Vec<_TestRc<ItemRegistration>> =
+        (0..15).map(|i| item(&format!("i{i}"), "x")).collect();
     let visible: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
     // Start at index 0, advance by 10 -> should land at index 10
     let result = find_next_by(&visible, 0, &items, 10, false);
@@ -3061,7 +3155,8 @@ fn page_down_moves_by_page_size() {
 #[test]
 fn page_up_moves_by_page_size() {
     // find_prev_by retreats `steps` positions backward.
-    let items: Vec<_TestRc<ItemRegistration>> = (0..15).map(|i| item(&format!("i{i}"), "x")).collect();
+    let items: Vec<_TestRc<ItemRegistration>> =
+        (0..15).map(|i| item(&format!("i{i}"), "x")).collect();
     let visible: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
     // Start at index 12, go back 5 -> should land at index 7
     let result = find_prev_by(&visible, 12, &items, 5, false);
@@ -3071,7 +3166,8 @@ fn page_up_moves_by_page_size() {
 #[test]
 fn page_down_clamps_at_end_without_loop() {
     // When loop_navigation=false, find_next_by stops at the last enabled item.
-    let items: Vec<_TestRc<ItemRegistration>> = (0..5).map(|i| item(&format!("i{i}"), "x")).collect();
+    let items: Vec<_TestRc<ItemRegistration>> =
+        (0..5).map(|i| item(&format!("i{i}"), "x")).collect();
     let visible: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
     // Start at index 2, advance by 10 (only 2 items remain) -> clamps at index 4
     let result = find_next_by(&visible, 2, &items, 10, false);
@@ -3081,7 +3177,8 @@ fn page_down_clamps_at_end_without_loop() {
 #[test]
 fn page_up_clamps_at_start_without_loop() {
     // When loop_navigation=false, find_prev_by stops at the first enabled item.
-    let items: Vec<_TestRc<ItemRegistration>> = (0..5).map(|i| item(&format!("i{i}"), "x")).collect();
+    let items: Vec<_TestRc<ItemRegistration>> =
+        (0..5).map(|i| item(&format!("i{i}"), "x")).collect();
     let visible: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
     // Start at index 2, go back 10 (only 2 items before) -> clamps at index 0
     let result = find_prev_by(&visible, 2, &items, 10, false);
@@ -3195,7 +3292,10 @@ fn test_p033_instance_id_increments() {
     // each call must be strictly greater than the previous.
     let id1 = next_instance_id();
     let id2 = next_instance_id();
-    assert!(id2 > id1, "IDs should increment monotonically: id1={id1}, id2={id2}");
+    assert!(
+        id2 > id1,
+        "IDs should increment monotonically: id1={id1}, id2={id2}"
+    );
 }
 
 #[test]
@@ -3233,12 +3333,22 @@ fn test_p035_closure_holder_starts_none() {
 
     // Simulate storing a listener.
     *holder.borrow_mut() = Some("listener".to_string());
-    assert!(holder.borrow().is_some(), "Holder should contain the listener");
+    assert!(
+        holder.borrow().is_some(),
+        "Holder should contain the listener"
+    );
 
     // Simulate cleanup via use_drop.
     let taken = holder.borrow_mut().take();
-    assert_eq!(taken, Some("listener".to_string()), "take() should return the stored value");
-    assert!(holder.borrow().is_none(), "Holder should be None after take()");
+    assert_eq!(
+        taken,
+        Some("listener".to_string()),
+        "take() should return the stored value"
+    );
+    assert!(
+        holder.borrow().is_none(),
+        "Holder should be None after take()"
+    );
 }
 
 #[test]
@@ -3289,7 +3399,10 @@ fn test_p035_multiple_holders_are_independent() {
     assert_eq!(*holder_b.borrow(), Some(2));
     // Taking from one does not affect the other.
     let _ = holder_a.borrow_mut().take();
-    assert!(holder_a.borrow().is_none(), "holder_a should be empty after take");
+    assert!(
+        holder_a.borrow().is_none(),
+        "holder_a should be empty after take"
+    );
     assert!(holder_b.borrow().is_some(), "holder_b should be unaffected");
 }
 
@@ -3499,7 +3612,11 @@ fn test_p018_loading_progress_clamped_low() {
 fn test_p018_loading_progress_none_means_status_role() {
     // When progress is None, should use role="status" (not "progressbar")
     let progress: Option<f32> = None;
-    let role = if progress.is_some() { "progressbar" } else { "status" };
+    let role = if progress.is_some() {
+        "progressbar"
+    } else {
+        "status"
+    };
     assert_eq!(role, "status");
 }
 
@@ -3507,7 +3624,11 @@ fn test_p018_loading_progress_none_means_status_role() {
 fn test_p018_loading_progress_some_means_progressbar_role() {
     // When progress is Some, should use role="progressbar"
     let progress: Option<f32> = Some(75.0);
-    let role = if progress.is_some() { "progressbar" } else { "status" };
+    let role = if progress.is_some() {
+        "progressbar"
+    } else {
+        "status"
+    };
     assert_eq!(role, "progressbar");
 }
 
@@ -3525,7 +3646,11 @@ fn test_p018_loading_progress_valuenow_formatted() {
     // aria-valuenow should be the clamped float formatted as string
     let progress: Option<f32> = Some(66.7);
     let clamped = progress.map(|p| p.clamp(0.0, 100.0));
-    let valuenow = if let Some(v) = clamped { v.to_string() } else { String::new() };
+    let valuenow = if let Some(v) = clamped {
+        v.to_string()
+    } else {
+        String::new()
+    };
     assert!(!valuenow.is_empty());
     assert!(valuenow.starts_with("66"));
 }
@@ -3567,7 +3692,6 @@ fn test_p019_separator_hides_when_before_group_hidden() {
     let after_hidden = false;
     let should_hide = !always_render && (before_hidden || after_hidden);
     assert!(should_hide);
-
 }
 
 // -----------------------------------------------------------------------
@@ -3589,7 +3713,7 @@ fn test_p037_router_sync_handle_push_query_updates_state() {
         assert_eq!(current_query, "hello world");
     }
     // On non-router builds, verify the absence of the type (compile-time check)
-    assert!(true, "P-037 router sync state logic: push_query updates internal state");
+    // P-037 router sync state logic: push_query updates internal state
 }
 
 #[test]
@@ -3624,12 +3748,20 @@ fn test_p037_router_sync_query_with_special_chars() {
 // -----------------------------------------------------------------------
 
 fn group_reg(id: &str) -> GroupRegistration {
-    GroupRegistration { id: id.to_string(), heading: None, force_mount: false }
+    GroupRegistration {
+        id: id.to_string(),
+        heading: None,
+        force_mount: false,
+    }
 }
 
 #[allow(dead_code)]
 fn group_reg_force_mount(id: &str) -> GroupRegistration {
-    GroupRegistration { id: id.to_string(), heading: None, force_mount: true }
+    GroupRegistration {
+        id: id.to_string(),
+        heading: None,
+        force_mount: true,
+    }
 }
 
 fn item_in_group_2(id: &str, group: &str) -> _TestRc<ItemRegistration> {
@@ -3663,7 +3795,9 @@ fn test_p021_find_next_group_basic() {
     ];
     let groups = vec![group_reg("A"), group_reg("B")];
     let mut visible: HashSet<String> = HashSet::new();
-    for i in &items { visible.insert(i.id.clone()); }
+    for i in &items {
+        visible.insert(i.id.clone());
+    }
 
     let result = find_next_group(&items, &groups, Some("a1"), &visible, false);
     assert_eq!(result, Some("b1".to_string()));
@@ -3681,7 +3815,9 @@ fn test_p021_find_prev_group_basic() {
     ];
     let groups = vec![group_reg("A"), group_reg("B")];
     let mut visible: HashSet<String> = HashSet::new();
-    for i in &items { visible.insert(i.id.clone()); }
+    for i in &items {
+        visible.insert(i.id.clone());
+    }
 
     let result = find_prev_group(&items, &groups, Some("b1"), &visible, false);
     assert_eq!(result, Some("a2".to_string()));
@@ -3690,13 +3826,12 @@ fn test_p021_find_prev_group_basic() {
 #[test]
 fn test_p021_find_next_group_single_group_no_loop() {
     // Only one group; no next group → None (no loop)
-    let items = vec![
-        item_in_group_2("a1", "A"),
-        item_in_group_2("a2", "A"),
-    ];
+    let items = vec![item_in_group_2("a1", "A"), item_in_group_2("a2", "A")];
     let groups = vec![group_reg("A")];
     let mut visible: HashSet<String> = HashSet::new();
-    for i in &items { visible.insert(i.id.clone()); }
+    for i in &items {
+        visible.insert(i.id.clone());
+    }
 
     let result = find_next_group(&items, &groups, Some("a1"), &visible, false);
     assert_eq!(result, None);
@@ -3705,13 +3840,12 @@ fn test_p021_find_next_group_single_group_no_loop() {
 #[test]
 fn test_p021_find_next_group_loop_wraps() {
     // Two groups; at last group with loop_nav=true → wraps to first group
-    let items = vec![
-        item_in_group_2("a1", "A"),
-        item_in_group_2("b1", "B"),
-    ];
+    let items = vec![item_in_group_2("a1", "A"), item_in_group_2("b1", "B")];
     let groups = vec![group_reg("A"), group_reg("B")];
     let mut visible: HashSet<String> = HashSet::new();
-    for i in &items { visible.insert(i.id.clone()); }
+    for i in &items {
+        visible.insert(i.id.clone());
+    }
 
     let result = find_next_group(&items, &groups, Some("b1"), &visible, true);
     assert_eq!(result, Some("a1".to_string()));
@@ -3738,13 +3872,12 @@ fn test_p021_find_next_group_skips_invisible_groups() {
 #[test]
 fn test_p021_find_prev_group_no_group_item() {
     // Active item has no group → treat as if at the very beginning; no prev group
-    let items = vec![
-        item("ungrouped", "Ungrouped"),
-        item_in_group_2("a1", "A"),
-    ];
+    let items = vec![item("ungrouped", "Ungrouped"), item_in_group_2("a1", "A")];
     let groups = vec![group_reg("A")];
     let mut visible: HashSet<String> = HashSet::new();
-    for i in &items { visible.insert(i.id.clone()); }
+    for i in &items {
+        visible.insert(i.id.clone());
+    }
 
     // No group for "ungrouped" → find_prev_group returns None (no current group to step back from)
     let result = find_prev_group(&items, &groups, Some("ungrouped"), &visible, false);
@@ -3767,10 +3900,18 @@ fn test_p015_animation_state_partial_eq() {
 #[test]
 fn test_p015_animation_state_variants() {
     // Verify all three states exist and are distinct
-    let states = [AnimationState::Entering, AnimationState::Visible, AnimationState::Leaving];
+    let states = [
+        AnimationState::Entering,
+        AnimationState::Visible,
+        AnimationState::Leaving,
+    ];
     let unique: std::collections::HashSet<String> =
         states.iter().map(|s| format!("{:?}", s)).collect();
-    assert_eq!(unique.len(), 3, "AnimationState should have 3 distinct variants");
+    assert_eq!(
+        unique.len(),
+        3,
+        "AnimationState should have 3 distinct variants"
+    );
 }
 
 #[test]
@@ -3813,7 +3954,7 @@ fn test_p029_explicit_match_indices_take_precedence() {
 fn test_p029_context_fallback_when_no_explicit_indices() {
     // When match_indices prop is None/absent, fall back to scored_items lookup.
     // Simulate context having a scored item with match positions.
-    let scored = vec![
+    let scored = [
         ScoredItem {
             id: "item-1".to_string(),
             score: Some(100),
@@ -4009,10 +4150,19 @@ mod action_panel_tests {
 
     #[test]
     fn action_panel_state_partial_eq() {
-        let a = ActionPanelState { item_id: "x".to_string(), active_idx: 1 };
-        let b = ActionPanelState { item_id: "x".to_string(), active_idx: 1 };
+        let a = ActionPanelState {
+            item_id: "x".to_string(),
+            active_idx: 1,
+        };
+        let b = ActionPanelState {
+            item_id: "x".to_string(),
+            active_idx: 1,
+        };
         assert_eq!(a, b);
-        let c = ActionPanelState { item_id: "y".to_string(), active_idx: 1 };
+        let c = ActionPanelState {
+            item_id: "y".to_string(),
+            active_idx: 1,
+        };
         assert_ne!(a, c);
     }
 
@@ -4172,7 +4322,10 @@ mod animate_out_tests {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let result = crate::helpers::prefers_reduced_motion();
-            assert!(!result, "prefers_reduced_motion should return false on non-wasm");
+            assert!(
+                !result,
+                "prefers_reduced_motion should return false on non-wasm"
+            );
         }
     }
 }
@@ -4286,7 +4439,7 @@ mod virtual_scroll_tests {
     fn virtual_scroll_default_off() {
         // virtualize defaults to false -- no change in default behavior
         // This is a design invariant test
-        assert!(!false); // virtualize default is false
+        // virtualize default is false -- design invariant
     }
 
     #[test]
@@ -4338,7 +4491,10 @@ mod placement_tests {
     #[test]
     fn float_style_bottom() {
         let s = compute_float_style(Side::Bottom, 50.0, 100.0, 148.0, 300.0, 4.0, 800.0);
-        assert!(s.contains("position:fixed"), "expected position:fixed in {s}");
+        assert!(
+            s.contains("position:fixed"),
+            "expected position:fixed in {s}"
+        );
         assert!(s.contains("top:152px"), "expected top:152px in {s}"); // 148 + 4
         assert!(s.contains("left:50px"), "expected left:50px in {s}");
         assert!(s.contains("width:300px"), "expected width:300px in {s}");
@@ -4347,7 +4503,10 @@ mod placement_tests {
     #[test]
     fn float_style_top() {
         let s = compute_float_style(Side::Top, 50.0, 600.0, 648.0, 300.0, 4.0, 800.0);
-        assert!(s.contains("position:fixed"), "expected position:fixed in {s}");
+        assert!(
+            s.contains("position:fixed"),
+            "expected position:fixed in {s}"
+        );
         assert!(s.contains("bottom:204px"), "expected bottom:204px in {s}"); // 800 - 600 + 4
         assert!(s.contains("left:50px"), "expected left:50px in {s}");
         assert!(s.contains("width:300px"), "expected width:300px in {s}");

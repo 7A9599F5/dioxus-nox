@@ -671,10 +671,10 @@ fn compute_nested_displacement(
     let parent_items = parent.items.read();
 
     // If this group is being dragged, no displacement
-    if let Some(ref dragged_id) = dragged_id_opt {
-        if dragged_id == my_item_id {
-            return style_with_duration("none".to_string(), false);
-        }
+    if let Some(ref dragged_id) = dragged_id_opt
+        && dragged_id == my_item_id
+    {
+        return style_with_duration("none".to_string(), false);
     }
 
     // Indicator mode: no displacement for nested containers either
@@ -692,7 +692,7 @@ fn compute_nested_displacement(
         .previous_traversal_signal()
         .peek()
         .as_ref()
-        .map_or(false, |(id, _)| id == my_item_id);
+        .is_some_and(|(id, _)| id == my_item_id);
 
     let snap_style =
         |transform: String| -> String { style_with_duration(transform, is_exiting_traversal) };
@@ -765,23 +765,21 @@ fn compute_nested_displacement(
 
         // Continuous traversal: this nested container is being smoothly traversed.
         // Invert fraction for upward drags (same logic as compute_displacement).
-        if is_traversal {
-            if let Some(src) = source_index {
-                let h = effective_size.unwrap_or(my_size);
-                // Normalize to entry→exit direction, apply easing when merge enabled
-                let progress = if src < my_idx {
-                    traversal_frac // DOWN/RIGHT: already 0→1
-                } else {
-                    1.0 - traversal_frac // UP/LEFT: invert to 0→1
-                };
-                let eased = if ctx.is_merge_enabled() {
-                    super::item::ease_traversal(progress)
-                } else {
-                    progress
-                };
-                let px = if src < my_idx { -h * eased } else { h * eased };
-                return style_with_duration(format!("translate{axis}({px}px)"), true);
-            }
+        if is_traversal && let Some(src) = source_index {
+            let h = effective_size.unwrap_or(my_size);
+            // Normalize to entry→exit direction, apply easing when merge enabled
+            let progress = if src < my_idx {
+                traversal_frac // DOWN/RIGHT: already 0→1
+            } else {
+                1.0 - traversal_frac // UP/LEFT: invert to 0→1
+            };
+            let eased = if ctx.is_merge_enabled() {
+                super::item::ease_traversal(progress)
+            } else {
+                progress
+            };
+            let px = if src < my_idx { -h * eased } else { h * eased };
+            return style_with_duration(format!("translate{axis}({px}px)"), true);
         }
 
         // Check if target is inside a nested child container (for parent-level expansion)
@@ -801,17 +799,16 @@ fn compute_nested_displacement(
 
         // Nested-sibling drag-out combines collapse + expansion; keep this
         // separate from canonical projection.
-        if let (Some(src), None) = (source_index, target_index) {
-            if has_any_target {
-                if let Some(group_idx) = nested_group_idx {
-                    let collapse = my_idx > src;
-                    let expansion = my_idx > group_idx;
-                    match (collapse, expansion) {
-                        (true, false) => return full_shift(true),
-                        (false, true) => return full_shift(false),
-                        _ => {}
-                    }
-                }
+        if let (Some(src), None) = (source_index, target_index)
+            && has_any_target
+            && let Some(group_idx) = nested_group_idx
+        {
+            let collapse = my_idx > src;
+            let expansion = my_idx > group_idx;
+            match (collapse, expansion) {
+                (true, false) => return full_shift(true),
+                (false, true) => return full_shift(false),
+                _ => {}
             }
         }
 
@@ -851,16 +848,12 @@ fn compute_nested_displacement(
         }
 
         // Remaining fallback for expansion-only paths.
-        match (source_index, target_index) {
-            // (Some(_), None) handled by canonical projection.
-            (None, None) => {
-                if let Some(group_idx) = nested_group_idx {
-                    if my_idx > group_idx {
-                        return full_shift(false);
-                    }
-                }
-            }
-            _ => {}
+        // (Some(_), None) handled by canonical projection.
+        if let (None, None) = (source_index, target_index)
+            && let Some(group_idx) = nested_group_idx
+            && my_idx > group_idx
+        {
+            return full_shift(false);
         }
     }
 

@@ -13,8 +13,8 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_dnd::{
-    DragId, DragOverlay, DragType, MoveEvent, ReorderEvent, SortableContext, SortableGroup,
-    SortableItem, FUNCTIONAL_STYLES, THEME_STYLES,
+    DragId, DragOverlay, DragType, FUNCTIONAL_STYLES, MoveEvent, ReorderEvent, SortableContext,
+    SortableGroup, SortableItem, THEME_STYLES,
 };
 
 // Container ID constants

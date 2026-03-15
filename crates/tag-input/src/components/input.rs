@@ -1,4 +1,4 @@
-use crate::hook::{extract_clipboard_text, TagInputState};
+use crate::hook::{TagInputState, extract_clipboard_text};
 use crate::tag::TagLike;
 use dioxus::prelude::*;
 

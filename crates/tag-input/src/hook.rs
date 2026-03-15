@@ -510,33 +510,32 @@ impl<T: TagLike> TagInputState<T> {
         }
 
         // Max tag length guard
-        if let Some(max_len) = *self.max_tag_length.read() {
-            if tag.name().len() > max_len {
-                self.validation_error
-                    .set(Some(format_error_max_length(max_len)));
-                return;
-            }
+        if let Some(max_len) = *self.max_tag_length.read()
+            && tag.name().len() > max_len
+        {
+            self.validation_error
+                .set(Some(format_error_max_length(max_len)));
+            return;
         }
 
         // Select mode: replace existing tag when max_tags=1
-        if *self.select_mode.read() {
-            if let Some(1) = *self.max_tags.read() {
-                if self.selected_tags.read().len() == 1 {
-                    let old_id = self.selected_tags.read()[0].id().to_string();
-                    self.selected_tags.write().retain(|t| t.id() != old_id);
-                }
-            }
+        if *self.select_mode.read()
+            && let Some(1) = *self.max_tags.read()
+            && self.selected_tags.read().len() == 1
+        {
+            let old_id = self.selected_tags.read()[0].id().to_string();
+            self.selected_tags.write().retain(|t| t.id() != old_id);
         }
 
         // Max tags guard
-        if let Some(max) = *self.max_tags.read() {
-            if self.selected_tags.read().len() >= max {
-                self.status_message
-                    .set(format!("Maximum of {max} tags reached."));
-                self.search_query.set(String::new());
-                self.is_dropdown_open.set(false);
-                return;
-            }
+        if let Some(max) = *self.max_tags.read()
+            && self.selected_tags.read().len() >= max
+        {
+            self.status_message
+                .set(format!("Maximum of {max} tags reached."));
+            self.search_query.set(String::new());
+            self.is_dropdown_open.set(false);
+            return;
         }
 
         // Duplicate guard
@@ -558,11 +557,11 @@ impl<T: TagLike> TagInputState<T> {
         if !already_selected || *self.allow_duplicates.read() {
             // Validation guard
             let validate_cb = *self.validate.read();
-            if let Some(cb) = validate_cb {
-                if let Err(msg) = cb.call(tag.clone()) {
-                    self.validation_error.set(Some(msg));
-                    return;
-                }
+            if let Some(cb) = validate_cb
+                && let Err(msg) = cb.call(tag.clone())
+            {
+                self.validation_error.set(Some(msg));
+                return;
             }
             self.validation_error.set(None);
 
@@ -613,16 +612,15 @@ impl<T: TagLike> TagInputState<T> {
             .find(|t| t.id() == id)
             .map(|t| t.name().to_string());
 
-        if let Some(cb) = *self.on_remove.read() {
-            if let Some(tag) = self
+        if let Some(cb) = *self.on_remove.read()
+            && let Some(tag) = self
                 .selected_tags
                 .read()
                 .iter()
                 .find(|t| t.id() == id)
                 .cloned()
-            {
-                cb.call(tag);
-            }
+        {
+            cb.call(tag);
         }
 
         self.selected_tags.write().retain(|t| t.id() != id);
@@ -797,20 +795,20 @@ impl<T: TagLike> TagInputState<T> {
         // Priority 2: delimiter splitting + on_create
         let delimiters = self.paste_delimiters.read().clone();
         let create_cb = *self.on_create.read();
-        if let Some(delimiters) = delimiters {
-            if let Some(cb) = create_cb {
-                let tokens = split_by_delimiters(&text, &delimiters);
-                let mut added = 0;
-                for token in tokens {
-                    if let Some(tag) = cb.call(token) {
-                        self.create_tag(tag);
-                        added += 1;
-                    }
+        if let Some(delimiters) = delimiters
+            && let Some(cb) = create_cb
+        {
+            let tokens = split_by_delimiters(&text, &delimiters);
+            let mut added = 0;
+            for token in tokens {
+                if let Some(tag) = cb.call(token) {
+                    self.create_tag(tag);
+                    added += 1;
                 }
-                if added > 0 {
-                    let count = self.selected_tags.read().len();
-                    self.status_message.set(format_status_pasted(added, count));
-                }
+            }
+            if added > 0 {
+                let count = self.selected_tags.read().len();
+                self.status_message.set(format_status_pasted(added, count));
             }
         }
 
@@ -873,10 +871,10 @@ impl<T: TagLike> TagInputState<T> {
         let edit_cb = *self.on_edit.read();
         if let Some(cb) = edit_cb {
             let current = self.selected_tags.read().get(idx).cloned();
-            if let Some(tag) = current {
-                if let Some(updated) = cb.call((tag, new_name)) {
-                    self.selected_tags.write()[idx] = updated;
-                }
+            if let Some(tag) = current
+                && let Some(updated) = cb.call((tag, new_name))
+            {
+                self.selected_tags.write()[idx] = updated;
             }
         }
         self.editing_pill.set(None);
@@ -965,10 +963,10 @@ impl<T: TagLike> TagInputState<T> {
         let available = self.filtered_suggestions.read().clone();
         let mut added = 0;
         for tag in available {
-            if let Some(max) = *self.max_tags.read() {
-                if self.selected_tags.read().len() >= max {
-                    break;
-                }
+            if let Some(max) = *self.max_tags.read()
+                && self.selected_tags.read().len() >= max
+            {
+                break;
             }
             let already = self.selected_tags.read().iter().any(|t| t.id() == tag.id());
             if !already {
@@ -1224,30 +1222,28 @@ impl<T: TagLike> TagInputState<T> {
             Key::Character(ref c) => {
                 // Custom delimiter: commit query when a delimiter char is typed
                 let delims = self.delimiters.read().clone();
-                if let Some(delimiters) = delims {
-                    if let Some(ch) = c.chars().next() {
-                        if delimiters.contains(&ch) {
-                            event.prevent_default();
-                            let highlight = *self.highlighted_index.read();
-                            if let Some(idx) = highlight {
-                                let suggestions = self.filtered_suggestions.read();
-                                if let Some(tag) = suggestions.get(idx).cloned() {
-                                    drop(suggestions);
-                                    self.add_tag(tag);
-                                }
-                            } else {
-                                // enforce_allow_list blocks on_create via delimiter too
-                                if !*self.enforce_allow_list.read() {
-                                    let query = self.search_query.read().clone();
-                                    let callback = *self.on_create.read();
-                                    if !query.is_empty() {
-                                        if let Some(cb) = callback {
-                                            if let Some(tag) = cb.call(query) {
-                                                self.create_tag(tag);
-                                            }
-                                        }
-                                    }
-                                }
+                if let Some(delimiters) = delims
+                    && let Some(ch) = c.chars().next()
+                    && delimiters.contains(&ch)
+                {
+                    event.prevent_default();
+                    let highlight = *self.highlighted_index.read();
+                    if let Some(idx) = highlight {
+                        let suggestions = self.filtered_suggestions.read();
+                        if let Some(tag) = suggestions.get(idx).cloned() {
+                            drop(suggestions);
+                            self.add_tag(tag);
+                        }
+                    } else {
+                        // enforce_allow_list blocks on_create via delimiter too
+                        if !*self.enforce_allow_list.read() {
+                            let query = self.search_query.read().clone();
+                            let callback = *self.on_create.read();
+                            if !query.is_empty()
+                                && let Some(cb) = callback
+                                && let Some(tag) = cb.call(query)
+                            {
+                                self.create_tag(tag);
                             }
                         }
                     }

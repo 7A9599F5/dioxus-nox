@@ -23,6 +23,9 @@ mod shell;
 #[cfg(test)]
 mod tests;
 
-pub use breakpoint::{BreakpointConfig, DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint, use_shell_breakpoint};
-pub use context::{use_shell_context, ShellContext};
+pub use breakpoint::{
+    BreakpointConfig, DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint,
+    use_shell_breakpoint,
+};
+pub use context::{ShellContext, use_shell_context};
 pub use shell::{AppShell, MobileSidebarBackdrop, ShellLayout};

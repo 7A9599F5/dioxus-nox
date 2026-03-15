@@ -68,11 +68,7 @@ pub(crate) fn compute_displacement_offset(
             if target_is_partial {
                 // Cross-container IntoItem: target squeezes down,
                 // no other items need displacement (no source gap).
-                if my_idx == tgt {
-                    item_size * 0.5
-                } else {
-                    0.0
-                }
+                if my_idx == tgt { item_size * 0.5 } else { 0.0 }
             } else if my_idx >= tgt {
                 dragged_size // Shift down/right to make room
             } else {
@@ -86,11 +82,7 @@ pub(crate) fn compute_displacement_offset(
 /// Convert a full-list index to the corresponding filtered-list index where
 /// the source slot is removed.
 pub(crate) fn to_filtered_index(index: usize, source_idx: usize) -> usize {
-    if index > source_idx {
-        index - 1
-    } else {
-        index
-    }
+    if index > source_idx { index - 1 } else { index }
 }
 
 #[cfg(test)]

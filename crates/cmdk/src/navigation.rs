@@ -66,7 +66,11 @@ pub fn find_prev(
     let len = visible.len();
 
     if loop_navigation {
-        let mut prev_idx = if current_idx == 0 { len - 1 } else { current_idx - 1 };
+        let mut prev_idx = if current_idx == 0 {
+            len - 1
+        } else {
+            current_idx - 1
+        };
         let start = prev_idx;
         loop {
             let pid = &visible[prev_idx];
@@ -156,16 +160,18 @@ pub(crate) fn find_next_group(
 
     // Determine the group of the active item (None if ungrouped)
     let active_group = active_id.and_then(|aid| {
-        items.iter().find(|i| i.id == aid).and_then(|i| i.group_id.as_deref())
+        items
+            .iter()
+            .find(|i| i.id == aid)
+            .and_then(|i| i.group_id.as_deref())
     });
 
     // Find index of the active group in the groups list
-    let active_group_idx = active_group
-        .and_then(|gid| groups.iter().position(|g| g.id == gid));
+    let active_group_idx = active_group.and_then(|gid| groups.iter().position(|g| g.id == gid));
 
     let start_idx = match active_group_idx {
         Some(idx) => idx + 1, // start searching from the next group
-        None => 0,             // no group → search from the first group
+        None => 0,            // no group → search from the first group
     };
 
     let n = groups.len();
@@ -184,9 +190,9 @@ pub(crate) fn find_next_group(
         }
         let gid = &groups[gidx].id;
         // Find first visible item in this group (in items registration order)
-        let first = items.iter().find(|i| {
-            i.group_id.as_deref() == Some(gid.as_str()) && visible_set.contains(&i.id)
-        });
+        let first = items
+            .iter()
+            .find(|i| i.group_id.as_deref() == Some(gid.as_str()) && visible_set.contains(&i.id));
         if let Some(item) = first {
             return Some(item.id.clone());
         }
@@ -222,12 +228,14 @@ pub(crate) fn find_prev_group(
 
     // Determine the group of the active item
     let active_group = active_id.and_then(|aid| {
-        items.iter().find(|i| i.id == aid).and_then(|i| i.group_id.as_deref())
+        items
+            .iter()
+            .find(|i| i.id == aid)
+            .and_then(|i| i.group_id.as_deref())
     });
 
     // No group → can't navigate to a previous group
-    let active_group_idx = active_group
-        .and_then(|gid| groups.iter().position(|g| g.id == gid))?;
+    let active_group_idx = active_group.and_then(|gid| groups.iter().position(|g| g.id == gid))?;
 
     let n = groups.len();
 
@@ -244,9 +252,10 @@ pub(crate) fn find_prev_group(
         }
         let gid = &groups[gidx].id;
         // Find last visible item in this group (in items registration order)
-        let last = items.iter().rev().find(|i| {
-            i.group_id.as_deref() == Some(gid.as_str()) && visible_set.contains(&i.id)
-        });
+        let last = items
+            .iter()
+            .rev()
+            .find(|i| i.group_id.as_deref() == Some(gid.as_str()) && visible_set.contains(&i.id));
         if let Some(item) = last {
             return Some(item.id.clone());
         }

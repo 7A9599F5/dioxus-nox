@@ -1,7 +1,10 @@
-use std::fmt;
-use dioxus::prelude::*;
+use crate::breakpoint::{
+    BreakpointConfig, DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint,
+    use_shell_breakpoint,
+};
 use crate::{ShellContext, use_shell_context};
-use crate::breakpoint::{BreakpointConfig, DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint, use_shell_breakpoint};
+use dioxus::prelude::*;
+use std::fmt;
 
 /// Selects the CSS layout mode applied via `data-shell-layout`.
 ///
@@ -237,9 +240,7 @@ pub fn AppShell(
     let has_sidebar = sidebar.is_some();
     let sidebar_for_desktop = sidebar.clone();
 
-    let derived_columns: &'static str = if is_mobile
-        || !has_sidebar
-        || !(signals.sidebar_visible)()
+    let derived_columns: &'static str = if is_mobile || !has_sidebar || !(signals.sidebar_visible)()
     {
         "1"
     } else {

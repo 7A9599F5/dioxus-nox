@@ -71,15 +71,11 @@ where
         let ch = holder.clone();
         use_effect(move || {
             let h = handler.clone();
-            let closure = Closure::wrap(
-                Box::new(move |event: web_sys::KeyboardEvent| h(event))
-                    as Box<dyn FnMut(web_sys::KeyboardEvent)>,
-            );
+            let closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| h(event))
+                as Box<dyn FnMut(web_sys::KeyboardEvent)>);
             if let Some(window) = web_sys::window() {
-                let _ = window.add_event_listener_with_callback(
-                    "keydown",
-                    closure.as_ref().unchecked_ref(),
-                );
+                let _ = window
+                    .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref());
             }
             *ch.borrow_mut() = Some(closure);
         });
@@ -91,10 +87,8 @@ where
             if let Some(cl) = ch.borrow_mut().take()
                 && let Some(window) = web_sys::window()
             {
-                let _ = window.remove_event_listener_with_callback(
-                    "keydown",
-                    cl.as_ref().unchecked_ref(),
-                );
+                let _ = window
+                    .remove_event_listener_with_callback("keydown", cl.as_ref().unchecked_ref());
             }
         });
     }
@@ -456,21 +450,13 @@ pub fn use_is_mobile() -> Signal<bool> {
             let wmh = width_mq_holder.clone();
             use_drop(move || {
                 use wasm_bindgen::JsCast;
-                if let (Some(cl), Some(mq)) =
-                    (pch.borrow_mut().take(), pmh.borrow_mut().take())
-                {
-                    let _ = mq.remove_event_listener_with_callback(
-                        "change",
-                        cl.as_ref().unchecked_ref(),
-                    );
+                if let (Some(cl), Some(mq)) = (pch.borrow_mut().take(), pmh.borrow_mut().take()) {
+                    let _ = mq
+                        .remove_event_listener_with_callback("change", cl.as_ref().unchecked_ref());
                 }
-                if let (Some(cl), Some(mq)) =
-                    (wch.borrow_mut().take(), wmh.borrow_mut().take())
-                {
-                    let _ = mq.remove_event_listener_with_callback(
-                        "change",
-                        cl.as_ref().unchecked_ref(),
-                    );
+                if let (Some(cl), Some(mq)) = (wch.borrow_mut().take(), wmh.borrow_mut().take()) {
+                    let _ = mq
+                        .remove_event_listener_with_callback("change", cl.as_ref().unchecked_ref());
                 }
             });
         }
@@ -1098,13 +1084,7 @@ pub fn use_command_history(capacity: usize) -> CommandHistoryHandle {
 pub fn use_scored_item(id: &str) -> Memo<Option<ScoredItem>> {
     let ctx = use_command_context();
     let id = id.to_string();
-    use_memo(move || {
-        ctx.scored_items
-            .read()
-            .iter()
-            .find(|s| s.id == id)
-            .cloned()
-    })
+    use_memo(move || ctx.scored_items.read().iter().find(|s| s.id == id).cloned())
 }
 
 // ---------------------------------------------------------------------------
@@ -1189,14 +1169,14 @@ pub fn use_router_sync(param: &'static str) -> RouterSyncHandle {
                     // location is like "?q=hello%20world"
                     let qs = location.trim_start_matches('?');
                     for pair in qs.split('&') {
-                        if let Some((key, val)) = pair.split_once('=') {
-                            if key == param {
-                                // Percent-decode spaces
-                                let decoded = val.replace('+', " ").replace("%20", " ");
-                                let mut s = search;
-                                s.set(decoded);
-                                break;
-                            }
+                        if let Some((key, val)) = pair.split_once('=')
+                            && key == param
+                        {
+                            // Percent-decode spaces
+                            let decoded = val.replace('+', " ").replace("%20", " ");
+                            let mut s = search;
+                            s.set(decoded);
+                            break;
                         }
                     }
                 }
@@ -1241,7 +1221,10 @@ pub fn use_router_sync(param: &'static str) -> RouterSyncHandle {
         });
     }
 
-    RouterSyncHandle { param_name: param, search }
+    RouterSyncHandle {
+        param_name: param,
+        search,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,8 +1320,7 @@ where
                 match result {
                     Ok(items) => {
                         // Diff: compute ids to add and remove
-                        let new_ids: HashSet<String> =
-                            items.iter().map(|i| i.id.clone()).collect();
+                        let new_ids: HashSet<String> = items.iter().map(|i| i.id.clone()).collect();
                         let old_ids = registered_ids_clone.borrow().clone();
 
                         // Unregister removed items

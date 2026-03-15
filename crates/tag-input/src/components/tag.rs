@@ -32,10 +32,8 @@ pub fn Tag<T: TagLike>(props: TagProps<T>) -> Element {
 
     // Focus management: focus this pill when it becomes active
     use_effect(move || {
-        if is_active {
-            if let Some(ref el) = *mounted_el.read() {
-                let _ = el.set_focus(true);
-            }
+        if is_active && let Some(ref el) = *mounted_el.read() {
+            drop(el.set_focus(true));
         }
     });
 

@@ -7,8 +7,8 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_dnd::{
-    DragId, DragOverlay, MoveEvent, ReorderEvent, SortableContext, SortableGroup, SortableItem,
-    FUNCTIONAL_STYLES, THEME_STYLES,
+    DragId, DragOverlay, FUNCTIONAL_STYLES, MoveEvent, ReorderEvent, SortableContext,
+    SortableGroup, SortableItem, THEME_STYLES,
 };
 
 fn main() {
@@ -98,11 +98,11 @@ fn app() -> Element {
                     };
 
                     // Add to target container
-                    if let Some(item) = item {
-                        if let Some(target_col) = cols.get_mut(&e.to_container.0) {
-                            let insert_idx = e.to_index.min(target_col.len());
-                            target_col.insert(insert_idx, item);
-                        }
+                    if let Some(item) = item
+                        && let Some(target_col) = cols.get_mut(&e.to_container.0)
+                    {
+                        let insert_idx = e.to_index.min(target_col.len());
+                        target_col.insert(insert_idx, item);
                     }
                 },
                 on_reorder: move |e: ReorderEvent| {

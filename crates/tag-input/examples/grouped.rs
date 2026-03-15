@@ -1,7 +1,9 @@
 use dioxus::document::Stylesheet;
 use dioxus::events::ClipboardData;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{find_match_ranges, use_tag_input_grouped, TagInputGroupConfig, TagLike};
+use dioxus_nox_tag_input::{
+    TagInputGroupConfig, TagLike, find_match_ranges, use_tag_input_grouped,
+};
 
 fn main() {
     dioxus::launch(App);

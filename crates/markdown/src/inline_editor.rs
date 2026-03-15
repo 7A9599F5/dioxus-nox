@@ -17,7 +17,10 @@ enum PendingCaretRestore {
     Raw(usize),
     Visible(usize),
     /// Visible UTF-16 offsets for a non-collapsed selection.
-    Selection { start: usize, end: usize },
+    Selection {
+        start: usize,
+        end: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -253,7 +256,8 @@ fn InactiveBlockView(node: OwnedAstNode) -> Element {
             }
         }
         _ => {
-            let is_blank_line = matches!(node.node_type, NodeType::Paragraph) && node.children.is_empty();
+            let is_blank_line =
+                matches!(node.node_type, NodeType::Paragraph) && node.children.is_empty();
             let block_id_for_click = block_id.clone();
             let node_for_click = node.clone();
             let node_for_render = node.clone();
@@ -1065,8 +1069,7 @@ fn spawn_token_editor_sync(
             ctx.trigger_parse.call(());
             applied_revision.set(captured_revision);
 
-            let raw_cursor_local =
-                raw_del_start.min(last_caret_offset(&(0..rebuilt_local.len())));
+            let raw_cursor_local = raw_del_start.min(last_caret_offset(&(0..rebuilt_local.len())));
 
             if let Some(mut cctx) = cursor_ctx_local {
                 cctx.cursor_position.set(CursorPosition {
@@ -1080,8 +1083,7 @@ fn spawn_token_editor_sync(
             if let Some(handler) = handler {
                 let mut fresh_node = node_local.clone();
                 fresh_node.range = start..start.saturating_add(rebuilt_local.len());
-                let fresh_tokens =
-                    collect_marker_tokens(&fresh_node, &rebuilt_local, start);
+                let fresh_tokens = collect_marker_tokens(&fresh_node, &rebuilt_local, start);
                 let fresh_visibility_flags = marker_visibility(
                     &fresh_tokens,
                     RevealContext {
@@ -1102,11 +1104,8 @@ fn spawn_token_editor_sync(
                 handler.call(ActiveBlockInputEvent {
                     raw_text: fresh_model.raw_text.clone(),
                     visible_text: fresh_model.visible_text.clone(),
-                    cursor_raw_utf16: byte_to_utf16_index(
-                        &fresh_model.raw_text,
-                        raw_cursor_local,
-                    )
-                    .unwrap_or(0),
+                    cursor_raw_utf16: byte_to_utf16_index(&fresh_model.raw_text, raw_cursor_local)
+                        .unwrap_or(0),
                     cursor_visible_utf16: new_cursor_vis,
                     block_start: start,
                     block_end: start.saturating_add(fresh_model.raw_text.len()),
@@ -1161,10 +1160,10 @@ fn spawn_token_editor_sync(
             cursor_visible_utf16,
             utf16_len(&new_visible),
         );
-        let old_raw_start =
-            visible_utf16_to_raw_offset(selected_model, edit.old_start_utf16).min(block_raw_current.len());
-        let old_raw_end =
-            visible_utf16_to_raw_offset(selected_model, edit.old_end_utf16).min(block_raw_current.len());
+        let old_raw_start = visible_utf16_to_raw_offset(selected_model, edit.old_start_utf16)
+            .min(block_raw_current.len());
+        let old_raw_end = visible_utf16_to_raw_offset(selected_model, edit.old_end_utf16)
+            .min(block_raw_current.len());
         let rebuilt_local = format!(
             "{}{}{}",
             &block_raw_current[..old_raw_start],
@@ -1198,9 +1197,7 @@ fn spawn_token_editor_sync(
                 column: 0,
             });
         }
-        pending_restore.set(Some(PendingCaretRestore::Visible(
-            effective_cursor_visible,
-        )));
+        pending_restore.set(Some(PendingCaretRestore::Visible(effective_cursor_visible)));
 
         if let Some(handler) = handler {
             let mut fresh_node = node_local.clone();
@@ -1531,9 +1528,8 @@ fn handle_inactive_block_click(
 
             let slice_end = safe_end.min(raw.len());
             let slice_start = safe_start.min(slice_end);
-            let clamped_offset = resolve_visible_column_in_block(
-                &node, &raw, slice_start, slice_end, visual_utf16,
-            );
+            let clamped_offset =
+                resolve_visible_column_in_block(&node, &raw, slice_start, slice_end, visual_utf16);
 
             cctx.cursor_position.set(CursorPosition {
                 offset: clamped_offset,
@@ -1872,29 +1868,29 @@ fn compute_post_visible_caret(
 ) -> usize {
     let inserted_utf16 = utf16_len(&edit.replacement);
 
-    if let Some(meta) = meta {
-        if meta.is_collapsed {
-            if meta.input_type == "insertText" {
-                let typed_utf16 = utf16_len(&meta.data);
-                if typed_utf16 > 0 {
-                    return meta
-                        .pre_visible_caret_utf16
-                        .saturating_add(typed_utf16)
-                        .min(new_visible_utf16_len);
-                }
-            }
-            if meta.input_type.starts_with("deleteContent") {
-                return edit
-                    .old_start_utf16
-                    .saturating_add(inserted_utf16)
+    if let Some(meta) = meta
+        && meta.is_collapsed
+    {
+        if meta.input_type == "insertText" {
+            let typed_utf16 = utf16_len(&meta.data);
+            if typed_utf16 > 0 {
+                return meta
+                    .pre_visible_caret_utf16
+                    .saturating_add(typed_utf16)
                     .min(new_visible_utf16_len);
             }
-        } else {
+        }
+        if meta.input_type.starts_with("deleteContent") {
             return edit
                 .old_start_utf16
                 .saturating_add(inserted_utf16)
                 .min(new_visible_utf16_len);
         }
+    } else {
+        return edit
+            .old_start_utf16
+            .saturating_add(inserted_utf16)
+            .min(new_visible_utf16_len);
     }
 
     normalize_cursor_visible_for_edit(fallback_cursor_visible_utf16, edit, new_visible_utf16_len)
@@ -2074,11 +2070,7 @@ fn perform_block_split(
 /// Symmetric inverse of `perform_block_split` (which inserts `\n\n`).
 /// Two paragraphs (`\n\n` gap): first Backspace → `\n` (soft break).
 /// Multiple blank lines (`\n\n\n\n`): each Backspace removes one `\n`.
-fn perform_block_join(
-    ctx: MarkdownContext,
-    cursor_ctx: Option<CursorContext>,
-    block_start: usize,
-) {
+fn perform_block_join(ctx: MarkdownContext, cursor_ctx: Option<CursorContext>, block_start: usize) {
     if block_start == 0 {
         return;
     }
@@ -2088,7 +2080,11 @@ fn perform_block_join(
         return;
     }
     let join_point = pos - 1;
-    let rebuilt = format!("{}{}", &current_global[..join_point], &current_global[pos..]);
+    let rebuilt = format!(
+        "{}{}",
+        &current_global[..join_point],
+        &current_global[pos..]
+    );
     ctx.handle_value_change(rebuilt);
     ctx.trigger_parse.call(());
     if let Some(mut cctx) = cursor_ctx {
@@ -2103,13 +2099,11 @@ fn perform_block_join(
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeInputMeta, VisibleEdit, compute_post_visible_caret,
-        NavDirection, adjacent_editable_offset, block_has_inline_markup,
-        cursor_within_inline_markup, direct_delete_from_beforeinput,
-        inject_gap_paragraphs, is_latest_revision,
-        next_visible_char_utf16, normalize_cursor_visible_for_edit,
-        previous_visible_char_utf16, select_best_input_projection,
-        snap_cursor_to_block, uses_token_aware_surface,
+        BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_offset,
+        block_has_inline_markup, compute_post_visible_caret, cursor_within_inline_markup,
+        direct_delete_from_beforeinput, inject_gap_paragraphs, is_latest_revision,
+        next_visible_char_utf16, normalize_cursor_visible_for_edit, previous_visible_char_utf16,
+        select_best_input_projection, snap_cursor_to_block, uses_token_aware_surface,
     };
     use crate::inline_tokens::{InlineSegment, SegmentKind, TokenizedBlock};
     use crate::types::{NodeType, OwnedAstNode};
@@ -2396,13 +2390,11 @@ mod tests {
     #[test]
     fn inject_gap_paragraphs_trailing_blank_lines() {
         // "Hello\n\n\n" — one block, then trailing newlines after the block
-        let ast = vec![
-            OwnedAstNode {
-                node_type: NodeType::Paragraph,
-                range: 0..6, // "Hello\n"
-                children: vec![text_node(0, 5, "Hello")],
-            },
-        ];
+        let ast = vec![OwnedAstNode {
+            node_type: NodeType::Paragraph,
+            range: 0..6, // "Hello\n"
+            children: vec![text_node(0, 5, "Hello")],
+        }];
         let raw = "Hello\n\n\n";
         let result = inject_gap_paragraphs(&ast, raw);
         // Trailing is raw[6..8] = "\n\n" → 2 newlines → 2 synthetic nodes (loop 0..2)
@@ -2595,11 +2587,14 @@ mod tests {
         // Raw: "**bold**" (8 bytes), visible: "bold" (4 chars)
         // Hidden markers: ** at raw 0..2 and ** at raw 6..8
         // Cursor at visible pos 4 (end of "bold") → should delete 'd' (raw 5..6)
-        let model = model_with_segments("**bold**", vec![
-            (0..2, "**", false),   // hidden opening **
-            (2..6, "bold", true),  // visible text
-            (6..8, "**", false),   // hidden closing **
-        ]);
+        let model = model_with_segments(
+            "**bold**",
+            vec![
+                (0..2, "**", false),  // hidden opening **
+                (2..6, "bold", true), // visible text
+                (6..8, "**", false),  // hidden closing **
+            ],
+        );
         let meta = backspace_meta(4); // end of visible "bold"
         let result = direct_delete_from_beforeinput(&meta, &model, "**bold**");
         assert_eq!(result, Some((5, 6, 3))); // delete raw 5..6 ('d'), cursor → vis 3
@@ -2609,11 +2604,14 @@ mod tests {
     fn direct_backspace_inside_revealed_marker() {
         // Raw: "**bold**" (8 bytes), all markers revealed (visible = "**bold**")
         // Cursor at visible pos 2 (after "**") → should delete '*' (raw 1..2)
-        let model = model_with_segments("**bold**", vec![
-            (0..2, "**", true),    // visible opening **
-            (2..6, "bold", true),  // visible text
-            (6..8, "**", true),    // visible closing **
-        ]);
+        let model = model_with_segments(
+            "**bold**",
+            vec![
+                (0..2, "**", true),   // visible opening **
+                (2..6, "bold", true), // visible text
+                (6..8, "**", true),   // visible closing **
+            ],
+        );
         let meta = backspace_meta(2); // after opening "**"
         let result = direct_delete_from_beforeinput(&meta, &model, "**bold**");
         assert_eq!(result, Some((1, 2, 1))); // delete raw 1..2 ('*'), cursor → vis 1
@@ -2628,12 +2626,15 @@ mod tests {
         // is at raw 8. But wait — visible char before pos 5 is at pos 4 ("bold" ends).
         // Actually visible "bold more": pos 4 = ' ', pos 5 = 'm'
         // Let's put cursor at vis 4 (the space) → backspace deletes 'd' at vis 3
-        let model = model_with_segments("**bold** more", vec![
-            (0..2, "**", false),       // hidden opening **
-            (2..6, "bold", true),      // visible text
-            (6..8, "**", false),       // hidden closing **
-            (8..13, " more", true),    // visible text
-        ]);
+        let model = model_with_segments(
+            "**bold** more",
+            vec![
+                (0..2, "**", false),    // hidden opening **
+                (2..6, "bold", true),   // visible text
+                (6..8, "**", false),    // hidden closing **
+                (8..13, " more", true), // visible text
+            ],
+        );
         let meta = backspace_meta(5); // cursor at vis 5 (space before "more")
         let result = direct_delete_from_beforeinput(&meta, &model, "**bold** more");
         // vis 5 = ' ' (raw 8), vis 4 = 'd' (raw 5) — wait, vis 4 is the start of " more" seg
@@ -2704,11 +2705,14 @@ mod tests {
     fn direct_backspace_with_strikethrough_hidden() {
         // Raw: "~~strike~~" (10 bytes), visible: "strike" (6 chars)
         // Cursor at visible pos 6 (end) → delete 'e' (raw 7..8)
-        let model = model_with_segments("~~strike~~", vec![
-            (0..2, "~~", false),       // hidden opening ~~
-            (2..8, "strike", true),    // visible text
-            (8..10, "~~", false),      // hidden closing ~~
-        ]);
+        let model = model_with_segments(
+            "~~strike~~",
+            vec![
+                (0..2, "~~", false),    // hidden opening ~~
+                (2..8, "strike", true), // visible text
+                (8..10, "~~", false),   // hidden closing ~~
+            ],
+        );
         let meta = backspace_meta(6);
         let result = direct_delete_from_beforeinput(&meta, &model, "~~strike~~");
         assert_eq!(result, Some((7, 8, 5)));

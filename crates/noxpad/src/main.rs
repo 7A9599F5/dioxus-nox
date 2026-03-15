@@ -22,8 +22,8 @@ use dioxus_nox_cmdk::{
 };
 use dioxus_nox_dnd::types::Orientation;
 use dioxus_nox_dnd::{
-    DragContextProvider, DragId, DragOverlay, DragType, MoveEvent, ReorderEvent, SortableContext,
-    SortableGroup, SortableItem, FEEDBACK_STYLES, FUNCTIONAL_STYLES,
+    DragContextProvider, DragId, DragOverlay, DragType, FEEDBACK_STYLES, FUNCTIONAL_STYLES,
+    MoveEvent, ReorderEvent, SortableContext, SortableGroup, SortableItem,
 };
 use dioxus_nox_markdown::markdown;
 use dioxus_nox_markdown::prelude::{Mode, generate_theme_css};
@@ -467,7 +467,11 @@ fn App() -> Element {
     let mut search_open: Signal<bool> = use_signal(|| false);
     let search_read: ReadSignal<bool> = search_open.into();
     let highlight_css: &'static str = use_hook(|| {
-        &*Box::leak(generate_theme_css("base16-ocean.dark", "hl-").unwrap_or_default().into_boxed_str())
+        &*Box::leak(
+            generate_theme_css("base16-ocean.dark", "hl-")
+                .unwrap_or_default()
+                .into_boxed_str(),
+        )
     });
 
     rsx! {
@@ -821,7 +825,11 @@ fn NoteEditor(
 }
 
 #[component]
-fn TabStrip(notes: Signal<Vec<Note>>, tabs: Signal<Vec<usize>>, active_idx: Signal<Option<usize>>) -> Element {
+fn TabStrip(
+    notes: Signal<Vec<Note>>,
+    tabs: Signal<Vec<usize>>,
+    active_idx: Signal<Option<usize>>,
+) -> Element {
     let tabs_snapshot = tabs.read().clone();
     let notes_snapshot = notes.read().clone();
     let tab_ids: Vec<DragId> = tabs_snapshot

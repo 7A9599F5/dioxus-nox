@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{extract_clipboard_text, use_tag_input, Tag, TagLike};
+use dioxus_nox_tag_input::{Tag, TagLike, extract_clipboard_text, use_tag_input};
 
 fn main() {
     dioxus::launch(App);
