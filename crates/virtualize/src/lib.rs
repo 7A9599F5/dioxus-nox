@@ -8,7 +8,7 @@
 //! ## Usage
 //!
 //! ```rust
-//! use dioxus_virtual::VirtualViewport;
+//! use dioxus_nox_virtualize::VirtualViewport;
 //!
 //! let mut vp = VirtualViewport::new(1000, 40, 400);
 //! vp.scroll_top = 800;
