@@ -8,13 +8,13 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_dnd::grouped::{
-    active_group_header, grouped_merge, grouped_position, grouped_reorder_default,
-    grouped_style_info, GroupedItem,
+    GroupedItem, active_group_header, grouped_merge, grouped_position, grouped_reorder_default,
+    grouped_style_info,
 };
 use dioxus_nox_dnd::styles::{GROUPED_FEEDBACK_STYLES, GROUPED_FUNCTIONAL_STYLES};
 use dioxus_nox_dnd::{
-    ActiveDrag, DragContext, DragId, DragOverlay, MergeEvent, ReorderEvent, SortableContext,
-    SortableGroup, SortableItem, FEEDBACK_STYLES, FUNCTIONAL_STYLES,
+    ActiveDrag, DragContext, DragId, DragOverlay, FEEDBACK_STYLES, FUNCTIONAL_STYLES, MergeEvent,
+    ReorderEvent, SortableContext, SortableGroup, SortableItem,
 };
 
 fn main() {

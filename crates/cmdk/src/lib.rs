@@ -91,6 +91,6 @@ pub use types::{
     ActionPanelState, ActionRegistration, AnimationState, AsyncCommandHandle, AsyncItem,
     ChordShortcut, ChordState, CustomFilter, FormFieldType, FormValue, FrecencyStrategy,
     GlobalShortcut, GroupRegistration, ItemRegistration, ItemSelectCallback, ModeRegistration,
-    PageRegistration, PaletteMode, ScoredItem, ScoringStrategy, ScoringStrategyProp,
-    SelectOption, Side,
+    PageRegistration, PaletteMode, ScoredItem, ScoringStrategy, ScoringStrategyProp, SelectOption,
+    Side,
 };

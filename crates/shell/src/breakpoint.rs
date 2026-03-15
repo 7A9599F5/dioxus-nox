@@ -18,8 +18,8 @@ impl ShellBreakpoint {
     /// Returns the lowercase string used for the `data-shell-breakpoint` attribute.
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Compact  => "compact",
-            Self::Medium   => "medium",
+            Self::Compact => "compact",
+            Self::Medium => "medium",
             Self::Expanded => "expanded",
         }
     }
@@ -81,9 +81,9 @@ impl SheetSnap {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Hidden => "hidden",
-            Self::Peek   => "peek",
-            Self::Half   => "half",
-            Self::Full   => "full",
+            Self::Peek => "peek",
+            Self::Half => "half",
+            Self::Full => "full",
         }
     }
 
@@ -112,7 +112,10 @@ pub struct BreakpointConfig {
 
 impl Default for BreakpointConfig {
     fn default() -> Self {
-        Self { compact_below: 640.0, expanded_above: 1024.0 }
+        Self {
+            compact_below: 640.0,
+            expanded_above: 1024.0,
+        }
     }
 }
 
@@ -126,18 +129,25 @@ impl Default for BreakpointConfig {
 ///
 /// **Requires a JavaScript engine.** Supported on all WebView targets:
 /// web WASM, Wry desktop, iOS WKWebView, and Android WebView.
-pub fn use_shell_breakpoint(compact_below: f64, expanded_above: f64) -> ReadSignal<ShellBreakpoint> {
+pub fn use_shell_breakpoint(
+    compact_below: f64,
+    expanded_above: f64,
+) -> ReadSignal<ShellBreakpoint> {
     use_shell_breakpoint_runtime(compact_below, expanded_above)
 }
 
 /// Private composite hook — encapsulates eval-channel logic so
 /// `use_shell_breakpoint` can remain a thin, stable public entry point.
-fn use_shell_breakpoint_runtime(compact_below: f64, expanded_above: f64) -> ReadSignal<ShellBreakpoint> {
+fn use_shell_breakpoint_runtime(
+    compact_below: f64,
+    expanded_above: f64,
+) -> ReadSignal<ShellBreakpoint> {
     let mut bp = use_signal(|| ShellBreakpoint::Medium);
     use_effect(move || {
         spawn(async move {
             let compact_max = compact_below - 1.0;
-            let js = format!(r#"
+            let js = format!(
+                r#"
                 function getBp() {{
                     const w = window.innerWidth;
                     if (w < {compact_below}) return "compact";
@@ -150,13 +160,14 @@ fn use_shell_breakpoint_runtime(compact_below: f64, expanded_above: f64) -> Read
                 function onChange() {{ dioxus.send(getBp()); }}
                 mqlC.addEventListener("change", onChange);
                 mqlE.addEventListener("change", onChange);
-            "#);
+            "#
+            );
             let mut eval = document::eval(&js);
             while let Ok(v) = eval.recv::<String>().await {
                 bp.set(match v.as_str() {
                     "compact" => ShellBreakpoint::Compact,
-                    "medium"  => ShellBreakpoint::Medium,
-                    _         => ShellBreakpoint::Expanded,
+                    "medium" => ShellBreakpoint::Medium,
+                    _ => ShellBreakpoint::Expanded,
                 });
             }
             // Eval channel closed — deterministic fallback for unsupported backends.

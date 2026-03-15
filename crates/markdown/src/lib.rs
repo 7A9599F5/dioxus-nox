@@ -17,13 +17,13 @@ mod tests;
 /// Prelude — import everything for typical consumer usage.
 pub mod prelude {
     pub use crate::components::*;
-    pub use crate::highlight::{
-        HighlightResult, generate_theme_css, highlight_code, supported_languages,
-        wrap_with_line_numbers,
-    };
     pub use crate::context::{
         CursorContext, MarkdownContext, MarkdownHandle, use_cursor_context, use_markdown_context,
         use_markdown_handle,
+    };
+    pub use crate::highlight::{
+        HighlightResult, generate_theme_css, highlight_code, supported_languages,
+        wrap_with_line_numbers,
     };
     pub use crate::hooks::{use_debounced_parse, use_heading_index, use_viewport_height};
     pub use crate::ime_proxy::ImeProxy;

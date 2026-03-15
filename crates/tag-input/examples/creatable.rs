@@ -1,6 +1,6 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{use_tag_input, Tag};
+use dioxus_nox_tag_input::{Tag, use_tag_input};
 
 fn main() {
     dioxus::launch(App);

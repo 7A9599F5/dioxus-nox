@@ -466,12 +466,12 @@ impl DropEvent {
         }
 
         // Insert into target container
-        if let Some(item) = removed_item {
-            if let Some((_, target_signal)) = containers.iter().find(|(id, _)| *id == target_id) {
-                let mut target_signal = *target_signal;
-                target_signal.write().push(item);
-                return true;
-            }
+        if let Some(item) = removed_item
+            && let Some((_, target_signal)) = containers.iter().find(|(id, _)| *id == target_id)
+        {
+            let mut target_signal = *target_signal;
+            target_signal.write().push(item);
+            return true;
         }
         false
     }
@@ -503,12 +503,11 @@ impl DropEvent {
         }
 
         // Insert into target container
-        if let Some(item) = removed_item {
-            if let Some((_, target_items)) = containers.iter_mut().find(|(id, _)| *id == target_id)
-            {
-                target_items.push(item);
-                return true;
-            }
+        if let Some(item) = removed_item
+            && let Some((_, target_items)) = containers.iter_mut().find(|(id, _)| *id == target_id)
+        {
+            target_items.push(item);
+            return true;
         }
         false
     }

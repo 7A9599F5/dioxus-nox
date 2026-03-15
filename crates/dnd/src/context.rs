@@ -876,11 +876,11 @@ impl DragContext {
 
         // Check if the target zone accepts the dragged item's types
         let target_container_id = location.container_id();
-        if let Some(zone) = self.drop_zones.peek().get(&target_container_id) {
-            if !zone.accepts_data(&active.data) {
-                self.set_announcement("Drop cancelled, item returned to start");
-                return None;
-            }
+        if let Some(zone) = self.drop_zones.peek().get(&target_container_id)
+            && !zone.accepts_data(&active.data)
+        {
+            self.set_announcement("Drop cancelled, item returned to start");
+            return None;
         }
 
         // Compute the source index: the dragged item's position among sorted
@@ -1012,7 +1012,7 @@ impl DragContext {
                 .previous_traversal
                 .peek()
                 .as_ref()
-                .map_or(false, |(_, ts)| current_time_ms() - ts >= SNAP_WINDOW_MS);
+                .is_some_and(|(_, ts)| current_time_ms() - ts >= SNAP_WINDOW_MS);
             if expired {
                 *self.previous_traversal.write_unchecked() = None;
             }
@@ -1650,10 +1650,10 @@ impl DragContext {
         };
 
         let zones = self.drop_zones.peek();
-        if let Some(zone) = zones.get(&target_item_id) {
-            if !zone.accepts_data(drag_data) {
-                return None;
-            }
+        if let Some(zone) = zones.get(&target_item_id)
+            && !zone.accepts_data(drag_data)
+        {
+            return None;
         }
         drop(zones);
         drop(active);
@@ -2007,9 +2007,7 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
         let ctx_for_scroll = context;
         use_effect(move || {
             let is_active = active_sig.read().is_some();
-            if !is_active {
-                return;
-            }
+            if !is_active {}
 
             #[cfg(target_arch = "wasm32")]
             {
@@ -2107,8 +2105,8 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                             e.prevent_default();
                         }
                         Key::ArrowDown | Key::ArrowRight => {
-                            if let Some(cid) = context.keyboard_container() {
-                                if let Some((all_items, item_id)) = get_all_items(&cid) {
+                            if let Some(cid) = context.keyboard_container()
+                                && let Some((all_items, item_id)) = get_all_items(&cid) {
                                     if let Some((pos, total)) = context.keyboard_move(1, &all_items) {
                                         // Check if the new target is a group item — enter it
                                         if let Some((inner_cid, inner_pos, inner_total)) = context.keyboard_enter_nested() {
@@ -2129,12 +2127,11 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                                         }
                                     }
                                 }
-                            }
                             e.prevent_default();
                         }
                         Key::ArrowUp | Key::ArrowLeft => {
-                            if let Some(cid) = context.keyboard_container() {
-                                if let Some((all_items, item_id)) = get_all_items(&cid) {
+                            if let Some(cid) = context.keyboard_container()
+                                && let Some((all_items, item_id)) = get_all_items(&cid) {
                                     if let Some((pos, total)) = context.keyboard_move(-1, &all_items) {
                                         // Check if the new target is a group item — enter it
                                         if let Some((inner_cid, inner_pos, inner_total)) = context.keyboard_enter_nested() {
@@ -2155,7 +2152,6 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                                         }
                                     }
                                 }
-                            }
                             e.prevent_default();
                         }
                         Key::Character(ref c) if c == " " => {
@@ -2221,13 +2217,12 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                         Key::Tab => {
                             let forward = !e.modifiers().shift();
                             let item_id = context.active.peek().as_ref().map(|a| a.data.id.clone());
-                            if let Some((cid, pos, total)) = context.keyboard_switch_container(forward) {
-                                if let Some(item_id) = item_id {
+                            if let Some((cid, pos, total)) = context.keyboard_switch_container(forward)
+                                && let Some(item_id) = item_id {
                                     context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
                                         item_id, position: pos, total, container_id: cid,
                                     });
                                 }
-                            }
                             e.prevent_default();
                         }
                         // M key: toggle merge target (Before/After ↔ IntoItem)

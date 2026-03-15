@@ -1,6 +1,6 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{use_breakpoint, use_tag_input, Breakpoint, Tag};
+use dioxus_nox_tag_input::{Breakpoint, Tag, use_breakpoint, use_tag_input};
 
 fn main() {
     dioxus::launch(App);

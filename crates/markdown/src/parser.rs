@@ -288,10 +288,7 @@ pub(crate) fn sanitize_href(raw: &str) -> Option<String> {
 }
 
 /// Render the AST tree into a Dioxus Element.
-pub(crate) fn render_ast_to_element(
-    children: &[AstNode],
-    config: &RenderConfig,
-) -> Element {
+pub(crate) fn render_ast_to_element(children: &[AstNode], config: &RenderConfig) -> Element {
     let kids: Vec<Element> = children
         .iter()
         .map(|node| render_node(node, config))
@@ -397,7 +394,8 @@ fn render_tag(
         Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(info)) => {
             let lang = info.split_whitespace().next().unwrap_or("").to_string();
             let code_text = extract_text_from_children(children);
-            let mut result = crate::highlight::highlight_code(&code_text, &lang, config.highlight_class_prefix);
+            let mut result =
+                crate::highlight::highlight_code(&code_text, &lang, config.highlight_class_prefix);
             if config.show_code_line_numbers {
                 result.html = crate::highlight::wrap_with_line_numbers(&result.html);
             }
@@ -427,7 +425,8 @@ fn render_tag(
         }
         Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Indented) => {
             let code_text = extract_text_from_children(children);
-            let mut result = crate::highlight::highlight_code(&code_text, "", config.highlight_class_prefix);
+            let mut result =
+                crate::highlight::highlight_code(&code_text, "", config.highlight_class_prefix);
             if config.show_code_line_numbers {
                 result.html = crate::highlight::wrap_with_line_numbers(&result.html);
             }

@@ -268,10 +268,10 @@ impl SortableCollisionDetector {
             // base position for collision detection. IntoItem has no displacement
             // so this is an early-return optimization that also prevents any
             // potential feedback loops.
-            if let Some(DropLocation::IntoItem { item_id, .. }) = current_target {
-                if *item_id == zone.id {
-                    return base;
-                }
+            if let Some(DropLocation::IntoItem { item_id, .. }) = current_target
+                && *item_id == zone.id
+            {
+                return base;
             }
 
             let size = axis_size(zone);
@@ -420,8 +420,9 @@ impl SortableCollisionDetector {
         // Fall back to 1D axis matching — find items whose primary-axis range contains
         // pointer_pos, scoped to the closest overshoot container. This allows IntoItem
         // zones to work even when the pointer drifts sideways during a merge attempt.
-        if item_matches.is_empty() && is_overshoot {
-            if let Some((cid, _)) = container_zones
+        if item_matches.is_empty()
+            && is_overshoot
+            && let Some((cid, _)) = container_zones
                 .iter()
                 .copied()
                 .filter(|(_, zone)| zone.rect.expanded(OVERSHOOT_PX).contains(pointer))
@@ -430,20 +431,19 @@ impl SortableCollisionDetector {
                     let db = pointer.distance_to(b.rect.center());
                     da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
                 })
-            {
-                item_matches = item_zones
-                    .iter()
-                    .copied()
-                    .filter(|(_, zone)| {
-                        zone.inner_container_id.is_none() && zone.container_id == *cid && {
-                            let start = effective_axis_start(zone);
-                            let size = axis_size(zone);
-                            let pp = pointer_pos_for(zone.orientation);
-                            pp >= start && pp <= start + size
-                        }
-                    })
-                    .collect();
-            }
+        {
+            item_matches = item_zones
+                .iter()
+                .copied()
+                .filter(|(_, zone)| {
+                    zone.inner_container_id.is_none() && zone.container_id == *cid && {
+                        let start = effective_axis_start(zone);
+                        let size = axis_size(zone);
+                        let pp = pointer_pos_for(zone.orientation);
+                        pp >= start && pp <= start + size
+                    }
+                })
+                .collect();
         }
 
         // Reorder stability: when dragging within the same container without
@@ -452,20 +452,20 @@ impl SortableCollisionDetector {
         // This breaks reverse-drag feedback loops where the currently selected
         // target displaces an item away from the pointer, causing collision to
         // stop seeing that item and bounce back to a gap target.
-        if !self.enable_merge {
-            if let Some(src_cid) = source_container {
-                let base_matches: Vec<(&DragId, &DropZoneState)> = item_zones
-                    .iter()
-                    .copied()
-                    .filter(|(_, zone)| {
-                        zone.inner_container_id.is_none()
-                            && zone.container_id == *src_cid
-                            && zone.rect.contains(pointer)
-                    })
-                    .collect();
-                if !base_matches.is_empty() {
-                    item_matches = base_matches;
-                }
+        if !self.enable_merge
+            && let Some(src_cid) = source_container
+        {
+            let base_matches: Vec<(&DragId, &DropZoneState)> = item_zones
+                .iter()
+                .copied()
+                .filter(|(_, zone)| {
+                    zone.inner_container_id.is_none()
+                        && zone.container_id == *src_cid
+                        && zone.rect.contains(pointer)
+                })
+                .collect();
+            if !base_matches.is_empty() {
+                item_matches = base_matches;
             }
         }
 
@@ -800,8 +800,8 @@ impl SortableCollisionDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Rect;
     use crate::DragType;
+    use crate::types::Rect;
 
     #[test]
     fn test_sortable_vertical_before() {

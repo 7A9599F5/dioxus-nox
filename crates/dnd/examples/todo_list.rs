@@ -4,7 +4,7 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_dnd::{
-    DragId, DragOverlay, ReorderEvent, SortableContext, SortableItem, FUNCTIONAL_STYLES,
+    DragId, DragOverlay, FUNCTIONAL_STYLES, ReorderEvent, SortableContext, SortableItem,
     THEME_STYLES,
 };
 

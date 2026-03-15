@@ -2445,7 +2445,8 @@ fn wrap_line_numbers_non_selectable_gutter() {
 #[test]
 fn wrap_line_numbers_preserves_html_spans() {
     // Simulate highlighted HTML with spans
-    let html = "<span class=\"hl-keyword\">fn</span> main() {}\n<span class=\"hl-comment\">// end</span>";
+    let html =
+        "<span class=\"hl-keyword\">fn</span> main() {}\n<span class=\"hl-comment\">// end</span>";
     let result = wrap_with_line_numbers(html);
     assert_eq!(result.matches("data-line-number").count(), 2);
     assert!(result.contains("<span class=\"hl-keyword\">fn</span> main() {}"));
@@ -2454,8 +2455,8 @@ fn wrap_line_numbers_preserves_html_spans() {
 
 // ── Code block feature integration tests ─────────────────────────────
 
-use crop::Rope;
 use crate::parser::parse_document_full_with_config;
+use crop::Rope;
 
 #[test]
 fn parse_document_line_numbers_enabled() {
@@ -2465,8 +2466,8 @@ fn parse_document_line_numbers_enabled() {
         &Rope::from(md),
         HtmlRenderPolicy::Escape,
         "hl-",
-        true,  // show_code_line_numbers
-        true,  // show_code_language
+        true, // show_code_line_numbers
+        true, // show_code_language
     );
     let mut vdom = dioxus::prelude::VirtualDom::new_with_props(
         |props: dioxus::prelude::Element| props,
@@ -2474,9 +2475,18 @@ fn parse_document_line_numbers_enabled() {
     );
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
-    assert!(html.contains("data-md-line-numbers"), "missing data-md-line-numbers on pre");
-    assert!(html.contains("data-md-line-gutter"), "missing line gutter spans");
-    assert!(html.contains("data-line-number"), "missing data-line-number on line spans");
+    assert!(
+        html.contains("data-md-line-numbers"),
+        "missing data-md-line-numbers on pre"
+    );
+    assert!(
+        html.contains("data-md-line-gutter"),
+        "missing line gutter spans"
+    );
+    assert!(
+        html.contains("data-line-number"),
+        "missing data-line-number on line spans"
+    );
 }
 
 #[test]
@@ -2496,8 +2506,14 @@ fn parse_document_line_numbers_disabled() {
     );
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
-    assert!(!html.contains("data-md-line-numbers"), "should not have data-md-line-numbers when disabled");
-    assert!(!html.contains("data-md-line-gutter"), "should not have gutter spans when disabled");
+    assert!(
+        !html.contains("data-md-line-numbers"),
+        "should not have data-md-line-numbers when disabled"
+    );
+    assert!(
+        !html.contains("data-md-line-gutter"),
+        "should not have gutter spans when disabled"
+    );
 }
 
 #[test]
@@ -2517,8 +2533,14 @@ fn parse_document_language_label_enabled() {
     );
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
-    assert!(html.contains("data-md-code-header"), "missing code header div");
-    assert!(html.contains("data-md-code-language"), "missing code language span");
+    assert!(
+        html.contains("data-md-code-header"),
+        "missing code header div"
+    );
+    assert!(
+        html.contains("data-md-code-language"),
+        "missing code language span"
+    );
     assert!(html.contains(">rust<"), "missing language text 'rust'");
 }
 
@@ -2539,8 +2561,14 @@ fn parse_document_language_label_disabled() {
     );
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
-    assert!(!html.contains("data-md-code-header"), "should not have code header when disabled");
-    assert!(!html.contains("data-md-code-language"), "should not have code language when disabled");
+    assert!(
+        !html.contains("data-md-code-header"),
+        "should not have code header when disabled"
+    );
+    assert!(
+        !html.contains("data-md-code-language"),
+        "should not have code language when disabled"
+    );
 }
 
 #[test]
@@ -2561,7 +2589,10 @@ fn parse_document_indented_code_block_no_language_label() {
     );
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
-    assert!(!html.contains("data-md-code-header"), "indented code blocks should never show language header");
+    assert!(
+        !html.contains("data-md-code-header"),
+        "indented code blocks should never show language header"
+    );
 }
 
 // ── pulldown-cmark AST range diagnostic tests ──────────────────────
@@ -2572,11 +2603,19 @@ fn parser_ranges_two_paragraphs() {
     let md = "Hello\n\nWorld";
     let doc = crate::parser::parse_document(&Rope::from(md));
     // We expect two Paragraph nodes; inspect their ranges to confirm gap behavior
-    assert_eq!(doc.ast.len(), 2, "expected 2 top-level nodes, got {}", doc.ast.len());
+    assert_eq!(
+        doc.ast.len(),
+        2,
+        "expected 2 top-level nodes, got {}",
+        doc.ast.len()
+    );
     let first = &doc.ast[0];
     let second = &doc.ast[1];
     assert!(matches!(first.node_type, crate::types::NodeType::Paragraph));
-    assert!(matches!(second.node_type, crate::types::NodeType::Paragraph));
+    assert!(matches!(
+        second.node_type,
+        crate::types::NodeType::Paragraph
+    ));
     // pulldown-cmark ranges: first paragraph includes trailing \n\n
     // Verify there's a gap or overlap — this tells us how to build synthetic nodes
     let gap_start = first.range.end;
@@ -2596,7 +2635,12 @@ fn parser_ranges_extra_blank_lines() {
     // "Hello\n\n\n\nWorld" — four newlines between paragraphs
     let md = "Hello\n\n\n\nWorld";
     let doc = crate::parser::parse_document(&Rope::from(md));
-    assert_eq!(doc.ast.len(), 2, "expected 2 top-level nodes, got {}", doc.ast.len());
+    assert_eq!(
+        doc.ast.len(),
+        2,
+        "expected 2 top-level nodes, got {}",
+        doc.ast.len()
+    );
     let first = &doc.ast[0];
     let second = &doc.ast[1];
     let gap = second.range.start.saturating_sub(first.range.end);

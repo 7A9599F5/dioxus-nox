@@ -16,10 +16,13 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_cmdk::{
-    CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-    CommandRoot, Hotkey, use_global_shortcuts,
+    CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandRoot,
+    Hotkey, use_global_shortcuts,
 };
-use dioxus_nox_shell::{AppShell, BreakpointConfig, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout, use_shell_context};
+use dioxus_nox_shell::{
+    AppShell, BreakpointConfig, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout,
+    use_shell_context,
+};
 
 fn main() {
     dioxus::launch(App);

@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
 use crate::ShellLayout;
 use crate::breakpoint::{DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint};
+use dioxus::prelude::*;
 
 /// Reactive context shared across the shell tree.
 ///
@@ -73,15 +73,27 @@ impl ShellContext {
     /// | Desktop `Expandable` collapsed | `"rail"` |
     pub fn sidebar_state(&self) -> &'static str {
         if self.is_mobile() {
-            if (self.sidebar_mobile_open)() { "open" } else { "closed" }
+            if (self.sidebar_mobile_open)() {
+                "open"
+            } else {
+                "closed"
+            }
         } else {
             match (self.desktop_sidebar)() {
                 DesktopSidebar::Rail => "rail",
                 DesktopSidebar::Full => {
-                    if (self.sidebar_visible)() { "expanded" } else { "collapsed" }
+                    if (self.sidebar_visible)() {
+                        "expanded"
+                    } else {
+                        "collapsed"
+                    }
                 }
                 DesktopSidebar::Expandable => {
-                    if (self.sidebar_visible)() { "expanded" } else { "rail" }
+                    if (self.sidebar_visible)() {
+                        "expanded"
+                    } else {
+                        "rail"
+                    }
                 }
             }
         }

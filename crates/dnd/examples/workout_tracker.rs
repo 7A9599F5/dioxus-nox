@@ -12,13 +12,13 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_dnd::grouped::{
-    grouped_merge, grouped_move_default, grouped_position, grouped_reorder_default,
-    grouped_style_info, partition_grouped_items, GroupedItem, TopLevelEntry,
+    GroupedItem, TopLevelEntry, grouped_merge, grouped_move_default, grouped_position,
+    grouped_reorder_default, grouped_style_info, partition_grouped_items,
 };
 use dioxus_nox_dnd::styles::{GROUPED_FUNCTIONAL_STYLES, GROUPED_THEME_STYLES};
 use dioxus_nox_dnd::{
-    ActiveDrag, DragContext, DragId, DragOverlay, DragType, MergeEvent, MoveEvent, ReorderEvent,
-    SortableContext, SortableGroup, SortableItem, FUNCTIONAL_STYLES, THEME_STYLES,
+    ActiveDrag, DragContext, DragId, DragOverlay, DragType, FUNCTIONAL_STYLES, MergeEvent,
+    MoveEvent, ReorderEvent, SortableContext, SortableGroup, SortableItem, THEME_STYLES,
 };
 
 fn main() {

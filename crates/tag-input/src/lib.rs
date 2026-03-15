@@ -40,9 +40,9 @@ mod tag;
 #[cfg(test)]
 mod tests;
 
-pub use breakpoint::{use_breakpoint, Breakpoint};
+pub use breakpoint::{Breakpoint, use_breakpoint};
 pub use hook::{
-    extract_clipboard_text, find_match_ranges, use_tag_input, use_tag_input_grouped,
-    use_tag_input_with, SuggestionGroup, TagInputConfig, TagInputGroupConfig, TagInputState,
+    SuggestionGroup, TagInputConfig, TagInputGroupConfig, TagInputState, extract_clipboard_text,
+    find_match_ranges, use_tag_input, use_tag_input_grouped, use_tag_input_with,
 };
 pub use tag::{Tag, TagLike};
