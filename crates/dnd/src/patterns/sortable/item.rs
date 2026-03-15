@@ -1101,13 +1101,12 @@ fn compute_displacement(
 
         // Remaining fallback for nested-container expansion-only paths.
         // (Some(_), None) is already handled by canonical projection.
-        if let (None, None) = (source_index, target_index_and_mode) {
-            // Cross-container drag into a nested child — expansion only
-            if let Some(group_idx) = nested_group_idx
-                && my_idx > group_idx
-            {
-                return full_shift(false);
-            }
+        // Cross-container drag into a nested child — expansion only
+        if let (None, None) = (source_index, target_index_and_mode)
+            && let Some(group_idx) = nested_group_idx
+            && my_idx > group_idx
+        {
+            return full_shift(false);
         }
     }
 

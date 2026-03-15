@@ -849,12 +849,11 @@ fn compute_nested_displacement(
 
         // Remaining fallback for expansion-only paths.
         // (Some(_), None) handled by canonical projection.
-        if let (None, None) = (source_index, target_index) {
-            if let Some(group_idx) = nested_group_idx
-                && my_idx > group_idx
-            {
-                return full_shift(false);
-            }
+        if let (None, None) = (source_index, target_index)
+            && let Some(group_idx) = nested_group_idx
+            && my_idx > group_idx
+        {
+            return full_shift(false);
         }
     }
 
