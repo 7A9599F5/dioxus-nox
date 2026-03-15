@@ -97,7 +97,7 @@ The highlight.rs usage is acceptable (bounded, cached). ~~The noxpad usage leaks
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Architecture — Version Inconsistency Across Crates
 **Problem:** Crate versions are wildly inconsistent:
 - cmdk: 0.13.0
@@ -108,6 +108,8 @@ The highlight.rs usage is acceptable (bounded, cached). ~~The noxpad usage leaks
 With a workspace-level edition of 2024 and pinned `dioxus = "=0.7.3"`, the version numbers suggest the cmdk crate has had 13 releases while others are effectively unreleased. This is confusing for consumers trying to understand compatibility.
 
 **Suggestion:** Either adopt a unified workspace version (all crates share the same version, bumped together) or document the versioning strategy. For a learning project, a unified version is simpler.
+
+**IMPLEMENTED**: Added `version = "0.13.0"` to `[workspace.package]` in the root `Cargo.toml`. All 17 crate `Cargo.toml` files (11 library crates, 1 demo app, 5 example apps) now use `version.workspace = true` to inherit the unified version. Version bumps are now a single-line change in the workspace root.
 
 **Expected Impact:** Clearer compatibility story; simpler dependency management.
 

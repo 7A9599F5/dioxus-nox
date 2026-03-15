@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-nox-cmdk"
-version = "0.13.0"
+version.workspace = true
 edition.workspace = true
 description = "A headless Command Palette primitive for Dioxus"
 license.workspace = true

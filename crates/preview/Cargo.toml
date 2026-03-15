@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-nox-preview"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 description = "Debounced preview hook and LRU cache for navigable Dioxus lists"
 license.workspace = true
