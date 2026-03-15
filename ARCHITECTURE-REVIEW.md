@@ -123,11 +123,20 @@ With a workspace-level edition of 2024 and pinned `dioxus = "=0.7.3"`, the versi
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Architecture — `DragContext` File Size and Responsibility
-**Problem:** `crates/dnd/src/context.rs` is 3,412 lines. It handles drag state management, pointer event processing, auto-scroll, animation frames, hysteresis, ARIA announcements, and the provider component — all in one file. The file has well-documented constants and clear intent, but the sheer size makes navigation difficult.
+**Problem:** `crates/dnd/src/context.rs` was 3,412 lines. It handled drag state management, pointer event processing, auto-scroll, animation frames, hysteresis, ARIA announcements, and the provider component — all in one file. The file had well-documented constants and clear intent, but the sheer size made navigation difficult.
 
 **Suggestion:** Extract WASM-specific pointer handling into `pointer.rs`, auto-scroll logic into `auto_scroll.rs`, and keep `context.rs` focused on state management and the provider component.
+
+**IMPLEMENTED**: Split `context.rs` into a `context/` directory module with 5 focused files:
+- `mod.rs` (~700 lines) — DragContext struct, constructors, registration, queries, ARIA announcements, state structs (DropZoneState, ActiveDrag, DragState), free functions, and all tests
+- `pointer.rs` (~500 lines) — Pointer drag lifecycle (start/update/end/cancel), traversal computation, hysteresis constants, timing helpers
+- `keyboard.rs` (~400 lines) — Keyboard drag navigation, container switching, merge toggling, nested entry/exit, helper free functions
+- `auto_scroll.rs` (~60 lines) — Scroll velocity constants and computation (WASM + stub)
+- `provider.rs` (~350 lines) — DragContextProvider component, props, auto-scroll RAF loop, keyboard event handler
+
+DragContext fields changed from private to `pub(super)` for submodule access. No public API changes — all re-exports from `lib.rs` remain valid. All 272 tests pass.
 
 **Expected Impact:** Each file has a single clear responsibility; easier to modify pointer handling without risking state management bugs.
 
