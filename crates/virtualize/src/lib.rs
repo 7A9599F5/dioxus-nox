@@ -1,4 +1,4 @@
-//! # dioxus-nox-virtualize
+//! # dioxus-virtual
 //!
 //! Viewport math for virtual scrolling lists with fixed-height items.
 //!
@@ -8,7 +8,7 @@
 //! ## Usage
 //!
 //! ```rust
-//! use dioxus_nox_virtualize::VirtualViewport;
+//! use dioxus_virtual::VirtualViewport;
 //!
 //! let mut vp = VirtualViewport::new(1000, 40, 400);
 //! vp.scroll_top = 800;
