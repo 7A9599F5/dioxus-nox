@@ -1244,6 +1244,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dioxus-nox"
+version = "0.13.0"
+dependencies = [
+ "dioxus-nox-cmdk",
+ "dioxus-nox-dnd",
+ "dioxus-nox-extensions",
+ "dioxus-nox-gestures",
+ "dioxus-nox-markdown",
+ "dioxus-nox-preview",
+ "dioxus-nox-shell",
+ "dioxus-nox-suggest",
+ "dioxus-nox-tag-input",
+ "dioxus-nox-virtualize",
+]
+
+[[package]]
 name = "dioxus-nox-cmdk"
 version = "0.13.0"
 dependencies = [

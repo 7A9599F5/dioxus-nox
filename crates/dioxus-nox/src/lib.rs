@@ -1,0 +1,98 @@
+//! # dioxus-nox
+//!
+//! Umbrella crate for the **dioxus-nox** headless component library.
+//!
+//! Enable individual crates via feature flags:
+//!
+//! ```toml
+//! [dependencies]
+//! dioxus-nox = { version = "0.13", features = ["cmdk", "markdown"] }
+//! ```
+//!
+//! Or enable everything:
+//!
+//! ```toml
+//! [dependencies]
+//! dioxus-nox = { version = "0.13", features = ["full"] }
+//! ```
+
+#[cfg(feature = "cmdk")]
+pub use dioxus_nox_cmdk as cmdk;
+
+#[cfg(feature = "dnd")]
+pub use dioxus_nox_dnd as dnd;
+
+#[cfg(feature = "markdown")]
+pub use dioxus_nox_markdown as markdown;
+
+#[cfg(feature = "shell")]
+pub use dioxus_nox_shell as shell;
+
+#[cfg(feature = "suggest")]
+pub use dioxus_nox_suggest as suggest;
+
+#[cfg(feature = "tag-input")]
+pub use dioxus_nox_tag_input as tag_input;
+
+#[cfg(feature = "virtualize")]
+pub use dioxus_nox_virtualize as virtualize;
+
+#[cfg(feature = "preview")]
+pub use dioxus_nox_preview as preview;
+
+#[cfg(feature = "extensions")]
+pub use dioxus_nox_extensions as extensions;
+
+#[cfg(feature = "gestures")]
+pub use dioxus_nox_gestures as gestures;
+
+/// Convenience re-exports of the most commonly used types.
+///
+/// ```rust,ignore
+/// use dioxus_nox::prelude::*;
+/// ```
+pub mod prelude {
+    #[cfg(feature = "cmdk")]
+    pub use dioxus_nox_cmdk::{
+        CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+        CommandPalette, use_command_palette,
+    };
+
+    #[cfg(feature = "dnd")]
+    pub use dioxus_nox_dnd::prelude::{
+        ActiveDrag, AnnouncementEvent, CollisionStrategy, DragContext, DragContextProvider,
+        DragData, DragId, DragOverlay, DragState, DragType, Draggable, DropEvent, DropIndicator,
+        DropLocation, DropZone, DropZoneState, IndicatorPosition, MergeEvent, MoveEvent,
+        Orientation as DndOrientation, Position, Rect, ReorderEvent, SortableContext,
+        SortableGroup, SortableItem, SortableItemState,
+    };
+
+    #[cfg(feature = "markdown")]
+    pub use dioxus_nox_markdown::prelude::{
+        Mode, Orientation as MarkdownOrientation, highlight_code, parse_document,
+        use_markdown_context, use_markdown_handle,
+    };
+
+    #[cfg(feature = "shell")]
+    pub use dioxus_nox_shell::{AppShell, ShellContext, use_shell_breakpoint, use_shell_context};
+
+    #[cfg(feature = "suggest")]
+    pub use dioxus_nox_suggest::{TriggerConfig, TriggerSelectEvent, suggest, use_suggestion};
+
+    #[cfg(feature = "tag-input")]
+    pub use dioxus_nox_tag_input::{use_tag_input, use_tag_input_grouped};
+
+    #[cfg(feature = "virtualize")]
+    pub use dioxus_nox_virtualize::VirtualViewport;
+
+    #[cfg(feature = "preview")]
+    pub use dioxus_nox_preview::{
+        PreviewPosition, preview, use_debounced_active, use_preview_cache,
+    };
+
+    #[cfg(feature = "extensions")]
+    pub use dioxus_nox_extensions::{Extension, PluginCommand, use_extensions};
+
+    #[cfg(feature = "gestures")]
+    pub use dioxus_nox_gestures::{SwipeConfig, swipe_actions, use_long_press, use_swipe_gesture};
+}
