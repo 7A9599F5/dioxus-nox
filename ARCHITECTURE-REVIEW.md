@@ -83,15 +83,15 @@ This makes the demo — which serves as the primary showcase for 6+ library crat
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Architecture — Memory Leaks via `Box::leak`
 **Problem:** Two instances of `Box::leak`:
 1. `crates/markdown/src/highlight.rs:47` — Leaks prefix strings into a `PREFIX_CACHE`. Documented as intentional since "only 1-2 prefixes are used per app."
-2. `crates/noxpad/src/main.rs:470` — Leaks the entire syntax theme CSS string on every app mount: `Box::leak(generate_theme_css(...).into_boxed_str())`
+2. ~~`crates/noxpad/src/main.rs:470` — Leaks the entire syntax theme CSS string on every app mount: `Box::leak(generate_theme_css(...).into_boxed_str())`~~ **IMPLEMENTED**: Replaced `Box::leak` with a module-level `LazyLock<String>` — the CSS is computed once on first access, owned by the static, and never leaked. No per-component allocation.
 
-The highlight.rs usage is acceptable (bounded, cached). The noxpad usage leaks memory on each `App` component remount — though in practice this is likely once per session, it's still a code smell and poor pattern for a demo that teaches.
+The highlight.rs usage is acceptable (bounded, cached). ~~The noxpad usage leaks memory on each `App` component remount — though in practice this is likely once per session, it's still a code smell and poor pattern for a demo that teaches.~~ Added explicit bounded-leak documentation comment in highlight.rs.
 
-**Suggestion:** In noxpad, use `use_signal` or `use_resource` with a `'static` memo pattern instead of `Box::leak`. In highlight.rs, add a comment noting the leak is bounded by the prefix cache.
+**Suggestion:** ~~In noxpad, use `use_signal` or `use_resource` with a `'static` memo pattern instead of `Box::leak`.~~ Done. ~~In highlight.rs, add a comment noting the leak is bounded by the prefix cache.~~ Done.
 
 **Expected Impact:** Eliminates memory leak in demo; better pattern for consumers to copy.
 

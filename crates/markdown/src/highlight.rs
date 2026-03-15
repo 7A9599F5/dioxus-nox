@@ -44,6 +44,9 @@ mod inner {
         if let Some(&s) = cache.get(prefix) {
             return s;
         }
+        // Intentional bounded leak: each unique prefix is leaked exactly once and
+        // cached in PREFIX_CACHE. In practice only 1-2 prefixes exist per app,
+        // so total leaked memory is negligible (~10-50 bytes).
         let leaked: &'static str = Box::leak(prefix.to_string().into_boxed_str());
         cache.insert(prefix.to_string(), leaked);
         leaked
