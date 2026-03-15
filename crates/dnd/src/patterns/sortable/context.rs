@@ -692,7 +692,7 @@ fn compute_nested_displacement(
         .previous_traversal_signal()
         .peek()
         .as_ref()
-        .map_or(false, |(id, _)| id == my_item_id);
+        .is_some_and(|(id, _)| id == my_item_id);
 
     let snap_style =
         |transform: String| -> String { style_with_duration(transform, is_exiting_traversal) };
@@ -848,16 +848,13 @@ fn compute_nested_displacement(
         }
 
         // Remaining fallback for expansion-only paths.
-        match (source_index, target_index) {
-            // (Some(_), None) handled by canonical projection.
-            (None, None) => {
-                if let Some(group_idx) = nested_group_idx
-                    && my_idx > group_idx
-                {
-                    return full_shift(false);
-                }
+        // (Some(_), None) handled by canonical projection.
+        if let (None, None) = (source_index, target_index) {
+            if let Some(group_idx) = nested_group_idx
+                && my_idx > group_idx
+            {
+                return full_shift(false);
             }
-            _ => {}
         }
     }
 

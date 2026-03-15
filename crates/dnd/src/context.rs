@@ -1012,7 +1012,7 @@ impl DragContext {
                 .previous_traversal
                 .peek()
                 .as_ref()
-                .map_or(false, |(_, ts)| current_time_ms() - ts >= SNAP_WINDOW_MS);
+                .is_some_and(|(_, ts)| current_time_ms() - ts >= SNAP_WINDOW_MS);
             if expired {
                 *self.previous_traversal.write_unchecked() = None;
             }
@@ -2006,34 +2006,32 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
         let ctx_for_scroll = context;
         use_effect(move || {
             let is_active = active_sig.read().is_some();
-            if !is_active {
-                return;
-            }
+            if is_active {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    // Spawn RAF loop for auto-scroll and viewport-driven rect refresh.
+                    spawn(async move {
+                        loop {
+                            NextAnimationFrame::new().await;
+                            // Check if drag is still active (non-reactive peek)
+                            if active_sig.peek().is_none() {
+                                break;
+                            }
 
-            #[cfg(target_arch = "wasm32")]
-            {
-                // Spawn RAF loop for auto-scroll and viewport-driven rect refresh.
-                spawn(async move {
-                    loop {
-                        NextAnimationFrame::new().await;
-                        // Check if drag is still active (non-reactive peek)
-                        if active_sig.peek().is_none() {
-                            break;
-                        }
+                            // Keep geometry fresh while dragging even if the pointer
+                            // is stationary (e.g., auto-scroll / viewport motion).
+                            ctx_for_scroll.maybe_refresh_measurements();
 
-                        // Keep geometry fresh while dragging even if the pointer
-                        // is stationary (e.g., auto-scroll / viewport motion).
-                        ctx_for_scroll.maybe_refresh_measurements();
-
-                        let vel = *scroll_vel.peek();
-                        if vel == 0.0 {
-                            continue; // No scroll needed, but keep loop alive
+                            let vel = *scroll_vel.peek();
+                            if vel == 0.0 {
+                                continue; // No scroll needed, but keep loop alive
+                            }
+                            if let Some(window) = web_sys::window() {
+                                window.scroll_by_with_x_and_y(0.0, vel);
+                            }
                         }
-                        if let Some(window) = web_sys::window() {
-                            window.scroll_by_with_x_and_y(0.0, vel);
-                        }
-                    }
-                });
+                    });
+                }
             }
         });
     }

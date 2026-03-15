@@ -901,7 +901,7 @@ fn compute_displacement(
         .previous_traversal_signal()
         .peek()
         .as_ref()
-        .map_or(false, |(id, _)| id == my_id);
+        .is_some_and(|(id, _)| id == my_id);
 
     // Helper: suppress CSS transition for one frame when an item exits traversal.
     // Without this, the CSS baseline transition animates the discrete
@@ -1100,17 +1100,14 @@ fn compute_displacement(
         }
 
         // Remaining fallback for nested-container expansion-only paths.
-        match (source_index, target_index_and_mode) {
-            // (Some(_), None) is already handled by canonical projection.
-            (None, None) => {
-                // Cross-container drag into a nested child — expansion only
-                if let Some(group_idx) = nested_group_idx
-                    && my_idx > group_idx
-                {
-                    return full_shift(false);
-                }
+        // (Some(_), None) is already handled by canonical projection.
+        if let (None, None) = (source_index, target_index_and_mode) {
+            // Cross-container drag into a nested child — expansion only
+            if let Some(group_idx) = nested_group_idx
+                && my_idx > group_idx
+            {
+                return full_shift(false);
             }
-            _ => {}
         }
     }
 
