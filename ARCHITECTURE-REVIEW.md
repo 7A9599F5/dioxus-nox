@@ -53,9 +53,9 @@ The `HtmlRenderPolicy` enum and its usage lack documentation about XSS implicati
 
 ---
 
-### [PRIORITY: High]
+### [IMPLEMENTED] ~~[PRIORITY: High]~~
 **Area:** Maintainability — Monolithic Demo File
-**Problem:** `crates/noxpad/src/main.rs` is 1,368 lines in a single file containing:
+**Problem:** `crates/noxpad/src/main.rs` was 1,368 lines in a single file containing:
 - ~210 lines of inline CSS as a `const` string
 - Data model definitions
 - 8+ component functions
