@@ -1129,10 +1129,10 @@ pub fn CommandItem(
             onpointermove,
             {children}
             // P-039: Render action panel slot when open for this item.
-            if panel_open {
-                if let Some(action_el) = actions {
-                    {action_el}
-                }
+            if panel_open
+                && let Some(action_el) = actions
+            {
+                {action_el}
             }
         }
     }

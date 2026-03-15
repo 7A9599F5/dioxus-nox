@@ -876,11 +876,11 @@ impl DragContext {
 
         // Check if the target zone accepts the dragged item's types
         let target_container_id = location.container_id();
-        if let Some(zone) = self.drop_zones.peek().get(&target_container_id) {
-            if !zone.accepts_data(&active.data) {
-                self.set_announcement("Drop cancelled, item returned to start");
-                return None;
-            }
+        if let Some(zone) = self.drop_zones.peek().get(&target_container_id)
+            && !zone.accepts_data(&active.data)
+        {
+            self.set_announcement("Drop cancelled, item returned to start");
+            return None;
         }
 
         // Compute the source index: the dragged item's position among sorted
@@ -1650,10 +1650,10 @@ impl DragContext {
         };
 
         let zones = self.drop_zones.peek();
-        if let Some(zone) = zones.get(&target_item_id) {
-            if !zone.accepts_data(drag_data) {
-                return None;
-            }
+        if let Some(zone) = zones.get(&target_item_id)
+            && !zone.accepts_data(drag_data)
+        {
+            return None;
         }
         drop(zones);
         drop(active);
@@ -1850,13 +1850,12 @@ fn keyboard_focus_item(item_id: DragId) {
     spawn(async move {
         NextAnimationFrame::new().await;
         NextAnimationFrame::new().await;
-        if let Some(document) = web_sys::window().and_then(|w| w.document()) {
-            let selector = format!("[data-dnd-id=\"{}\"]", item_id.0);
-            if let Ok(Some(el)) = document.query_selector(&selector) {
-                if let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>() {
-                    let _ = html_el.focus();
-                }
-            }
+        if let Some(document) = web_sys::window().and_then(|w| w.document())
+            && let Ok(Some(el)) =
+                document.query_selector(&format!("[data-dnd-id=\"{}\"]", item_id.0))
+            && let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>()
+        {
+            let _ = html_el.focus();
         }
     });
 }
@@ -2107,52 +2106,52 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                             e.prevent_default();
                         }
                         Key::ArrowDown | Key::ArrowRight => {
-                            if let Some(cid) = context.keyboard_container() {
-                                if let Some((all_items, item_id)) = get_all_items(&cid) {
-                                    if let Some((pos, total)) = context.keyboard_move(1, &all_items) {
-                                        // Check if the new target is a group item — enter it
-                                        if let Some((inner_cid, inner_pos, inner_total)) = context.keyboard_enter_nested() {
-                                            context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
-                                                item_id, position: inner_pos, total: inner_total, container_id: inner_cid,
-                                            });
-                                        } else {
-                                            context.dispatch_announcement(AnnouncementEvent::Moved {
-                                                item_id, position: pos, total, container_id: cid,
-                                            });
-                                        }
+                            if let Some(cid) = context.keyboard_container()
+                                && let Some((all_items, item_id)) = get_all_items(&cid)
+                            {
+                                if let Some((pos, total)) = context.keyboard_move(1, &all_items) {
+                                    // Check if the new target is a group item — enter it
+                                    if let Some((inner_cid, inner_pos, inner_total)) = context.keyboard_enter_nested() {
+                                        context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
+                                            item_id, position: inner_pos, total: inner_total, container_id: inner_cid,
+                                        });
                                     } else {
-                                        // At boundary — try exiting nested container
-                                        if let Some((parent_cid, pos, total)) = context.keyboard_exit_to_parent() {
-                                            context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
-                                                item_id, position: pos, total, container_id: parent_cid,
-                                            });
-                                        }
+                                        context.dispatch_announcement(AnnouncementEvent::Moved {
+                                            item_id, position: pos, total, container_id: cid,
+                                        });
+                                    }
+                                } else {
+                                    // At boundary — try exiting nested container
+                                    if let Some((parent_cid, pos, total)) = context.keyboard_exit_to_parent() {
+                                        context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
+                                            item_id, position: pos, total, container_id: parent_cid,
+                                        });
                                     }
                                 }
                             }
                             e.prevent_default();
                         }
                         Key::ArrowUp | Key::ArrowLeft => {
-                            if let Some(cid) = context.keyboard_container() {
-                                if let Some((all_items, item_id)) = get_all_items(&cid) {
-                                    if let Some((pos, total)) = context.keyboard_move(-1, &all_items) {
-                                        // Check if the new target is a group item — enter it
-                                        if let Some((inner_cid, inner_pos, inner_total)) = context.keyboard_enter_nested() {
-                                            context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
-                                                item_id, position: inner_pos, total: inner_total, container_id: inner_cid,
-                                            });
-                                        } else {
-                                            context.dispatch_announcement(AnnouncementEvent::Moved {
-                                                item_id, position: pos, total, container_id: cid,
-                                            });
-                                        }
+                            if let Some(cid) = context.keyboard_container()
+                                && let Some((all_items, item_id)) = get_all_items(&cid)
+                            {
+                                if let Some((pos, total)) = context.keyboard_move(-1, &all_items) {
+                                    // Check if the new target is a group item — enter it
+                                    if let Some((inner_cid, inner_pos, inner_total)) = context.keyboard_enter_nested() {
+                                        context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
+                                            item_id, position: inner_pos, total: inner_total, container_id: inner_cid,
+                                        });
                                     } else {
-                                        // At boundary — try exiting nested container
-                                        if let Some((parent_cid, pos, total)) = context.keyboard_exit_to_parent() {
-                                            context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
-                                                item_id, position: pos, total, container_id: parent_cid,
-                                            });
-                                        }
+                                        context.dispatch_announcement(AnnouncementEvent::Moved {
+                                            item_id, position: pos, total, container_id: cid,
+                                        });
+                                    }
+                                } else {
+                                    // At boundary — try exiting nested container
+                                    if let Some((parent_cid, pos, total)) = context.keyboard_exit_to_parent() {
+                                        context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
+                                            item_id, position: pos, total, container_id: parent_cid,
+                                        });
                                     }
                                 }
                             }
@@ -2221,12 +2220,12 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                         Key::Tab => {
                             let forward = !e.modifiers().shift();
                             let item_id = context.active.peek().as_ref().map(|a| a.data.id.clone());
-                            if let Some((cid, pos, total)) = context.keyboard_switch_container(forward) {
-                                if let Some(item_id) = item_id {
-                                    context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
-                                        item_id, position: pos, total, container_id: cid,
-                                    });
-                                }
+                            if let Some((cid, pos, total)) = context.keyboard_switch_container(forward)
+                                && let Some(item_id) = item_id
+                            {
+                                context.dispatch_announcement(AnnouncementEvent::MovedToContainer {
+                                    item_id, position: pos, total, container_id: cid,
+                                });
                             }
                             e.prevent_default();
                         }
@@ -2287,14 +2286,14 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                                 }
                                 _ => None,
                             };
-                            if let Some(id) = target_item_id {
-                                if let Some(document) = web_sys::window().and_then(|w| w.document()) {
-                                    let selector = format!("[data-dnd-item][data-dnd-id=\"{}\"]", id);
-                                    if let Ok(Some(el)) = document.query_selector(&selector) {
-                                        let opts = web_sys::ScrollIntoViewOptions::new();
-                                        opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
-                                        el.scroll_into_view_with_scroll_into_view_options(&opts);
-                                    }
+                            if let Some(id) = target_item_id
+                                && let Some(document) = web_sys::window().and_then(|w| w.document())
+                            {
+                                let selector = format!("[data-dnd-item][data-dnd-id=\"{}\"]", id);
+                                if let Ok(Some(el)) = document.query_selector(&selector) {
+                                    let opts = web_sys::ScrollIntoViewOptions::new();
+                                    opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
+                                    el.scroll_into_view_with_scroll_into_view_options(&opts);
                                 }
                             }
                         }

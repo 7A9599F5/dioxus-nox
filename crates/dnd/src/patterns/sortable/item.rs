@@ -605,10 +605,10 @@ pub fn SortableItem(props: SortableItemProps) -> Element {
         }
 
         // If a handle selector is specified, check if the event target matches
-        if let Some(ref selector) = handle_selector {
-            if !pointer_event_matches_handle(&e, selector) {
-                return;
-            }
+        if let Some(ref selector) = handle_selector
+            && !pointer_event_matches_handle(&e, selector)
+        {
+            return;
         }
 
         e.prevent_default();
@@ -871,10 +871,10 @@ fn compute_displacement(
     };
 
     // If I am the dragged item, no displacement
-    if let Some(dragged_id) = &dragged_id_opt {
-        if dragged_id == my_id {
-            return no_displacement();
-        }
+    if let Some(dragged_id) = &dragged_id_opt
+        && dragged_id == my_id
+    {
+        return no_displacement();
     }
 
     // If this container doesn't accept the dragged item's type, skip displacement.
@@ -997,27 +997,25 @@ fn compute_displacement(
         // the top (frac ≈ 0) and exits at the bottom (frac ≈ 1), so displacement
         // grows with fraction. When dragging UP, the center enters from the bottom
         // (frac ≈ 1) and exits at the top (frac ≈ 0), so we invert the fraction.
-        if is_traversal {
-            if let Some(src) = source_index {
-                let h = effective_size.unwrap_or(my_size);
-                // Normalize to entry→exit direction, apply easing when merge enabled
-                let progress = if src < my_idx {
-                    traversal_frac // DOWN/RIGHT: already 0→1
-                } else {
-                    1.0 - traversal_frac // UP/LEFT: invert to 0→1
-                };
-                let eased = if ctx.is_merge_enabled() {
-                    ease_traversal(progress)
-                } else {
-                    progress
-                };
-                let px = if src < my_idx { -h * eased } else { h * eased };
-                return DisplacementResult {
-                    transform: format!("translate{axis}({px}px)"),
-                    instant_transition: true,
-                    drop_adjacent: adjacency,
-                };
-            }
+        if is_traversal && let Some(src) = source_index {
+            let h = effective_size.unwrap_or(my_size);
+            // Normalize to entry→exit direction, apply easing when merge enabled
+            let progress = if src < my_idx {
+                traversal_frac // DOWN/RIGHT: already 0→1
+            } else {
+                1.0 - traversal_frac // UP/LEFT: invert to 0→1
+            };
+            let eased = if ctx.is_merge_enabled() {
+                ease_traversal(progress)
+            } else {
+                progress
+            };
+            let px = if src < my_idx { -h * eased } else { h * eased };
+            return DisplacementResult {
+                transform: format!("translate{axis}({px}px)"),
+                instant_transition: true,
+                drop_adjacent: adjacency,
+            };
         }
 
         // Check if target is inside a nested child container (for parent-level expansion).
@@ -1039,17 +1037,16 @@ fn compute_displacement(
 
         // Nested-sibling drag-out combines collapse + expansion; this case
         // cannot be represented by the standard projection model.
-        if let (Some(src), None) = (source_index, target_index_and_mode) {
-            if has_any_target {
-                if let Some(group_idx) = nested_group_idx {
-                    let collapse = my_idx > src;
-                    let expansion = my_idx > group_idx;
-                    match (collapse, expansion) {
-                        (true, false) => return full_shift(true),  // collapse only
-                        (false, true) => return full_shift(false), // expansion only
-                        _ => {} // both cancel out, or neither applies
-                    }
-                }
+        if let (Some(src), None) = (source_index, target_index_and_mode)
+            && has_any_target
+            && let Some(group_idx) = nested_group_idx
+        {
+            let collapse = my_idx > src;
+            let expansion = my_idx > group_idx;
+            match (collapse, expansion) {
+                (true, false) => return full_shift(true),  // collapse only
+                (false, true) => return full_shift(false), // expansion only
+                _ => {}                                    // both cancel out, or neither applies
             }
         }
 
@@ -1107,10 +1104,10 @@ fn compute_displacement(
             // (Some(_), None) is already handled by canonical projection.
             (None, None) => {
                 // Cross-container drag into a nested child — expansion only
-                if let Some(group_idx) = nested_group_idx {
-                    if my_idx > group_idx {
-                        return full_shift(false);
-                    }
+                if let Some(group_idx) = nested_group_idx
+                    && my_idx > group_idx
+                {
+                    return full_shift(false);
                 }
             }
             _ => {}

@@ -280,41 +280,39 @@ fn collect_mark_spans_recursive(
     out: &mut Vec<MarkSpan>,
 ) {
     if let Some(mark) = mark_kind_for_node(&node.node_type) {
-        if node.children.is_empty() {
-            if mark == InlineMark::Code {
-                let node_start = node.range.start.saturating_sub(block_start);
-                let node_end = node
-                    .range
-                    .end
-                    .saturating_sub(block_start)
-                    .min(block_raw.len());
-                if node_end > node_start {
-                    let slice = &block_raw[node_start..node_end];
-                    let mut left_ticks = 0usize;
-                    for ch in slice.chars() {
-                        if ch == '`' {
-                            left_ticks += ch.len_utf8();
-                        } else {
-                            break;
-                        }
+        if node.children.is_empty() && mark == InlineMark::Code {
+            let node_start = node.range.start.saturating_sub(block_start);
+            let node_end = node
+                .range
+                .end
+                .saturating_sub(block_start)
+                .min(block_raw.len());
+            if node_end > node_start {
+                let slice = &block_raw[node_start..node_end];
+                let mut left_ticks = 0usize;
+                for ch in slice.chars() {
+                    if ch == '`' {
+                        left_ticks += ch.len_utf8();
+                    } else {
+                        break;
                     }
-                    let mut right_ticks = 0usize;
-                    for ch in slice.chars().rev() {
-                        if ch == '`' {
-                            right_ticks += ch.len_utf8();
-                        } else {
-                            break;
-                        }
+                }
+                let mut right_ticks = 0usize;
+                for ch in slice.chars().rev() {
+                    if ch == '`' {
+                        right_ticks += ch.len_utf8();
+                    } else {
+                        break;
                     }
-                    if left_ticks + right_ticks < slice.len() {
-                        let content_start = node_start.saturating_add(left_ticks);
-                        let content_end = node_end.saturating_sub(right_ticks);
-                        if content_end > content_start {
-                            out.push(MarkSpan {
-                                raw_range: content_start..content_end,
-                                mark,
-                            });
-                        }
+                }
+                if left_ticks + right_ticks < slice.len() {
+                    let content_start = node_start.saturating_add(left_ticks);
+                    let content_end = node_end.saturating_sub(right_ticks);
+                    if content_end > content_start {
+                        out.push(MarkSpan {
+                            raw_range: content_start..content_end,
+                            mark,
+                        });
                     }
                 }
             }
