@@ -1,6 +1,6 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{use_tag_input, Tag};
+use dioxus_nox_tag_input::{Tag, use_tag_input};
 
 fn main() {
     dioxus::launch(App);
@@ -210,15 +210,13 @@ struct AccentTheme {
 const EMERALD: AccentTheme = AccentTheme {
     pill: "bg-emerald-600/25 border-emerald-500/40 text-emerald-200",
     pill_hover: "hover:bg-emerald-500/30",
-    focus_ring:
-        "focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500/50",
+    focus_ring: "focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500/50",
 };
 
 const VIOLET: AccentTheme = AccentTheme {
     pill: "bg-violet-600/25 border-violet-500/40 text-violet-200",
     pill_hover: "hover:bg-violet-500/30",
-    focus_ring:
-        "focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-500/50",
+    focus_ring: "focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-500/50",
 };
 
 fn accent_theme(name: &str) -> &'static AccentTheme {

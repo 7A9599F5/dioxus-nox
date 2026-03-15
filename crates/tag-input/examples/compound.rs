@@ -1,6 +1,6 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{components as tag_input, TagInputState, TagLike};
+use dioxus_nox_tag_input::{TagInputState, TagLike, components as tag_input};
 
 fn main() {
     dioxus::launch(App);

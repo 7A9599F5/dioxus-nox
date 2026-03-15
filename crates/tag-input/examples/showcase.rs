@@ -2,7 +2,9 @@ use std::cmp::Ordering;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{components as tag_input, find_match_ranges, Tag, TagInputState, TagLike};
+use dioxus_nox_tag_input::{
+    Tag, TagInputState, TagLike, components as tag_input, find_match_ranges,
+};
 
 fn main() {
     dioxus::launch(App);

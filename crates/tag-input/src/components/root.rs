@@ -1,4 +1,4 @@
-use crate::hook::{use_tag_input_grouped, use_tag_input_with, TagInputConfig, TagInputGroupConfig};
+use crate::hook::{TagInputConfig, TagInputGroupConfig, use_tag_input_grouped, use_tag_input_with};
 use crate::tag::TagLike;
 use dioxus::prelude::*;
 use std::cmp::Ordering;

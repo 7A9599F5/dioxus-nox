@@ -7,12 +7,12 @@
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{components as tag_input, TagInputState, TagLike};
 use dioxus_nox_dnd::types::Orientation;
 use dioxus_nox_dnd::{
-    ActiveDrag, DragId, DragOverlay, ReorderEvent, SortableContext, SortableItem, FEEDBACK_STYLES,
-    FUNCTIONAL_STYLES,
+    ActiveDrag, DragId, DragOverlay, FEEDBACK_STYLES, FUNCTIONAL_STYLES, ReorderEvent,
+    SortableContext, SortableItem,
 };
+use dioxus_nox_tag_input::{TagInputState, TagLike, components as tag_input};
 
 fn main() {
     dioxus::launch(App);

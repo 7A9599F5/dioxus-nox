@@ -125,18 +125,17 @@ pub mod prelude {
 
     // Patterns - Grouped (flat lists)
     pub use crate::patterns::grouped::{
-        active_group_header, default_group_id, find_flat_insert_position, group_id_from_container,
-        grouped_merge, grouped_merge_default, grouped_merge_with, grouped_move,
-        grouped_move_default, grouped_position, grouped_reorder, grouped_reorder_default,
-        grouped_style_info, partition_grouped_items, ActiveGroupHeader, GroupedItem, GroupedList,
-        GroupedPosition, GroupedStyleInfo, TopLevelEntry, CONTAINER_SUFFIX,
-        DEFAULT_MIN_GROUP_MEMBERS,
+        ActiveGroupHeader, CONTAINER_SUFFIX, DEFAULT_MIN_GROUP_MEMBERS, GroupedItem, GroupedList,
+        GroupedPosition, GroupedStyleInfo, TopLevelEntry, active_group_header, default_group_id,
+        find_flat_insert_position, group_id_from_container, grouped_merge, grouped_merge_default,
+        grouped_merge_with, grouped_move, grouped_move_default, grouped_position, grouped_reorder,
+        grouped_reorder_default, grouped_style_info, partition_grouped_items,
     };
 
     // Utils — CSS
     pub use crate::utils::{
-        find_contiguous_block, FEEDBACK_STYLES, FUNCTIONAL_STYLES, GROUPED_FEEDBACK_STYLES,
-        GROUPED_FUNCTIONAL_STYLES,
+        FEEDBACK_STYLES, FUNCTIONAL_STYLES, GROUPED_FEEDBACK_STYLES, GROUPED_FUNCTIONAL_STYLES,
+        find_contiguous_block,
     };
     #[cfg(feature = "styles")]
     pub use crate::utils::{GROUPED_THEME_STYLES, THEME_STYLES};

@@ -286,7 +286,7 @@ pub fn SortableGroup(props: SortableGroupProps) -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::{route_group_drop, GroupDropAction};
+    use super::{GroupDropAction, route_group_drop};
     use crate::types::{DragData, DragId, DropEvent, DropLocation};
 
     fn make_drop_event(

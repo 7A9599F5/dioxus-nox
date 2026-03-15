@@ -14,7 +14,10 @@
 
 use dioxus::prelude::*;
 use dioxus_core::use_drop;
-use dioxus_nox_shell::{AppShell, BreakpointConfig, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout, use_shell_context};
+use dioxus_nox_shell::{
+    AppShell, BreakpointConfig, DesktopSidebar, MobileSidebar, MobileSidebarBackdrop, ShellLayout,
+    use_shell_context,
+};
 
 fn main() {
     dioxus::launch(App);
@@ -39,11 +42,21 @@ static NOTES: &[(&str, &str, &str)] = &[
 /// Sample body text for each note (keyed by id prefix)
 fn note_body(id: &str) -> &'static str {
     match id {
-        "getting-started" => "Welcome to your note-taking workspace.\n\nThis note is your starting point. Explore the sidebar to navigate between notes.\n\nPress Ctrl+K (or the Search button) to open full-screen search.",
-        "installation" => "## Installation\n\nAdd dioxus-shell to your Cargo.toml:\n\n```toml\n[dependencies]\ndioxus-shell = \"0.1\"\n```\n\nThen wrap your app with `AppShell`.",
-        "configuration" => "## Configuration\n\nConfigure AppShell with props:\n\n- `layout` — Horizontal, Vertical, or Sidebar\n- `mobile_sidebar` — Drawer, Rail, or Hidden\n- `desktop_sidebar` — Full, Rail, or Expandable",
-        "dioxus-shell" => "## dioxus-shell\n\nHeadless application shell layout primitive for Dioxus.\n\nProvides named slots: sidebar, children, preview, footer, tabs, sheet, modal, fab, search.",
-        _ => "Note content goes here.\n\nStart writing your thoughts, meeting notes, or documentation.\n\nThe editor area supports any Dioxus content.",
+        "getting-started" => {
+            "Welcome to your note-taking workspace.\n\nThis note is your starting point. Explore the sidebar to navigate between notes.\n\nPress Ctrl+K (or the Search button) to open full-screen search."
+        }
+        "installation" => {
+            "## Installation\n\nAdd dioxus-shell to your Cargo.toml:\n\n```toml\n[dependencies]\ndioxus-shell = \"0.1\"\n```\n\nThen wrap your app with `AppShell`."
+        }
+        "configuration" => {
+            "## Configuration\n\nConfigure AppShell with props:\n\n- `layout` — Horizontal, Vertical, or Sidebar\n- `mobile_sidebar` — Drawer, Rail, or Hidden\n- `desktop_sidebar` — Full, Rail, or Expandable"
+        }
+        "dioxus-shell" => {
+            "## dioxus-shell\n\nHeadless application shell layout primitive for Dioxus.\n\nProvides named slots: sidebar, children, preview, footer, tabs, sheet, modal, fab, search."
+        }
+        _ => {
+            "Note content goes here.\n\nStart writing your thoughts, meeting notes, or documentation.\n\nThe editor area supports any Dioxus content."
+        }
     }
 }
 
@@ -56,7 +69,10 @@ fn note_title(id: &str) -> &'static str {
 }
 
 fn root_notes() -> Vec<&'static (&'static str, &'static str, &'static str)> {
-    NOTES.iter().filter(|(_, _, parent)| parent.is_empty()).collect()
+    NOTES
+        .iter()
+        .filter(|(_, _, parent)| parent.is_empty())
+        .collect()
 }
 
 fn child_notes(parent: &str) -> Vec<&'static (&'static str, &'static str, &'static str)> {
@@ -203,7 +219,7 @@ fn NoteContent(selected_note: Signal<Option<&'static str>>) -> Element {
                 "if (window.__noxNoteKeyHandler) { \
                     document.removeEventListener('keydown', window.__noxNoteKeyHandler); \
                     delete window.__noxNoteKeyHandler; \
-                }"
+                }",
             );
         });
     });

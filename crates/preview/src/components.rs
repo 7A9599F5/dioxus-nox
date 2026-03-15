@@ -19,8 +19,7 @@ use crate::PreviewPosition;
 /// `"false"`), so both attribute selectors are reliable.
 #[component]
 pub fn Root(
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     /// Positional hint written as `data-preview-position`.
     #[props(default)]
     position: PreviewPosition,
@@ -49,8 +48,7 @@ pub fn Root(
 /// Ships **zero visual styles**.
 #[component]
 pub fn Container(
-    #[props(extends = GlobalAttributes)]
-    attributes: Vec<Attribute>,
+    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
     children: Element,
 ) -> Element {
     rsx! {

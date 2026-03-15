@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        breakpoint::{BreakpointConfig, DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint},
         ShellLayout,
+        breakpoint::{BreakpointConfig, DesktopSidebar, MobileSidebar, SheetSnap, ShellBreakpoint},
     };
 
     // ── ShellLayout ────────────────────────────────────────────────────────────
@@ -196,9 +196,9 @@ mod tests {
     #[test]
     fn sheet_snap_as_str() {
         assert_eq!(SheetSnap::Hidden.as_str(), "hidden");
-        assert_eq!(SheetSnap::Peek.as_str(),   "peek");
-        assert_eq!(SheetSnap::Half.as_str(),   "half");
-        assert_eq!(SheetSnap::Full.as_str(),   "full");
+        assert_eq!(SheetSnap::Peek.as_str(), "peek");
+        assert_eq!(SheetSnap::Half.as_str(), "half");
+        assert_eq!(SheetSnap::Full.as_str(), "full");
     }
 
     #[test]

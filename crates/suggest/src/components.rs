@@ -346,7 +346,13 @@ pub fn List(
 
         // Prefer caret-level anchor_rect when available (precise positioning).
         if let Some([left, bottom, width]) = maybe_anchor {
-            fs.set(compute_float_style(left, bottom, width.max(240.0), offset, 0.0));
+            fs.set(compute_float_style(
+                left,
+                bottom,
+                width.max(240.0),
+                offset,
+                0.0,
+            ));
             return;
         }
 

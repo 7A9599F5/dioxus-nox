@@ -800,8 +800,8 @@ impl SortableCollisionDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Rect;
     use crate::DragType;
+    use crate::types::Rect;
 
     #[test]
     fn test_sortable_vertical_before() {
