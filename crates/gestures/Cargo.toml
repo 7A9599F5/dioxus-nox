@@ -14,6 +14,7 @@ dioxus = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { workspace = true }
 gloo-timers = { workspace = true }
+js-sys = { workspace = true }
 web-sys = { workspace = true, features = [
     "Window",
     "Document",

@@ -8,6 +8,7 @@ use dioxus_nox_dnd::{
     DragId, DragOverlay, DragType, MoveEvent, ReorderEvent, SortableContext, SortableGroup,
     SortableItem,
 };
+use dioxus_nox_gestures::{swipe_actions, SwipeConfig};
 
 #[component]
 pub(crate) fn NoteSidebar(
@@ -131,18 +132,42 @@ pub(crate) fn NoteSidebar(
                                                                         drag_type: Some(DragType::new(NOTE_DRAG_TYPE)),
                                                                         handle: Some("[data-drag-handle]".to_string()),
 
-                                                                        div {
-                                                                            class: "note-item",
-                                                                            "data-active": if is_active { "true" } else { "false" },
-                                                                            onclick: move |_| {
-                                                                                active_idx.set(Some(note_idx));
-                                                                                let mut tab_state = tabs.write();
-                                                                                ensure_tab_open(&mut tab_state, note_idx);
+                                                                        swipe_actions::Root {
+                                                                            config: SwipeConfig { action_width_px: 72.0, ..Default::default() },
+                                                                            on_commit: {
+                                                                                let folder_id = folder_id.clone();
+                                                                                move |_| {
+                                                                                    let mut folder_state = folders.write();
+                                                                                    if let Some(f) = folder_state.iter_mut().find(|f| f.id == folder_id) {
+                                                                                        f.note_indices.retain(|&i| i != note_idx);
+                                                                                    }
+                                                                                    let mut tab_state = tabs.write();
+                                                                                    let new_active = close_tab(&mut tab_state, (active_idx)(), note_idx);
+                                                                                    active_idx.set(new_active);
+                                                                                }
                                                                             },
-                                                                            span { "data-drag-handle": "", class: "drag-handle", "⠿" }
-                                                                            div { class: "note-item-title", "{title}" }
-                                                                            if !tags_preview.is_empty() {
-                                                                                div { class: "note-item-tags", "{tags_preview}" }
+                                                                            swipe_actions::Content {
+                                                                                div {
+                                                                                    class: "note-item",
+                                                                                    "data-active": if is_active { "true" } else { "false" },
+                                                                                    onclick: move |_| {
+                                                                                        active_idx.set(Some(note_idx));
+                                                                                        let mut tab_state = tabs.write();
+                                                                                        ensure_tab_open(&mut tab_state, note_idx);
+                                                                                    },
+                                                                                    span { "data-drag-handle": "", class: "drag-handle", "⠿" }
+                                                                                    div { class: "note-item-title", "{title}" }
+                                                                                    if !tags_preview.is_empty() {
+                                                                                        div { class: "note-item-tags", "{tags_preview}" }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            swipe_actions::Actions {
+                                                                                button {
+                                                                                    class: "swipe-action-delete",
+                                                                                    style: "background: var(--danger, #e53935); color: white; border: none; padding: 0 16px; cursor: pointer;",
+                                                                                    "Delete"
+                                                                                }
                                                                             }
                                                                         }
                                                                     }

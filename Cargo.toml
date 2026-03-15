@@ -44,4 +44,5 @@ dioxus-nox-markdown = { path = "crates/markdown" }
 dioxus-nox-suggest = { path = "crates/suggest" }
 dioxus-nox-tag-input = { path = "crates/tag-input" }
 dioxus-nox-preview = { path = "crates/preview" }
+dioxus-nox-gestures = { path = "crates/gestures" }
 syntect = { version = "5.3", default-features = false }

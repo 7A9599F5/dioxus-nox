@@ -12,18 +12,16 @@
 
 ---
 
-### [PRIORITY: High]
+### [PARTIALLY IMPLEMENTED] [PRIORITY: High]
 **Area:** Feature Assessment — Incomplete/Stub Crates
 **Problem:** Two workspace-declared crates are completely empty:
 - `crates/extensions/src/lib.rs` (13 lines) — only doc comments describing a "Planned API" with references to non-existent SPEC.md and BUILD_PROMPT.md
-- `crates/gestures/src/lib.rs` (11 lines) — same pattern, only planned API docs
+- ~~`crates/gestures/src/lib.rs` (11 lines) — same pattern, only planned API docs~~ **IMPLEMENTED**: gestures crate now provides a layered API (pure math, hooks, compound components) for swipe-to-reveal and long-press gestures, integrated into noxpad sidebar.
 - `crates/tabs/` — empty directory with only a `.gitignore`, no `Cargo.toml`, not in workspace
 
-These crates are published in the workspace and importable but contain zero functionality. The extensions and gestures crates even reference non-existent specification files.
+**Suggestion:** These stub crates MUST be implemented with their planned APIs. The `extensions` crate should implement its runtime plugin system (`Extension` trait, `PluginCommand`, `ExtensionHandle`). The `tabs/` directory needs a `Cargo.toml` and implementation of a headless tab management crate. Do NOT remove these crates — they represent planned functionality.
 
-**Suggestion:** Either implement the planned APIs or remove these crates from the workspace entirely. Keeping empty crates creates false expectations for consumers and clutters the dependency graph. If they represent future work, move them to a `planned/` directory outside the workspace or track them as issues.
-
-**Expected Impact:** Clearer project scope; no confusion about what's actually available; smaller workspace compilation surface.
+**Expected Impact:** Complete component library coverage; all workspace crates deliver real functionality.
 
 ---
 
