@@ -10,6 +10,7 @@ members = [
     "crates/suggest",
     "crates/tag-input",
     "crates/markdown",
+    "crates/dioxus-nox",
     "crates/cmdk/examples/command_palette",
     "crates/cmdk/examples/command_palette_adaptive",
     "crates/cmdk/examples/command_palette_floating",
@@ -45,5 +46,7 @@ dioxus-nox-markdown = { path = "crates/markdown" }
 dioxus-nox-suggest = { path = "crates/suggest" }
 dioxus-nox-tag-input = { path = "crates/tag-input" }
 dioxus-nox-preview = { path = "crates/preview" }
+dioxus-nox-extensions = { path = "crates/extensions" }
 dioxus-nox-gestures = { path = "crates/gestures" }
+dioxus-nox = { path = "crates/dioxus-nox" }
 syntect = { version = "5.3", default-features = false }

@@ -1,0 +1,68 @@
+[package]
+name = "dioxus-nox"
+version.workspace = true
+edition.workspace = true
+description = "Umbrella crate for the dioxus-nox headless component library"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "components", "wasm", "ui"]
+categories = ["gui", "wasm", "web-programming"]
+
+[dependencies]
+dioxus-nox-cmdk       = { workspace = true, optional = true }
+dioxus-nox-dnd        = { workspace = true, optional = true }
+dioxus-nox-markdown   = { workspace = true, optional = true }
+dioxus-nox-shell      = { workspace = true, optional = true }
+dioxus-nox-suggest    = { workspace = true, optional = true }
+dioxus-nox-tag-input  = { workspace = true, optional = true }
+dioxus-nox-virtualize = { workspace = true, optional = true }
+dioxus-nox-preview    = { workspace = true, optional = true }
+dioxus-nox-extensions = { workspace = true, optional = true }
+dioxus-nox-gestures   = { workspace = true, optional = true }
+
+[features]
+default = ["shell", "cmdk", "dnd", "tag-input", "suggest", "preview"]
+
+# Per-crate gates
+cmdk       = ["dep:dioxus-nox-cmdk"]
+dnd        = ["dep:dioxus-nox-dnd"]
+markdown   = ["dep:dioxus-nox-markdown"]
+shell      = ["dep:dioxus-nox-shell"]
+suggest    = ["dep:dioxus-nox-suggest"]
+tag-input  = ["dep:dioxus-nox-tag-input"]
+virtualize = ["dep:dioxus-nox-virtualize"]
+preview    = ["dep:dioxus-nox-preview"]
+extensions = ["dep:dioxus-nox-extensions"]
+gestures   = ["dep:dioxus-nox-gestures"]
+
+# All-in-one
+full = [
+    "cmdk", "dnd", "markdown", "shell", "suggest",
+    "tag-input", "virtualize", "preview", "extensions", "gestures",
+]
+
+# Sub-crate feature pass-through
+cmdk-web       = ["cmdk", "dioxus-nox-cmdk/web"]
+cmdk-desktop   = ["cmdk", "dioxus-nox-cmdk/desktop"]
+cmdk-mobile    = ["cmdk", "dioxus-nox-cmdk/mobile"]
+cmdk-router    = ["cmdk", "dioxus-nox-cmdk/router"]
+cmdk-virtualize = ["cmdk", "dioxus-nox-cmdk/virtualize"]
+
+dnd-web     = ["dnd", "dioxus-nox-dnd/web"]
+dnd-desktop = ["dnd", "dioxus-nox-dnd/desktop"]
+dnd-mobile  = ["dnd", "dioxus-nox-dnd/mobile"]
+dnd-styles  = ["dnd", "dioxus-nox-dnd/styles"]
+
+markdown-web                 = ["markdown", "dioxus-nox-markdown/web"]
+markdown-desktop             = ["markdown", "dioxus-nox-markdown/desktop"]
+markdown-mobile              = ["markdown", "dioxus-nox-markdown/mobile"]
+markdown-syntax-highlighting = ["markdown", "dioxus-nox-markdown/syntax-highlighting"]
+markdown-sanitize            = ["markdown", "dioxus-nox-markdown/sanitize"]
+
+suggest-web     = ["suggest", "dioxus-nox-suggest/web"]
+suggest-desktop = ["suggest", "dioxus-nox-suggest/desktop"]
+suggest-mobile  = ["suggest", "dioxus-nox-suggest/mobile"]
+
+tag-input-web = ["tag-input", "dioxus-nox-tag-input/web"]
+
+virtualize-hooks = ["virtualize", "dioxus-nox-virtualize/hooks"]

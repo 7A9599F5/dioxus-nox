@@ -162,11 +162,13 @@ The comments reference optimization tickets (P-050, P-051, P-052) indicating awa
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Developer Experience — No Prelude or Unified Import
 **Problem:** There is no top-level `dioxus-nox` crate that re-exports all sub-crates. Consumers must individually depend on and import each crate (`dioxus-nox-cmdk`, `dioxus-nox-dnd`, `dioxus-nox-markdown`, etc.). The noxpad demo shows this results in 9 import lines just for library types.
 
-**Suggestion:** Create a `dioxus-nox` umbrella crate with feature-gated re-exports of each sub-crate. This is the standard pattern for workspace libraries (similar to `tokio`, `axum`).
+**Suggestion:** ~~Create a `dioxus-nox` umbrella crate with feature-gated re-exports of each sub-crate. This is the standard pattern for workspace libraries (similar to `tokio`, `axum`).~~
+
+**IMPLEMENTED**: Created `crates/dioxus-nox/` umbrella crate with feature-gated re-exports of all 10 library sub-crates. Each sub-crate is behind a feature flag (`cmdk`, `dnd`, `markdown`, `shell`, `suggest`, `tag-input`, `virtualize`, `preview`, `extensions`, `gestures`). A `full` feature enables everything. Default features include the most commonly used crates (`shell`, `cmdk`, `dnd`, `tag-input`, `suggest`, `preview`). Sub-crate features are forwarded (e.g., `cmdk-web`, `markdown-syntax-highlighting`, `dnd-styles`). A `prelude` module provides curated re-exports of the most common types and hooks.
 
 **Expected Impact:** Single dependency line for consumers; simpler getting-started experience.
 
