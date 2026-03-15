@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 keywords = ["dioxus", "tag-input", "multi-select", "wasm"]
 categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
 
 [dependencies]
 dioxus = { workspace = true }
