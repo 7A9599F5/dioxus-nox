@@ -318,16 +318,51 @@ impl PartialEq for ParsedDoc {
 
 // ── HTML render policy ───────────────────────────────────────────────
 
-/// Controls how raw HTML blocks and inline HTML are rendered.
+/// Controls how raw HTML blocks and inline HTML in markdown are rendered.
 ///
-/// By default, raw HTML is **escaped** (displayed as-is) to prevent XSS.
-/// Consumers who trust their markdown source can opt into `Trusted` rendering.
+/// By default, raw HTML is **escaped** (displayed as visible text) to prevent
+/// cross-site scripting (XSS) attacks. Choose a policy based on how much you
+/// trust the markdown source:
+///
+/// | Policy | Use when | XSS safe? |
+/// |-----------|----------------------------------------------|-----------|
+/// | `Escape` | Untrusted / user-generated markdown (default)| Yes |
+/// | `Sanitized` | User-generated markdown where you want HTML formatting but not scripts (requires `sanitize` feature) | Yes |
+/// | `Trusted` | You control the markdown source entirely | **No** |
+///
+/// # Security
+///
+/// **`Trusted` mode renders arbitrary HTML without any sanitization.** If the
+/// markdown contains `<script>`, `<iframe>`, `onload=`, or any other active
+/// content, it **will** be injected into the DOM. Never use `Trusted` with
+/// user-generated or untrusted markdown — this is a direct XSS vector.
+///
+/// For user-generated content that needs HTML rendering, enable the `sanitize`
+/// feature and use [`HtmlRenderPolicy::Sanitized`], which strips dangerous
+/// elements and attributes via the [`ammonia`](https://docs.rs/ammonia) crate.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HtmlRenderPolicy {
-    /// Escape HTML — render as visible text. Safe default.
+    /// Escape HTML — render as visible text. Safe for all inputs.
     #[default]
     Escape,
-    /// Render raw HTML via `dangerous_inner_html`. Only use with trusted input.
+
+    /// Sanitize HTML with [`ammonia`](https://docs.rs/ammonia) before rendering.
+    ///
+    /// Strips dangerous elements (`<script>`, `<iframe>`, `<object>`, etc.) and
+    /// event-handler attributes (`onload`, `onclick`, etc.) while preserving safe
+    /// formatting tags (`<b>`, `<i>`, `<a>`, `<code>`, etc.).
+    ///
+    /// Requires the `sanitize` Cargo feature. Falls back to `Escape` if the
+    /// feature is not enabled.
+    Sanitized,
+
+    /// Render raw HTML via `dangerous_inner_html` **without any sanitization**.
+    ///
+    /// # Security Warning
+    ///
+    /// **This is a direct XSS vector.** Only use this when you fully control the
+    /// markdown source (e.g., static content compiled into your binary). Never
+    /// use with user-generated input.
     Trusted,
 }
 

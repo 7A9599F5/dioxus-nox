@@ -133,10 +133,11 @@ pub fn Root(
     /// `Inline` = Obsidian-style cursor-aware single-surface editing.
     #[props(default)]
     live_preview_variant: LivePreviewVariant,
-    /// Controls raw HTML rendering behavior.
+    /// Controls raw HTML rendering behavior. See [`HtmlRenderPolicy`] for details.
     ///
-    /// Default is `Escape`, which renders HTML as text. Use `Trusted` only
-    /// for trusted markdown input.
+    /// - `Escape` (default): renders HTML tags as visible text. Safe for all inputs.
+    /// - `Sanitized`: strips dangerous HTML while keeping safe formatting (requires `sanitize` feature).
+    /// - `Trusted`: renders raw HTML with **no sanitization** — XSS risk with user content.
     #[props(default)]
     html_render_policy: HtmlRenderPolicy,
     /// CSS class prefix for syntax-highlighted code spans.
