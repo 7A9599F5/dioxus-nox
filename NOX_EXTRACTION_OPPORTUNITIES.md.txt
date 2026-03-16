@@ -1,0 +1,784 @@
+# dioxus-nox Extraction Opportunities from basalt-fitness
+
+> Analysis of UI components in [basalt-fitness](https://github.com/7A9599F5/basalt-fitness) for extraction into the [dioxus-nox](https://github.com/7A9599F5/dioxus-nox) headless component library.
+
+**Guiding principle:** dioxus-nox crates are **headless** — they expose state machines, ARIA attributes, and `data-*` attribute hooks. They never ship Tailwind classes or visual opinions.
+
+**Existing dioxus-nox crates** (verified from `crates/` directory):
+
+| Crate | Purpose |
+|-------|---------|
+| `dioxus-nox-cmdk` | Headless command palette |
+| `dioxus-nox-dnd` | Composable drag-and-drop |
+| `dioxus-nox-extensions` | Runtime plugin system |
+| `dioxus-nox-gestures` | Touch gesture primitives (swipe, long-press) |
+| `dioxus-nox-markdown` | Headless markdown editor/previewer |
+| `dioxus-nox-preview` | Debounced preview hook + LRU cache |
+| `dioxus-nox-shell` | Application shell layout primitive |
+| `dioxus-nox-suggest` | Inline-trigger suggestion primitive |
+| `dioxus-nox-tabs` | Headless WAI-ARIA tabs |
+| `dioxus-nox-tag-input` | Headless tag/multi-select input |
+| `dioxus-nox-virtualize` | Virtual list / viewport math |
+
+---
+
+## Section 1: Categorized Extraction Report
+
+### Category A: UI Primitives
+
+Source: `crates/basalt-ui/src/components/ui/`
+
+| Component | File | Value | Effort | Overlap | Notes |
+|-----------|------|-------|--------|---------|-------|
+| **Modal** | `modal.rs` | **High** | Low | None | Universal dialog. Already has `aria-modal`, ESC close, backdrop click, `role="dialog"`. Headless version: open/close state machine, focus trap hook, ARIA attribute builder. |
+| **Toast / UndoToast / ToastContainer** | `toast.rs` | **High** | Medium | None | Queue manager with countdown auto-dismiss, max-toast limit (3), undo with timer. Strip `UndoableAction` / `UndoActionType` domain types → generic `ToastItem<T>`. |
+| **SlideOverPanel** | `slide_over_panel.rs` | **High** | Low | Partial: `dioxus-nox-shell` | Drawer/sheet pattern. Shell provides sidebar but not a modal sheet/drawer. Already has `role="dialog"`, `aria-modal`. Generalize to multi-side (left/right/bottom). |
+| **MasterDetailLayout** | `master_detail_layout.rs` | **High** | Low | Partial: `dioxus-nox-shell` | Adaptive 2-panel responsive layout. Shell provides `AppShell` with sidebar, but master-detail is a distinct pattern (list → detail, breakpoint-aware behavior). Already fully generic in source. |
+| **Toggle / ToggleRow** | `toggle.rs` | Medium | Low | None | `role="switch"` with `aria-checked`, keyboard support. Toggle is headless-worthy; ToggleRow is a layout convenience (not headless). |
+| **FilterChips** | `filter_chips.rs` | Medium | Low | None | Single-select horizontal chip bar → headless `ToggleGroup` / `SegmentedControl`. Returns selected key, manages active state, `role="radiogroup"` ARIA. |
+| **SearchInput** | `search_input.rs` | Medium | Low | None | Search with clear button. Headless: debounced value signal, clear callback, `role="search"` ARIA. |
+| **InlineConfirm** | `inline_confirm.rs` | Medium | Low | None | Replaces action button with confirm/cancel inline. Headless: `use_inline_confirm()` hook → `{is_confirming, request_confirm, confirm, cancel}`. |
+| **EmptyState** | `empty_state.rs` | Low | Low | None | Icon + title + subtitle + action slots. Almost pure styling, minimal headless logic. |
+| **Button** | `button.rs` | Low | Low | None | Variants/sizes are styling concerns. Loading + disabled state has minimal headless value. |
+| **Input / TextArea** | `input.rs` | Low | Low | None | Standard form inputs. Error/validation display is common but headless value limited to ARIA association helpers (`aria-invalid`, `aria-describedby`). |
+| **Badge** | `badge.rs` | Low | Low | None | Pure visual. No interactive behavior to make headless. |
+| **Card / CardHeader / CardTitle / CardContent / CardFooter** | `card.rs` | Low | Low | None | Compound layout. Pure styling, no headless behavior. |
+| **Select** | `select.rs` | Low | Low | None | Thin wrapper around native `<select>`. A headless custom listbox would be valuable but this is just a styled native select. |
+| **Loading / SkeletonCard / SkeletonList** | `loading.rs` | Low | Low | None | Pure visual loading indicators. |
+| **ErrorMessage / ErrorPage** | `error.rs` | Low | Low | None | Pure visual error displays. |
+| **MuscleBadge** | `muscle_badge.rs` | Low | N/A | None | Domain-specific badge for muscle groups. Not extractable. |
+
+### Category B: Layout / Structural Patterns
+
+Source: `crates/basalt-ui/src/components/` and `components/workout/`
+
+| Component | File | Value | Effort | Overlap | Notes |
+|-----------|------|-------|--------|---------|-------|
+| **ResponsiveWorkoutLayout** | `workout/responsive_layout.rs` | Medium | Medium | Partial: `dioxus-nox-shell` | Main + sidebar + mobile bottom action bar. The mobile action bar is a distinct pattern from shell. Could enhance shell with bottom-bar slot. |
+| **MobileActionBar** | `workout/responsive_layout.rs` | Medium | Low | Partial: `dioxus-nox-shell` | Fixed bottom bar with primary/secondary actions, 44px touch targets. Common mobile pattern. Could be a shell enhancement. |
+| **RootLayout / Layout / AuthLayout** | `layout.rs` | Low | N/A | `dioxus-nox-shell` | App-specific routing layouts with auth checks. Not extractable. |
+| **NavigationBar / AuthNavigationBar** | `navigation.rs` | Low | High | `dioxus-nox-shell` | Deeply tied to app routes and auth state. Dropdown menu behavior could be headless, but nav itself is app-specific. |
+| **ThemeShelf / ShelfSidebar / ThemeSpine / PreviewPanel** | `theme_shelf/*.rs` | Low | High | None | Theme-specific UI, highly coupled to basalt theme system. |
+
+### Category C: Fitness-Domain Widgets
+
+Source: `crates/basalt-ui/src/components/workout/`
+
+These components are deeply coupled to fitness domain types (`WorkoutSetResponse`, `Exercise`, `Workout`, `MeasurementType`, etc.) and are **not extractable as-is**. Listed for completeness.
+
+| Component | File | Value | Effort | Notes |
+|-----------|------|-------|--------|-------|
+| **SetRow / SetRowReadOnly** | `set_row.rs` | Low | High | CSS Grid row with weight/reps/RPE/check columns using `display: contents`. |
+| **ExerciseBlock / ExerciseBlockReadOnly** | `exercise_block.rs` | Low | High | Header + expandable set grid, badge modes (TreeLine/MiniCard/SideRail), drag handle, reorder buttons. |
+| **ExerciseCard / ExerciseList** | `exercise_card.rs` | Low | High | Card with muscle badges, equipment, instructions preview. |
+| **WorkoutCard / WorkoutList** | `workout_card.rs` | Low | High | Card with workout status, date, exercise count, action buttons. |
+| **ExerciseSelector** | `exercise_selector.rs` | Low | High | Modal picker with search + multi-select. Pattern already covered by cmdk + tag-input. |
+| **RpeSelect** | `rpe_select.rs` | Low | High | RPE 1.0-10.0 decimal input. Niche fitness domain. |
+| **MeasurementInput / QuickMeasurementInput** | `measurement_input.rs`, `quick_measurement_input.rs` | Low | High | Unit-aware numeric input. Domain-specific. |
+| **Badge display modes** (TreeLine, MiniCard, SideRail, Column, Display) | `badge_*.rs` | Low | High | Fitness-specific badge layout modes for attribute visualization. |
+| **AttributeInputs / AttributeRow / VisibleAttributeInputs** | `attribute_inputs.rs`, `attribute_row.rs`, `visible_attribute_inputs.rs` | Low | High | Domain-specific attribute management forms. |
+| **CascadeConfigModal** | `cascade_config_modal.rs` | Low | High | Modal for configuring exercise attributes across all sets. |
+| **PrIndicator** | `pr_indicator.rs` | Low | N/A | Personal record badge. |
+| **PreviousWorkoutReference** | `previous_workout_reference.rs` | Low | N/A | Compares current sets with last workout data. |
+| **RunningStats** | `running_stats.rs` | Low | N/A | Live workout statistics (volume, sets completed). |
+| **RestIndicator** | `rest_indicator.rs` | Low | N/A | Rest state indicator dot. |
+| **WorkoutHeader** | `workout_header.rs` | Low | N/A | Workout info header with controls. |
+| **SessionManager** | `session_manager.rs` | Low | N/A | Workout session state management. |
+| **VariantQuickPick** | `variant_quick_pick.rs` | Low | N/A | Quick variant selection. |
+| **WorkoutAttributeChips** | `workout_attribute_chips.rs` | Low | N/A | Chip display for workout attributes. |
+| **ExerciseLibrary** | `exercise_library.rs` | Low | N/A | Browse/search exercise catalog. |
+| **SetConfigPanel** | `set_config_panel.rs` | Low | N/A | Per-set configuration panel. |
+| **SetOverrideRow** | `set_override_row.rs` | Low | N/A | Per-set attribute overrides. |
+| **AttributeDefaultsPanel** | `attribute_defaults_panel.rs` | Low | N/A | Attribute defaults management. |
+| **MeasurementTypeSelector** | `measurement_type_selector.rs` | Low | N/A | Choose measurement type (Weight, Time, Reps, Duration). |
+
+### Category D: Interaction Patterns
+
+Source: `crates/basalt-ui/src/hooks/` and various component files
+
+| Component | File | Value | Effort | Overlap | Notes |
+|-----------|------|-------|--------|---------|-------|
+| **Countdown Timer hook** | `hooks/use_rest_timer.rs` | **High** | Low | None | `use_rest_timer` is 90% generic. States: `{Idle, Running, Paused, Complete}`, controls: `{start, pause, resume, skip, adjust, dismiss}`. Wall-clock based (survives browser tab backgrounding). Strip audio/haptic calls → `use_countdown`. |
+| **Stopwatch / ElapsedTime** | `workout/elapsed_time.rs` | Medium | Low | None | `ElapsedTimeDisplay` with wall-clock elapsed time. Extract as `use_stopwatch(started_at, ended_at?)`. Pairs with countdown as `dioxus-nox-timer`. |
+| **Cycle Toggle** (SetTypeToggle) | `workout/set_type_toggle.rs` | Medium | Low | None | Cycling-through-values-on-click pattern. Generic `use_cycle<T>`: takes `&[T]`, returns `{current, index, next(), previous()}`. |
+| **PasswordStrength** | `password_strength.rs` | Medium | Low | None | `calculate_strength(password) -> u8` (0-4 score). Checks: length, uppercase, numbers, special chars. Pure logic, no rendering. |
+| **ProgressTracker tabs** | `progress_tracker.rs` | Low | N/A | **`dioxus-nox-tabs`** | Already uses tab pattern. Tabs crate exists. |
+| **DraggableList (ReorderButtons)** | `workout/draggable_list.rs` | Low | Low | **`dioxus-nox-dnd`** | Move up/down buttons as accessible alternative to drag-and-drop. Could enhance dnd crate. |
+| **BasaltCommandPalette** | `command_palette/basalt_command_palette.rs` | Low | N/A | **`dioxus-nox-cmdk`** | Already wraps cmdk. No extraction needed. |
+| **GlobalKeyboardHandler** | `command_palette/global_keyboard_handler.rs` | Low | N/A | **`dioxus-nox-cmdk`** | Keyboard shortcuts already handled by cmdk's `use_global_shortcuts`. |
+
+---
+
+## Section 2: Component Spec Stubs
+
+### 2.1 `dioxus-nox-timer` — Countdown & Stopwatch Hooks
+
+**Source:** `hooks/use_rest_timer.rs` + `workout/elapsed_time.rs`
+
+```rust
+//! Headless timer primitives: countdown and stopwatch hooks.
+//!
+//! Wall-clock based — survives browser tab backgrounding.
+
+/// Timer state machine
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimerState {
+    /// No timer active
+    Idle,
+    /// Counting down / counting up
+    Running,
+    /// Paused mid-count
+    Paused,
+    /// Countdown reached zero
+    Complete,
+}
+
+/// Controls returned by use_countdown
+#[derive(Clone)]
+pub struct CountdownControls {
+    /// Start countdown with given duration in seconds
+    pub start: Callback<i64>,
+    /// Pause a running countdown
+    pub pause: Callback<()>,
+    /// Resume a paused countdown
+    pub resume: Callback<()>,
+    /// Cancel immediately, return to Idle
+    pub skip: Callback<()>,
+    /// Adjust remaining time by delta seconds (positive adds, negative subtracts)
+    pub adjust: Callback<i64>,
+    /// Dismiss after completion (Complete → Idle)
+    pub dismiss: Callback<()>,
+}
+
+/// Countdown timer hook
+///
+/// Returns (remaining_seconds, status, controls).
+/// Uses wall-clock calculation internally for accuracy across tab backgrounding.
+pub fn use_countdown(
+    /// Optional callback when countdown reaches zero
+    on_complete: Option<Callback<()>>,
+) -> (Signal<i64>, Signal<TimerState>, CountdownControls);
+
+/// Stopwatch hook — counts up from a start time
+///
+/// Returns elapsed seconds signal. Ticks every second via wall-clock diff.
+/// Automatically stops when `ended_at` is provided.
+pub fn use_stopwatch(
+    /// When the stopwatch started
+    started_at: DateTime<Utc>,
+    /// When it ended (None = still running)
+    ended_at: Option<DateTime<Utc>>,
+) -> Signal<i64>;
+
+/// Format seconds as M:SS or H:MM:SS
+pub fn format_duration(total_seconds: i64) -> String;
+```
+
+**Key behaviors:**
+- `use_countdown`: Idle → Running → Complete state machine; pause/resume preserves remaining time; adjust clamps to >= 0
+- `use_stopwatch`: Wall-clock diff recalculated every second; stops ticking when `ended_at` is Some
+- Both survive browser tab backgrounding (no `setInterval` drift)
+
+**Events emitted:**
+- `on_complete: Callback<()>` — fired once when countdown reaches zero
+
+**Dioxus implementation notes:**
+- Internal `use_signal` for `end_time: Option<DateTime<Utc>>` and `paused_remaining: Option<Duration>`
+- `use_effect` spawns async tick loop (100ms for countdown, 1000ms for stopwatch)
+- `try_write()` for graceful component unmount handling
+- No audio/haptic — consumers add their own `on_complete` side effects
+
+---
+
+### 2.2 `dioxus-nox-modal` — Headless Dialog
+
+**Source:** `components/ui/modal.rs`
+
+```rust
+//! Headless modal dialog primitive with focus trap and ARIA.
+
+/// Modal state hook
+pub fn use_modal(
+    /// Initial open state
+    initial_open: bool,
+) -> ModalHandle;
+
+#[derive(Clone)]
+pub struct ModalHandle {
+    /// Whether the modal is open
+    pub open: Signal<bool>,
+    /// Open the modal
+    pub show: Callback<()>,
+    /// Close the modal
+    pub close: Callback<()>,
+    /// Toggle open/close
+    pub toggle: Callback<()>,
+}
+
+/// Headless modal root component
+#[component]
+pub fn ModalRoot(
+    /// Modal content
+    children: Element,
+    /// Whether the modal is open (controlled)
+    open: bool,
+    /// Close handler
+    on_close: EventHandler<()>,
+    /// Close on Escape key press
+    #[props(default = true)]
+    close_on_escape: bool,
+    /// Close on backdrop/overlay click
+    #[props(default = true)]
+    close_on_backdrop: bool,
+    /// Trap focus within the modal
+    #[props(default = true)]
+    trap_focus: bool,
+    /// Lock body scroll when open
+    #[props(default = true)]
+    lock_scroll: bool,
+) -> Element;
+
+/// Headless backdrop/overlay
+#[component]
+pub fn ModalOverlay(
+    /// Optional additional attributes
+    children: Element,
+) -> Element;
+
+/// Headless modal content container
+#[component]
+pub fn ModalContent(
+    children: Element,
+) -> Element;
+```
+
+**Key behaviors:**
+- Renders nothing when `open = false`
+- ESC key calls `on_close` (configurable via `close_on_escape`)
+- Backdrop click calls `on_close` (configurable via `close_on_backdrop`)
+- Content click stops propagation
+- Focus trap cycles Tab/Shift+Tab within modal bounds
+
+**ARIA attributes emitted:**
+- Root: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`
+- Data attributes: `data-state="open|closed"` for CSS targeting
+
+**Dioxus implementation notes:**
+- `use_effect` to add/remove `overflow: hidden` on body for scroll lock
+- Focus trap via `onkeydown` handler tracking first/last focusable elements
+- `tabindex="-1"` on root for keyboard event capture
+
+---
+
+### 2.3 `dioxus-nox-drawer` — Headless Slide-Over Sheet
+
+**Source:** `components/ui/slide_over_panel.rs`
+
+```rust
+//! Headless drawer/sheet primitive that slides from any edge.
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum DrawerSide {
+    Left,
+    #[default]
+    Right,
+    Bottom,
+    Top,
+}
+
+/// Headless drawer root
+#[component]
+pub fn DrawerRoot(
+    /// Drawer content
+    children: Element,
+    /// Whether the drawer is open
+    open: bool,
+    /// Close handler
+    on_close: EventHandler<()>,
+    /// Which edge the drawer slides from
+    #[props(default = DrawerSide::Right)]
+    side: DrawerSide,
+    /// Close on Escape key
+    #[props(default = true)]
+    close_on_escape: bool,
+    /// Close on overlay click
+    #[props(default = true)]
+    close_on_overlay: bool,
+    /// Lock body scroll when open
+    #[props(default = true)]
+    lock_scroll: bool,
+) -> Element;
+
+/// Headless overlay/backdrop
+#[component]
+pub fn DrawerOverlay(
+    children: Element,
+) -> Element;
+
+/// Headless drawer content panel
+#[component]
+pub fn DrawerContent(
+    children: Element,
+) -> Element;
+```
+
+**Key behaviors:**
+- Slides in from specified `side`
+- ESC key and overlay click close (configurable)
+- Content click stops propagation
+
+**ARIA attributes emitted:**
+- Content: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`
+- Data attributes: `data-state="open|closed"`, `data-side="left|right|bottom|top"`
+
+**Dioxus implementation notes:**
+- Shares focus-trap and scroll-lock logic with modal (could be internal utils)
+- Compound component pattern: Root provides context, Overlay and Content consume it
+- Animation via `data-state` attribute — consumer applies CSS transitions
+
+---
+
+### 2.4 `dioxus-nox-toast` — Headless Toast Notifications
+
+**Source:** `components/ui/toast.rs`
+
+```rust
+//! Headless toast notification system with queue management and auto-dismiss.
+
+use std::time::Duration;
+
+/// Unique toast identifier
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ToastId(Uuid);
+
+/// A toast item in the queue
+#[derive(Clone)]
+pub struct Toast<T: Clone + 'static> {
+    /// Unique identifier
+    pub id: ToastId,
+    /// User-provided data (message, action, variant — whatever the consumer needs)
+    pub data: T,
+    /// When this toast expires (auto-dismiss)
+    pub expires_at: DateTime<Utc>,
+    /// Whether this toast supports an undo action
+    pub undoable: bool,
+}
+
+/// Toast manager — provide via use_context_provider at app root
+#[derive(Clone)]
+pub struct ToastManager<T: Clone + 'static> {
+    /// Active toasts signal
+    pub toasts: Signal<Vec<Toast<T>>>,
+    /// Maximum simultaneous toasts (oldest removed when exceeded)
+    pub max_toasts: usize,
+}
+
+impl<T: Clone + 'static> ToastManager<T> {
+    /// Show a toast with auto-dismiss duration
+    pub fn show(&mut self, data: T, duration: Duration);
+
+    /// Show a toast that supports undo (longer default duration)
+    pub fn show_undoable(&mut self, data: T, duration: Duration);
+
+    /// Dismiss a specific toast by ID
+    pub fn dismiss(&mut self, id: ToastId);
+
+    /// Get toast by ID (for executing undo)
+    pub fn get(&self, id: ToastId) -> Option<Toast<T>>;
+}
+
+/// Hook to create and provide a toast manager
+pub fn use_toast_manager<T: Clone + 'static>(
+    /// Maximum toasts displayed at once
+    #[props(default = 3)]
+    max_toasts: usize,
+) -> ToastManager<T>;
+
+/// Headless toast viewport — renders toast children with auto-dismiss
+#[component]
+pub fn ToastViewport<T: Clone + PartialEq + 'static>(
+    /// Render function for each toast
+    render_toast: fn(Toast<T>) -> Element,
+) -> Element;
+```
+
+**Key behaviors:**
+- FIFO queue with configurable max (default 3)
+- Auto-dismiss via countdown timer (wall-clock based)
+- Each toast can be undoable or info-only
+- Oldest toasts removed when max exceeded
+
+**Events emitted:**
+- `on_dismiss: EventHandler<ToastId>` — when a toast is dismissed (manually or by timer)
+- `on_undo: EventHandler<ToastId>` — when user clicks undo (consumer handles the action)
+
+**Dioxus implementation notes:**
+- `ToastManager<T>` is generic over consumer-defined data type
+- Each `Toast` spawns its own countdown `use_effect` (1-second tick)
+- Provide at app root with `use_context_provider(|| ToastManager::new(3))`
+- Consumer defines rendering — this crate only manages the queue and timing
+
+---
+
+### 2.5 `dioxus-nox-master-detail` — Adaptive 2-Panel Layout
+
+**Source:** `components/ui/master_detail_layout.rs`
+
+```rust
+//! Headless master-detail layout with responsive breakpoint awareness.
+//!
+//! - Mobile: detail opens as full-screen overlay
+//! - Tablet: detail opens as right-side panel
+//! - Desktop: detail renders inline as sidebar
+
+/// Master-detail root component
+#[component]
+pub fn MasterDetail(
+    /// The list/master panel content
+    list_content: Element,
+    /// The detail panel content
+    detail_content: Element,
+    /// Whether the detail panel is open
+    detail_open: bool,
+    /// Called when detail panel should close (e.g., backdrop click)
+    on_detail_close: EventHandler<()>,
+) -> Element;
+
+/// Headless list panel
+#[component]
+pub fn MasterPanel(
+    children: Element,
+) -> Element;
+
+/// Headless detail panel
+#[component]
+pub fn DetailPanel(
+    children: Element,
+) -> Element;
+
+/// Headless backdrop for mobile/tablet overlay
+#[component]
+pub fn DetailBackdrop() -> Element;
+```
+
+**Key behaviors:**
+- List panel always visible (full width on mobile, flex child on desktop)
+- Detail panel: full overlay on mobile, side panel on tablet (fixed right), inline sidebar on desktop (static)
+- Backdrop click on mobile/tablet closes detail
+- Detail panel is sticky on desktop
+
+**Data attributes emitted:**
+- Root: `data-detail="open|closed"`
+- Detail: `data-layout="mobile|tablet|desktop"` (consumer detects via CSS or JS)
+- Backdrop: only rendered on mobile/tablet when detail is open
+
+**Dioxus implementation notes:**
+- Pure CSS responsive behavior via data attributes — no JS breakpoint detection needed
+- Consumer styles the panels and transitions via `data-*` selectors
+- Focus management: when detail opens on mobile, move focus to detail panel
+
+---
+
+### 2.6 `dioxus-nox-toggle-group` — Headless Segmented Control
+
+**Source:** `components/ui/filter_chips.rs`
+
+```rust
+//! Headless toggle group / segmented control with ARIA radiogroup semantics.
+
+/// A toggle group item definition
+#[derive(Clone, PartialEq)]
+pub struct ToggleItem<K: Clone + PartialEq> {
+    /// Unique key for this item
+    pub key: K,
+    /// Display label
+    pub label: String,
+    /// Whether this item is disabled
+    pub disabled: bool,
+}
+
+/// Toggle group state hook
+pub fn use_toggle_group<K: Clone + PartialEq + 'static>(
+    /// Available items
+    items: Vec<ToggleItem<K>>,
+    /// Initially active key
+    initial: K,
+) -> ToggleGroupState<K>;
+
+#[derive(Clone)]
+pub struct ToggleGroupState<K: Clone + PartialEq> {
+    /// Currently active key
+    pub active: Signal<K>,
+    /// Set active key
+    pub set_active: Callback<K>,
+    /// Check if a key is active
+    pub is_active: Box<dyn Fn(&K) -> bool>,
+}
+
+/// Headless toggle group root
+#[component]
+pub fn ToggleGroupRoot<K: Clone + PartialEq + 'static>(
+    /// Toggle group children (ToggleGroupItem components)
+    children: Element,
+    /// Currently active value (controlled)
+    value: K,
+    /// Change handler
+    on_value_change: EventHandler<K>,
+    /// Single-select (radiogroup) or multi-select (group)
+    #[props(default = false)]
+    multi_select: bool,
+    /// Layout orientation
+    #[props(default = Orientation::Horizontal)]
+    orientation: Orientation,
+) -> Element;
+
+/// Headless toggle group item
+#[component]
+pub fn ToggleGroupItem<K: Clone + PartialEq + 'static>(
+    /// This item's value
+    value: K,
+    /// Item content
+    children: Element,
+    /// Whether disabled
+    #[props(default = false)]
+    disabled: bool,
+) -> Element;
+```
+
+**ARIA attributes emitted:**
+- Root: `role="radiogroup"` (single) or `role="group"` (multi), `aria-orientation`
+- Item: `role="radio"`, `aria-checked="true|false"`, `data-state="on|off"`, `data-disabled`
+- Keyboard: Arrow keys navigate, Space/Enter activates
+
+---
+
+### 2.7 `dioxus-nox-cycle` — Value Cycling Hook
+
+**Source:** `components/workout/set_type_toggle.rs`
+
+```rust
+//! Generic hook for cycling through an ordered set of values.
+
+/// Cycle state returned by use_cycle
+#[derive(Clone)]
+pub struct CycleState<T: Clone> {
+    /// Current value
+    pub current: Signal<T>,
+    /// Current index in the items list
+    pub index: Signal<usize>,
+    /// Advance to next value (wraps around)
+    pub next: Callback<()>,
+    /// Go to previous value (wraps around)
+    pub previous: Callback<()>,
+    /// Jump to specific index
+    pub set_index: Callback<usize>,
+}
+
+/// Hook for cycling through ordered values
+///
+/// Wraps around at both ends. Useful for set type toggles, status cycles,
+/// priority selectors, or any ordered enum.
+pub fn use_cycle<T: Clone + PartialEq + 'static>(
+    /// Ordered list of values to cycle through
+    items: &[T],
+    /// Initial index (default 0)
+    initial_index: Option<usize>,
+) -> CycleState<T>;
+```
+
+**Key behaviors:**
+- `next()` advances index with wraparound (last → first)
+- `previous()` decrements index with wraparound (first → last)
+- `set_index()` for direct jump
+- Signals update reactively
+
+**Dioxus implementation notes:**
+- Pure signal-based, no effects needed
+- `items` stored in a `use_signal` for reference
+- Tiny crate — could also live in a `dioxus-nox-primitives` collection
+
+---
+
+### 2.8 `dioxus-nox-inline-confirm` — Headless Inline Confirmation
+
+**Source:** `components/ui/inline_confirm.rs`
+
+```rust
+//! Headless inline confirmation pattern.
+//!
+//! Replaces a destructive action trigger with confirm/cancel buttons inline.
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmState {
+    /// Default state — show the action trigger
+    Idle,
+    /// Confirmation requested — show confirm/cancel
+    Confirming,
+}
+
+/// Inline confirm state hook
+pub fn use_inline_confirm(
+    /// Auto-cancel after this many milliseconds (None = no timeout)
+    auto_cancel_ms: Option<u64>,
+) -> InlineConfirmHandle;
+
+#[derive(Clone)]
+pub struct InlineConfirmHandle {
+    /// Current state
+    pub state: Signal<ConfirmState>,
+    /// Request confirmation (Idle → Confirming)
+    pub request: Callback<()>,
+    /// Confirm the action (Confirming → Idle, fires on_confirm)
+    pub confirm: Callback<()>,
+    /// Cancel (Confirming → Idle)
+    pub cancel: Callback<()>,
+}
+
+/// Headless inline confirm root
+#[component]
+pub fn InlineConfirmRoot(
+    children: Element,
+    /// Current state (controlled)
+    state: ConfirmState,
+    /// Handler when user confirms
+    on_confirm: EventHandler<()>,
+    /// Handler when user cancels (or auto-cancel fires)
+    on_cancel: EventHandler<()>,
+    /// Auto-cancel timeout in ms (None = no auto-cancel)
+    #[props(default = None)]
+    auto_cancel_ms: Option<u64>,
+) -> Element;
+
+/// Slot shown when state is Idle
+#[component]
+pub fn InlineConfirmTrigger(children: Element) -> Element;
+
+/// Slot shown when state is Confirming
+#[component]
+pub fn InlineConfirmAction(children: Element) -> Element;
+```
+
+**Key behaviors:**
+- Two-phase: Idle shows the trigger, Confirming shows confirm/cancel
+- Optional auto-cancel timeout (e.g., 5 seconds)
+- Data attributes: `data-state="idle|confirming"` on root
+
+---
+
+### 2.9 `dioxus-nox-password-strength` — Password Strength Hook
+
+**Source:** `components/password_strength.rs`
+
+```rust
+//! Pure-logic password strength assessment.
+//!
+//! No rendering — consumer builds their own UI (bars, text, colors).
+
+/// Strength level (0-4)
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StrengthLevel {
+    /// No password entered
+    None = 0,
+    /// Weak (score 1)
+    Weak = 1,
+    /// Fair (score 2)
+    Fair = 2,
+    /// Good (score 3)
+    Good = 3,
+    /// Strong (score 4)
+    Strong = 4,
+}
+
+/// Individual check result
+#[derive(Clone, PartialEq)]
+pub struct StrengthCheck {
+    /// Human-readable label (e.g., "At least 8 characters")
+    pub label: &'static str,
+    /// Whether this check passes
+    pub passed: bool,
+}
+
+/// Full strength assessment result
+#[derive(Clone, PartialEq)]
+pub struct StrengthResult {
+    /// Overall strength level
+    pub level: StrengthLevel,
+    /// Numeric score (0-4)
+    pub score: u8,
+    /// Descriptive label ("Weak", "Fair", "Good", "Strong")
+    pub label: &'static str,
+    /// Individual check results
+    pub checks: Vec<StrengthCheck>,
+}
+
+/// Assess password strength (pure function, no Dioxus dependency)
+pub fn assess_password_strength(password: &str) -> StrengthResult;
+
+/// Default checks: length >= 8, length >= 12, uppercase, number, special char
+pub fn default_checks() -> Vec<Box<dyn Fn(&str) -> StrengthCheck>>;
+
+/// Dioxus hook wrapper for reactive password strength
+pub fn use_password_strength(
+    password: Signal<String>,
+) -> Signal<StrengthResult>;
+```
+
+**Key behaviors:**
+- Pure function `assess_password_strength` has no framework dependency
+- Default checks: length ≥ 8, length ≥ 12, has uppercase, has number, has special char
+- Score = min(passed_checks, 4)
+- Consumer renders bars, colors, labels however they want
+
+---
+
+## Section 3: Prioritized Backlog Table
+
+Ranked by **Value / Effort ratio**, highest first.
+
+| Rank | Component | Category | Value | Effort | Type | Rationale |
+|------|-----------|----------|-------|--------|------|-----------|
+| 1 | **Countdown Timer** (`use_countdown`) | Interaction | High | Low | NEW CRATE: `dioxus-nox-timer` | `use_rest_timer` is already 90% generic. Rename states, strip audio/haptic, done. Wall-clock approach is a differentiator — survives tab backgrounding. |
+| 2 | **Modal** | UI Primitive | High | Low | NEW CRATE: `dioxus-nox-modal` | 95% ready. Remove Tailwind, export state machine + ARIA. Focus trap is the only real work item. Universal need. |
+| 3 | **Drawer / Sheet** | UI Primitive | High | Low | NEW CRATE: `dioxus-nox-drawer` | `SlideOverPanel` is already generic. Strip styles, add `side` enum, share focus-trap with modal. |
+| 4 | **Master-Detail Layout** | Layout | High | Low | NEW CRATE: `dioxus-nox-master-detail` | Already fully generic source. Refactor to data-attributes for headless. Distinct from shell's AppShell. |
+| 5 | **Toast Notifications** | UI Primitive | High | Medium | NEW CRATE: `dioxus-nox-toast` | Requires genericizing `ToastState<T>` over user types instead of `UndoableAction`. Countdown and queue logic already work. |
+| 6 | **Cycle Hook** (`use_cycle`) | Interaction | Medium | Low | NEW CRATE: `dioxus-nox-cycle` | Trivial generic hook. Could also bundle into a primitives collection. |
+| 7 | **Inline Confirm** | Interaction | Medium | Low | NEW CRATE: `dioxus-nox-inline-confirm` | Simple 2-state machine. Small but useful for any app with destructive actions. |
+| 8 | **Toggle Group** (FilterChips) | UI Primitive | Medium | Low | NEW CRATE: `dioxus-nox-toggle-group` | Single/multi-select with `role="radiogroup"` ARIA. Generalized segmented control. |
+| 9 | **Stopwatch** (`use_stopwatch`) | Interaction | Medium | Low | ENHANCEMENT: `dioxus-nox-timer` | Pairs naturally with countdown in the timer crate. Wall-clock elapsed time. |
+| 10 | **Password Strength** | Interaction | Medium | Low | NEW CRATE: `dioxus-nox-password-strength` | Pure logic hook. Small surface area. Useful for any app with auth. |
+| 11 | **Bottom Action Bar slot** | Layout | Medium | Low | ENHANCEMENT: `dioxus-nox-shell` | Add `action_bar: Option<Element>` prop to AppShell. Mobile-only fixed bottom pattern. |
+| 12 | **Toggle / Switch** | UI Primitive | Medium | Low | NEW CRATE: `dioxus-nox-toggle-group` (or standalone) | `role="switch"` ARIA. Could be part of toggle-group crate as a single-item variant. |
+| 13 | **SearchInput** | UI Primitive | Medium | Low | Standalone or primitives bundle | Debounced search with clear. Small headless surface. |
+| 14 | **Accessible ReorderButtons** | Interaction | Low | Low | ENHANCEMENT: `dioxus-nox-dnd` | Move up/down buttons as keyboard-accessible companion to drag-and-drop. |
+| 15 | **Button** | UI Primitive | Low | Low | NOT RECOMMENDED | Loading/disabled state has minimal headless value. |
+| 16 | **Input / TextArea** | UI Primitive | Low | Low | NOT RECOMMENDED | Standard form inputs, minimal headless logic. |
+| 17 | **Badge** | UI Primitive | Low | Low | NOT RECOMMENDED | Pure visual, no interaction. |
+| 18 | **Card** | UI Primitive | Low | Low | NOT RECOMMENDED | Pure layout, no headless behavior. |
+| 19 | **Select** | UI Primitive | Low | Low | NOT RECOMMENDED | Styled native select, not a custom listbox. |
+| 20 | **EmptyState** | UI Primitive | Low | Low | NOT RECOMMENDED | Trivially simple layout. |
+| 21 | **Loading / Skeleton** | UI Primitive | Low | Low | NOT RECOMMENDED | Pure visual indicators. |
+| 22 | **Error displays** | UI Primitive | Low | Low | NOT RECOMMENDED | Pure visual. |
+| 23 | **ResponsiveWorkoutLayout** | Layout | Medium | Medium | ENHANCEMENT: `dioxus-nox-shell` | Generic responsive layout partially overlaps shell. Bottom action bar is the extractable part. |
+| 24+ | All fitness-domain components | Domain | Low | High | NOT RECOMMENDED | SetRow, ExerciseBlock, WorkoutCard, etc. — deeply coupled to domain types. |
+
+### Recommended Extraction Waves
+
+**Wave 1 — Immediate (Low effort, High value):**
+- `dioxus-nox-timer` (countdown + stopwatch)
+- `dioxus-nox-modal`
+- `dioxus-nox-drawer`
+
+**Wave 2 — Short-term (Medium effort, High value):**
+- `dioxus-nox-toast`
+- `dioxus-nox-master-detail`
+
+**Wave 3 — Primitives bundle (Low effort, Medium value):**
+- `dioxus-nox-cycle`
+- `dioxus-nox-inline-confirm`
+- `dioxus-nox-toggle-group`
+
+**Wave 4 — Enhancements + niche (Low effort, Mixed value):**
+- `dioxus-nox-shell` bottom action bar slot
+- `dioxus-nox-dnd` accessible reorder buttons
+- `dioxus-nox-password-strength`
