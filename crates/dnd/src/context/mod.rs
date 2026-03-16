@@ -1821,4 +1821,307 @@ mod tests {
         // Returns 2, not the actual number of items in the container
         assert_eq!(location2.resolve_drop_index(&[]), 2);
     }
+
+    // =========================================================================
+    // Auto-scroll velocity tests (scroll_velocity_for pure function)
+    // =========================================================================
+
+    #[test]
+    fn test_scroll_velocity_middle_of_viewport() {
+        // Pointer in the middle of the viewport — no scrolling
+        let v = scroll_velocity_for(400.0, 800.0);
+        assert!((v - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_just_outside_top_edge_zone() {
+        // Pointer at exactly SCROLL_EDGE_PX — boundary of top zone, no scroll
+        let v = scroll_velocity_for(SCROLL_EDGE_PX, 800.0);
+        assert!((v - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_just_outside_bottom_edge_zone() {
+        // Pointer at exactly viewport_height - SCROLL_EDGE_PX — boundary, no scroll
+        let v = scroll_velocity_for(800.0 - SCROLL_EDGE_PX, 800.0);
+        assert!((v - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_at_very_top() {
+        // Pointer at y=0 — maximum upward scroll speed
+        let v = scroll_velocity_for(0.0, 800.0);
+        assert!((v - (-SCROLL_MAX_PX)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_at_very_bottom() {
+        // Pointer at y=viewport_height — maximum downward scroll speed
+        let v = scroll_velocity_for(800.0, 800.0);
+        assert!((v - SCROLL_MAX_PX).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_near_top_linear_scaling() {
+        // Pointer halfway into top edge zone — half of max speed
+        let v = scroll_velocity_for(SCROLL_EDGE_PX / 2.0, 800.0);
+        let expected = -SCROLL_MAX_PX * 0.5;
+        assert!((v - expected).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_near_bottom_linear_scaling() {
+        // Pointer halfway into bottom edge zone — half of max speed
+        let viewport = 800.0;
+        let pointer_y = viewport - SCROLL_EDGE_PX / 2.0;
+        let v = scroll_velocity_for(pointer_y, viewport);
+        let expected = SCROLL_MAX_PX * 0.5;
+        assert!((v - expected).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_beyond_viewport_top_clamped() {
+        // Pointer above viewport (negative y) — clamped to max upward speed
+        let v = scroll_velocity_for(-100.0, 800.0);
+        assert!((v - (-SCROLL_MAX_PX)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_beyond_viewport_bottom_clamped() {
+        // Pointer below viewport — clamped to max downward speed
+        let v = scroll_velocity_for(900.0, 800.0);
+        assert!((v - SCROLL_MAX_PX).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_velocity_small_viewport() {
+        // Small viewport where edge zones overlap — top zone takes priority
+        let v = scroll_velocity_for(30.0, 80.0);
+        // 30 < SCROLL_EDGE_PX (60), so top zone logic applies
+        let distance = SCROLL_EDGE_PX - 30.0;
+        let ratio = (distance / SCROLL_EDGE_PX).min(1.0);
+        let expected = -SCROLL_MAX_PX * ratio;
+        assert!((v - expected).abs() < f64::EPSILON);
+    }
+
+    // =========================================================================
+    // Keyboard helper free function tests
+    // =========================================================================
+
+    #[test]
+    fn test_toggle_merge_target_at_index_to_into_item() {
+        let location = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 2,
+        };
+        let result =
+            toggle_merge_target(&location, &DragId::new("list"), &DragId::new("item-2"), 2);
+        assert_eq!(
+            result,
+            Some(DropLocation::IntoItem {
+                container_id: DragId::new("list"),
+                item_id: DragId::new("item-2"),
+            })
+        );
+    }
+
+    #[test]
+    fn test_toggle_merge_target_into_item_to_at_index() {
+        let location = DropLocation::IntoItem {
+            container_id: DragId::new("list"),
+            item_id: DragId::new("item-2"),
+        };
+        let result =
+            toggle_merge_target(&location, &DragId::new("list"), &DragId::new("item-2"), 3);
+        assert_eq!(
+            result,
+            Some(DropLocation::AtIndex {
+                container_id: DragId::new("list"),
+                index: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn test_toggle_merge_target_into_container_returns_none() {
+        let location = DropLocation::IntoContainer {
+            container_id: DragId::new("list"),
+        };
+        let result =
+            toggle_merge_target(&location, &DragId::new("list"), &DragId::new("item-1"), 0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_find_nested_exit_with_inner_container() {
+        let mut zones = HashMap::new();
+        let parent_cid = DragId::new("parent-list");
+        let inner_cid = DragId::new("group-1-container");
+
+        // Parent container zone
+        zones.insert(
+            parent_cid.clone(),
+            DropZoneState::new(
+                "parent-list",
+                parent_cid.clone(),
+                Rect::new(0.0, 0.0, 300.0, 500.0),
+                vec![],
+            ),
+        );
+
+        // Group wrapper item in parent container with inner_container_id
+        let mut wrapper_zone = DropZoneState::new(
+            "group-1",
+            parent_cid.clone(),
+            Rect::new(0.0, 100.0, 300.0, 200.0),
+            vec![],
+        );
+        wrapper_zone.inner_container_id = Some(inner_cid.clone());
+        zones.insert(DragId::new("group-1"), wrapper_zone);
+
+        // Inner container zone
+        zones.insert(
+            inner_cid.clone(),
+            DropZoneState::new(
+                "group-1-container",
+                inner_cid.clone(),
+                Rect::new(10.0, 110.0, 280.0, 180.0),
+                vec![],
+            ),
+        );
+
+        let result = find_nested_exit(&zones, &inner_cid);
+        assert_eq!(result, Some((parent_cid, DragId::new("group-1"))));
+    }
+
+    #[test]
+    fn test_find_nested_exit_no_parent() {
+        let mut zones = HashMap::new();
+        let cid = DragId::new("top-level");
+        zones.insert(
+            cid.clone(),
+            DropZoneState::new(
+                "top-level",
+                cid.clone(),
+                Rect::new(0.0, 0.0, 300.0, 500.0),
+                vec![],
+            ),
+        );
+
+        let result = find_nested_exit(&zones, &DragId::new("nonexistent-inner"));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_find_inner_container_exists() {
+        let mut zones = HashMap::new();
+        let inner_cid = DragId::new("group-1-container");
+        let mut zone = DropZoneState::new(
+            "group-1",
+            DragId::new("list"),
+            Rect::new(0.0, 0.0, 300.0, 200.0),
+            vec![],
+        );
+        zone.inner_container_id = Some(inner_cid.clone());
+        zones.insert(DragId::new("group-1"), zone);
+
+        let result = find_inner_container(&zones, &DragId::new("group-1"));
+        assert_eq!(result, Some(inner_cid));
+    }
+
+    #[test]
+    fn test_find_inner_container_not_a_group() {
+        let mut zones = HashMap::new();
+        zones.insert(
+            DragId::new("item-1"),
+            DropZoneState::new(
+                "item-1",
+                DragId::new("list"),
+                Rect::new(0.0, 0.0, 300.0, 60.0),
+                vec![],
+            ),
+        );
+
+        let result = find_inner_container(&zones, &DragId::new("item-1"));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_find_inner_container_missing_item() {
+        let zones = HashMap::new();
+        let result = find_inner_container(&zones, &DragId::new("nonexistent"));
+        assert_eq!(result, None);
+    }
+
+    // =========================================================================
+    // Projected target selection tests (projected_target_from)
+    // =========================================================================
+
+    #[test]
+    fn test_projected_target_no_pending_no_committed() {
+        let result = projected_target_from(None, None, 100.0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_projected_target_no_pending_has_committed() {
+        let committed = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 2,
+        };
+        let result = projected_target_from(Some(committed.clone()), None, 100.0);
+        assert_eq!(result, Some(committed));
+    }
+
+    #[test]
+    fn test_projected_target_pending_matured() {
+        let committed = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 2,
+        };
+        let pending = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 3,
+        };
+        // Pending started at 50ms, now is 100ms → elapsed 50ms >= PROJECTED_PENDING_MIN_MS (18ms)
+        let result = projected_target_from(Some(committed), Some((pending.clone(), 50.0)), 100.0);
+        assert_eq!(result, Some(pending));
+    }
+
+    #[test]
+    fn test_projected_target_pending_not_matured() {
+        let committed = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 2,
+        };
+        let pending = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 3,
+        };
+        // Pending started at 95ms, now is 100ms → elapsed 5ms < PROJECTED_PENDING_MIN_MS (18ms)
+        let result = projected_target_from(Some(committed.clone()), Some((pending, 95.0)), 100.0);
+        assert_eq!(result, Some(committed));
+    }
+
+    #[test]
+    fn test_projected_target_pending_not_matured_no_committed() {
+        let pending = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 3,
+        };
+        // Pending not matured, no committed → returns None
+        let result = projected_target_from(None, Some((pending, 99.0)), 100.0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_projected_target_test_sentinel_immediate() {
+        // When now_ms == 0.0 (test sentinel), pending is returned immediately
+        let pending = DropLocation::AtIndex {
+            container_id: DragId::new("list"),
+            index: 1,
+        };
+        let result = projected_target_from(None, Some((pending.clone(), 0.0)), 0.0);
+        assert_eq!(result, Some(pending));
+    }
 }

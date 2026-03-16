@@ -204,17 +204,24 @@ While inline CSS is a legitimate pattern for headless components (zero-dependenc
 
 ---
 
-### [PRIORITY: Low]
+### [IMPLEMENTED] ~~[PRIORITY: Low]~~
 **Area:** Code Quality — Test Coverage Gaps
 **Problem:** Testing is strong in cmdk (4,355 lines), markdown (2,615 lines), tag-input (889 lines), and dnd collision detection. However, several crates have no tests at all:
-- `dnd` primitives, context, patterns (the core drag-and-drop runtime — only collision has tests)
+- ~~`dnd` primitives, context, patterns (the core drag-and-drop runtime — only collision has tests)~~ **IMPLEMENTED**: Added comprehensive unit tests for the three previously untested context modules.
 - `shell` (223 lines of tests, relatively thin)
 - `virtualize` (inline tests, adequate for the simple viewport math)
 - `preview` (166 lines, basic)
 
-The dnd crate's collision algorithm is heavily tested (good), but the actual component behavior (DragContextProvider, SortableItem, Draggable, DropZone) has zero tests. Given the complexity of the context.rs (3,412 lines), this is a gap.
+~~The dnd crate's collision algorithm is heavily tested (good), but the actual component behavior (DragContextProvider, SortableItem, Draggable, DropZone) has zero tests. Given the complexity of the context.rs (3,412 lines), this is a gap.~~
 
-**Suggestion:** Add unit tests for dnd context state transitions (drag start, move, end), drop zone registration/deregistration, and collision strategy selection. The existing `wasm-bindgen-test` dev dependency is unused — consider using it for integration tests.
+**IMPLEMENTED**: Added 24 new unit tests to `crates/dnd/src/context/mod.rs` covering the three previously untested context submodules:
+- **`auto_scroll.rs`**: 10 tests for the `scroll_velocity_for()` pure function — middle-of-viewport zero velocity, top/bottom edge max velocity, linear scaling within edge zones, clamping for out-of-bounds pointer positions, and small viewport behavior.
+- **`keyboard.rs`**: 8 tests for the free helper functions — `toggle_merge_target()` (AtIndex↔IntoItem toggle, unsupported variant returns None), `find_nested_exit()` (parent container discovery, missing parent returns None), `find_inner_container()` (inner container lookup, regular items return None, missing items return None).
+- **`pointer.rs`**: 6 tests for `projected_target_from()` — no pending/no committed returns None, committed fallback, matured pending overrides committed, immature pending falls back to committed, immature pending with no committed returns None, test sentinel (now=0.0) bypasses maturity check.
+
+Total dnd crate tests: 296 (up from 272). All tests pass.
+
+**Suggestion:** ~~Add unit tests for dnd context state transitions (drag start, move, end), drop zone registration/deregistration, and collision strategy selection.~~ Done. The existing `wasm-bindgen-test` dev dependency is unused — consider using it for integration tests.
 
 **Expected Impact:** Confidence in the most complex runtime behavior; regression protection for the drag-and-drop system.
 
