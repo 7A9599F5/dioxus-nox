@@ -21,10 +21,7 @@ pub fn assess_password_strength(password: &str, checks: &[CheckFn]) -> StrengthR
             level: StrengthLevel::None,
             score: 0,
             label: "None",
-            checks: checks
-                .iter()
-                .map(|check| check(password))
-                .collect(),
+            checks: checks.iter().map(|check| check(password)).collect(),
         };
     }
 

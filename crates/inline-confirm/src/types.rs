@@ -3,18 +3,13 @@
 use dioxus::prelude::*;
 
 /// Confirmation state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ConfirmState {
     /// Default state — show the action trigger.
+    #[default]
     Idle,
     /// Confirmation requested — show confirm/cancel.
     Confirming,
-}
-
-impl Default for ConfirmState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 /// Handle returned by [`use_inline_confirm`](crate::use_inline_confirm).

@@ -12,6 +12,5 @@ use crate::manager::ToastManager;
 ///
 /// - `max_toasts`: Maximum toasts displayed at once (default 3).
 pub fn use_toast_manager<T: Clone + 'static>(max_toasts: usize) -> ToastManager<T> {
-    let manager = use_context_provider(|| ToastManager::<T>::new(max_toasts));
-    manager
+    use_context_provider(|| ToastManager::<T>::new(max_toasts))
 }

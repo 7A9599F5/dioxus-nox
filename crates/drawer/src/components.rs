@@ -46,7 +46,7 @@ pub fn Root(
 
     use_context_provider(|| DrawerContext {
         open,
-        on_close: on_close.clone(),
+        on_close,
         close_on_overlay,
         side,
         instance_id,

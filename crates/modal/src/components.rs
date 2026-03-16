@@ -44,7 +44,7 @@ pub fn Root(
     // Provide context to children.
     use_context_provider(|| ModalContext {
         open,
-        on_close: on_close.clone(),
+        on_close,
         close_on_backdrop,
         instance_id,
     });

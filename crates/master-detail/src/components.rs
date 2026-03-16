@@ -18,7 +18,7 @@ pub fn Root(
 ) -> Element {
     use_context_provider(|| MasterDetailContext {
         detail_open,
-        on_detail_close: on_detail_close.clone(),
+        on_detail_close,
     });
 
     let data_detail = if detail_open { "open" } else { "closed" };

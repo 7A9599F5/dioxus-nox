@@ -3,16 +3,11 @@
 use dioxus::prelude::*;
 
 /// Layout orientation for the toggle group.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Orientation {
+    #[default]
     Horizontal,
     Vertical,
-}
-
-impl Default for Orientation {
-    fn default() -> Self {
-        Self::Horizontal
-    }
 }
 
 impl Orientation {

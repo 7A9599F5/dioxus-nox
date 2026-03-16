@@ -18,22 +18,22 @@ pub fn use_inline_confirm(auto_cancel_ms: Option<u64>) -> InlineConfirmHandle {
     let gen_value = *cancel_generation.read();
     use_effect(move || {
         let current_gen = gen_value;
-        if *state.read() == ConfirmState::Confirming {
-            if let Some(timeout_ms) = auto_cancel_ms {
-                spawn(async move {
-                    #[cfg(target_arch = "wasm32")]
-                    gloo_timers::future::TimeoutFuture::new(timeout_ms as u32).await;
-                    #[cfg(not(target_arch = "wasm32"))]
-                    tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
+        if *state.read() == ConfirmState::Confirming
+            && let Some(timeout_ms) = auto_cancel_ms
+        {
+            spawn(async move {
+                #[cfg(target_arch = "wasm32")]
+                gloo_timers::future::TimeoutFuture::new(timeout_ms as u32).await;
+                #[cfg(not(target_arch = "wasm32"))]
+                tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
 
-                    // Only cancel if generation hasn't changed.
-                    if *cancel_generation.read() == current_gen
-                        && *state.read() == ConfirmState::Confirming
-                    {
-                        state.set(ConfirmState::Idle);
-                    }
-                });
-            }
+                // Only cancel if generation hasn't changed.
+                if *cancel_generation.read() == current_gen
+                    && *state.read() == ConfirmState::Confirming
+                {
+                    state.set(ConfirmState::Idle);
+                }
+            });
         }
     });
 

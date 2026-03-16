@@ -5,9 +5,10 @@ use dioxus::prelude::*;
 /// Timer state machine.
 ///
 /// Represents the lifecycle of a countdown timer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TimerState {
     /// No timer active.
+    #[default]
     Idle,
     /// Counting down (or counting up for stopwatch).
     Running,
@@ -15,12 +16,6 @@ pub enum TimerState {
     Paused,
     /// Countdown reached zero.
     Complete,
-}
-
-impl Default for TimerState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 /// Controls returned by [`use_countdown`](crate::use_countdown).

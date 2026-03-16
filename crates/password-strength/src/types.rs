@@ -3,9 +3,10 @@
 //! These types have **no Dioxus dependency** and can be used anywhere.
 
 /// Strength level (0-4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StrengthLevel {
     /// No password entered.
+    #[default]
     None = 0,
     /// Weak (score 1).
     Weak = 1,
@@ -38,12 +39,6 @@ impl StrengthLevel {
             Self::Good => "Good",
             Self::Strong => "Strong",
         }
-    }
-}
-
-impl Default for StrengthLevel {
-    fn default() -> Self {
-        Self::None
     }
 }
 

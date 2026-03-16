@@ -3,18 +3,13 @@
 use dioxus::prelude::*;
 
 /// Which edge the drawer slides from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum DrawerSide {
     Left,
+    #[default]
     Right,
     Bottom,
     Top,
-}
-
-impl Default for DrawerSide {
-    fn default() -> Self {
-        Self::Right
-    }
 }
 
 impl DrawerSide {

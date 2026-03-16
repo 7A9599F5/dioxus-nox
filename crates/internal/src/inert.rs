@@ -51,9 +51,7 @@ fn set_siblings_inert_wasm(root_id: &str, inert: bool) {
         };
 
         // Skip the element that contains (or IS) the overlay root.
-        let skip = root_el
-            .as_ref()
-            .is_some_and(|re| child.contains(Some(re)));
+        let skip = root_el.as_ref().is_some_and(|re| child.contains(Some(re)));
         if skip {
             continue;
         }

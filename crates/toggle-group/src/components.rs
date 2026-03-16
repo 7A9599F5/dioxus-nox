@@ -25,7 +25,7 @@ pub fn Root(
 ) -> Element {
     use_context_provider(|| ToggleGroupContext {
         value: value.clone(),
-        on_value_change: on_value_change.clone(),
+        on_value_change,
         multi_select,
         orientation,
     });
@@ -58,12 +58,16 @@ pub fn Item(
 ) -> Element {
     let ctx: ToggleGroupContext = use_context();
     let is_active = ctx.value == value;
-    let role = if ctx.multi_select { "checkbox" } else { "radio" };
+    let role = if ctx.multi_select {
+        "checkbox"
+    } else {
+        "radio"
+    };
     let data_state = if is_active { "on" } else { "off" };
     let aria_checked = if is_active { "true" } else { "false" };
 
     let item_value = value.clone();
-    let on_change = ctx.on_value_change.clone();
+    let on_change = ctx.on_value_change;
 
     rsx! {
         div {

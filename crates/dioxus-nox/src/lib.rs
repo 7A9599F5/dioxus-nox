@@ -135,7 +135,9 @@ pub mod prelude {
     pub use dioxus_nox_tabs::{ActivationMode, Orientation as TabsOrientation, tabs};
 
     #[cfg(feature = "timer")]
-    pub use dioxus_nox_timer::{CountdownControls, TimerState, format_duration, use_countdown, use_stopwatch};
+    pub use dioxus_nox_timer::{
+        CountdownControls, TimerState, format_duration, use_countdown, use_stopwatch,
+    };
 
     #[cfg(feature = "modal")]
     pub use dioxus_nox_modal::{ModalHandle, modal, use_modal};
@@ -153,11 +155,15 @@ pub mod prelude {
     pub use dioxus_nox_cycle::{CycleState, use_cycle};
 
     #[cfg(feature = "inline-confirm")]
-    pub use dioxus_nox_inline_confirm::{ConfirmState, InlineConfirmHandle, inline_confirm, use_inline_confirm};
+    pub use dioxus_nox_inline_confirm::{
+        ConfirmState, InlineConfirmHandle, inline_confirm, use_inline_confirm,
+    };
 
     #[cfg(feature = "toggle-group")]
     pub use dioxus_nox_toggle_group::{Orientation as ToggleGroupOrientation, toggle_group};
 
     #[cfg(feature = "password-strength")]
-    pub use dioxus_nox_password_strength::{StrengthLevel, StrengthResult, assess_password_strength_default};
+    pub use dioxus_nox_password_strength::{
+        StrengthLevel, StrengthResult, assess_password_strength_default,
+    };
 }

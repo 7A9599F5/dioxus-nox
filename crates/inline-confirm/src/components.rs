@@ -20,8 +20,8 @@ pub fn Root(
 ) -> Element {
     use_context_provider(|| InlineConfirmContext {
         state,
-        on_confirm: on_confirm.clone(),
-        on_cancel: on_cancel.clone(),
+        on_confirm,
+        on_cancel,
     });
 
     let data_state = match state {

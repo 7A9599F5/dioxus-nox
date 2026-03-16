@@ -81,7 +81,11 @@ pub fn cycle_focus(container_id: &str, forward: bool) {
     let next_index = match current_index {
         Some(idx) => {
             if forward {
-                if idx + 1 >= focusables.len() { 0 } else { idx + 1 }
+                if idx + 1 >= focusables.len() {
+                    0
+                } else {
+                    idx + 1
+                }
             } else if idx == 0 {
                 focusables.len() - 1
             } else {
