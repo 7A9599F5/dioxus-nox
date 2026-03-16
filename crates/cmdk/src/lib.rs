@@ -80,7 +80,9 @@ pub use components::{
     CommandList, CommandLoading, CommandModeIndicator, CommandPage, CommandPalette, CommandPreview,
     CommandQuickInput, CommandRoot, CommandSeparator, CommandSheet, CommandShortcut,
 };
-pub use context::{CommandContext, use_command_context};
+pub use context::{
+    ActionPanelFeature, CommandContext, ModeFeature, PageFeature, use_command_context,
+};
 pub use hook::{
     AdaptivePaletteHandle, CommandHistoryHandle, CommandModesHandle, CommandPagesHandle,
     CommandPaletteHandle, GlobalShortcutHandle, use_adaptive_palette, use_async_commands,

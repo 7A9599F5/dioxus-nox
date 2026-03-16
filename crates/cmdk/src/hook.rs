@@ -281,13 +281,19 @@ impl CommandPagesHandle {
 
     /// Current page navigation stack.
     pub fn stack(&self) -> Vec<String> {
-        self.ctx.page_stack.read().clone()
+        let feat = *self.ctx.page_feature.read();
+        feat.map(|pf| pf.page_stack.read().clone())
+            .unwrap_or_default()
     }
 
     /// Breadcrumbs: `(id, title)` pairs for each page in the stack.
     pub fn breadcrumbs(&self) -> Vec<(String, Option<String>)> {
-        let stack = self.ctx.page_stack.read();
-        let pages = self.ctx.pages.read();
+        let feat = *self.ctx.page_feature.read();
+        let Some(pf) = feat else {
+            return Vec::new();
+        };
+        let stack = pf.page_stack.read();
+        let pages = pf.pages.read();
         stack
             .iter()
             .map(|sid| {
@@ -307,7 +313,8 @@ impl CommandPagesHandle {
 
     /// Whether the page stack is empty (at root).
     pub fn is_root(&self) -> bool {
-        self.ctx.page_stack.read().is_empty()
+        let feat = *self.ctx.page_feature.read();
+        feat.is_none_or(|pf| pf.page_stack.read().is_empty())
     }
 
     /// Get the current page's data, downcast to the expected type.

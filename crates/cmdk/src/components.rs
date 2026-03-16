@@ -155,17 +155,20 @@ pub fn CommandRoot(
 
     // 2. Page navigation → announce current page title
     use_effect(move || {
-        let stack = ctx.page_stack.read();
-        if let Some(page_id) = stack.last() {
-            let pages_list = ctx.pages.peek();
-            let title = pages_list
-                .iter()
-                .find(|p| p.id == *page_id)
-                .and_then(|p| p.title.clone())
-                .unwrap_or_else(|| page_id.clone());
-            drop(pages_list);
-            let mut ann = ctx.announcer;
-            ann.set(title);
+        let feat = *ctx.page_feature.read();
+        if let Some(pf) = feat {
+            let stack = pf.page_stack.read();
+            if let Some(page_id) = stack.last() {
+                let pages_list = pf.pages.peek();
+                let title = pages_list
+                    .iter()
+                    .find(|p| p.id == *page_id)
+                    .and_then(|p| p.title.clone())
+                    .unwrap_or_else(|| page_id.clone());
+                drop(pages_list);
+                let mut ann = ctx.announcer;
+                ann.set(title);
+            }
         }
     });
 
@@ -419,31 +422,31 @@ pub fn CommandInput(
                 }
             }
             // P-039: Action panel navigation — when panel is open, intercept arrow/enter/escape
-            Key::ArrowDown if ctx.action_panel.read().is_some() => {
+            Key::ArrowDown if ctx.peek_action_panel_open() => {
                 event.prevent_default();
                 let mut ctx = ctx;
                 ctx.select_next_action();
             }
-            Key::ArrowUp if ctx.action_panel.read().is_some() => {
+            Key::ArrowUp if ctx.peek_action_panel_open() => {
                 event.prevent_default();
                 let mut ctx = ctx;
                 ctx.select_prev_action();
             }
-            Key::Enter if ctx.action_panel.read().is_some() => {
+            Key::Enter if ctx.peek_action_panel_open() => {
                 event.prevent_default();
                 let mut ctx = ctx;
                 ctx.confirm_action();
             }
             // P-039: Escape or ArrowLeft closes the action panel (without closing the palette)
-            Key::Escape | Key::ArrowLeft if ctx.action_panel.read().is_some() => {
+            Key::Escape | Key::ArrowLeft if ctx.peek_action_panel_open() => {
                 event.prevent_default();
                 let mut ctx = ctx;
                 ctx.close_action_panel();
             }
             // P-039: Tab or ArrowRight opens the action panel if the active item has actions registered
             Key::Tab | Key::ArrowRight
-                if ctx.action_panel.read().is_none()
-                    && !ctx.action_items.read().is_empty()
+                if !ctx.peek_action_panel_open()
+                    && ctx.peek_has_action_items()
                     && ctx.active_item.read().is_some() =>
             {
                 event.prevent_default();
@@ -504,7 +507,11 @@ pub fn CommandInput(
                 }
             }
             Key::Backspace => {
-                if ctx.search.read().is_empty() && !ctx.page_stack.read().is_empty() {
+                let has_pages = ctx
+                    .page_feature
+                    .peek()
+                    .is_some_and(|pf| !pf.page_stack.peek().is_empty());
+                if ctx.search.read().is_empty() && has_pages {
                     event.prevent_default();
                     ctx.pop_page();
                 }
@@ -1061,9 +1068,7 @@ pub fn CommandItem(
         .is_some_and(|a| a == &item_id);
     // P-039: Whether the action panel is open for this specific item.
     let panel_open = ctx
-        .action_panel
-        .read()
-        .as_ref()
+        .read_action_panel()
         .is_some_and(|s| s.item_id == item_id);
 
     let dom_id = make_item_dom_id(ctx.instance_id, &item_id);
@@ -2652,7 +2657,7 @@ pub fn CommandActionPanel(
     label: String,
 ) -> Element {
     let ctx = use_context::<CommandContext>();
-    let is_open = ctx.action_panel.read().is_some();
+    let is_open = ctx.read_action_panel().is_some();
 
     if !is_open {
         return rsx! {};
@@ -2692,7 +2697,7 @@ pub fn CommandAction(
     let mut ctx = use_context::<CommandContext>();
     let action_id = id.clone();
 
-    // Register on mount
+    // Register on mount — lazily initializes the action panel feature
     use_hook({
         let reg = ActionRegistration {
             id: id.clone(),
@@ -2700,9 +2705,10 @@ pub fn CommandAction(
             disabled,
             on_action,
         };
-        let mut ctx_hook = ctx;
+        let ctx_hook = ctx;
         move || {
-            ctx_hook.action_items.write().push(reg);
+            let mut af = ctx_hook.ensure_action_panel();
+            af.items.write().push(reg);
         }
     });
 
@@ -2710,7 +2716,9 @@ pub fn CommandAction(
     {
         let action_id_drop = action_id.clone();
         use_drop(move || {
-            ctx.action_items.write().retain(|r| r.id != action_id_drop);
+            if let Some(mut af) = *ctx.action_panel_feature.peek() {
+                af.items.write().retain(|r| r.id != action_id_drop);
+            }
         });
     }
 
@@ -2719,30 +2727,32 @@ pub fn CommandAction(
         let action_id_sync = action_id.clone();
         let label_sync = label.clone();
         use_effect(move || {
-            let mut items = ctx.action_items.write();
-            if let Some(reg) = items.iter_mut().find(|r| r.id == action_id_sync) {
-                reg.label.clone_from(&label_sync);
-                reg.disabled = disabled;
+            if let Some(mut af) = *ctx.action_panel_feature.read() {
+                let mut items = af.items.write();
+                if let Some(reg) = items.iter_mut().find(|r| r.id == action_id_sync) {
+                    reg.label.clone_from(&label_sync);
+                    reg.disabled = disabled;
+                }
             }
         });
     }
 
     let action_id_render = id.clone();
-    let is_active = ctx
-        .action_panel
-        .read()
+    let panel_state = ctx.read_action_panel();
+    let is_active = panel_state
         .as_ref()
         .map(|s| {
-            let items = ctx.action_items.read();
-            items
-                .get(s.active_idx)
-                .is_some_and(|r| r.id == action_id_render)
+            let feat = *ctx.action_panel_feature.read();
+            feat.is_some_and(|af| {
+                let items = af.items.read();
+                items
+                    .get(s.active_idx)
+                    .is_some_and(|r| r.id == action_id_render)
+            })
         })
         .unwrap_or(false);
 
-    let item_id_for_click = ctx
-        .action_panel
-        .read()
+    let item_id_for_click = panel_state
         .as_ref()
         .map(|s| s.item_id.clone())
         .unwrap_or_default();
