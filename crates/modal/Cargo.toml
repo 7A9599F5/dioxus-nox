@@ -11,4 +11,4 @@ readme = "../../README.md"
 
 [dependencies]
 dioxus = { workspace = true }
-dioxus-nox-core = { path = "../core" }
+dioxus-nox-core = { workspace = true }
