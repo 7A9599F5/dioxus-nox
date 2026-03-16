@@ -1392,6 +1392,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dioxus-nox-select"
+version = "0.13.0"
+dependencies = [
+ "dioxus",
+ "nucleo-matcher",
+]
+
+[[package]]
 name = "dioxus-nox-shell"
 version = "0.13.0"
 dependencies = [

@@ -29,6 +29,7 @@ members = [
     "crates/inline-confirm",
     "crates/toggle-group",
     "crates/password-strength",
+    "crates/select",
 ]
 resolver = "2"
 
@@ -70,6 +71,7 @@ dioxus-nox-cycle = { path = "crates/cycle", version = "=0.13.0" }
 dioxus-nox-inline-confirm = { path = "crates/inline-confirm", version = "=0.13.0" }
 dioxus-nox-toggle-group = { path = "crates/toggle-group", version = "=0.13.0" }
 dioxus-nox-password-strength = { path = "crates/password-strength", version = "=0.13.0" }
+dioxus-nox-select = { path = "crates/select", version = "=0.13.0" }
 dioxus-nox = { path = "crates/dioxus-nox", version = "=0.13.0" }
 syntect = { version = "5.3", default-features = false }
 uuid = "1"
