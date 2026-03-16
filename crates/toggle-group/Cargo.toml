@@ -1,0 +1,13 @@
+[package]
+name = "dioxus-nox-toggle-group"
+version.workspace = true
+edition.workspace = true
+description = "Headless toggle group / segmented control with ARIA radiogroup semantics"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "toggle-group", "segmented-control", "headless", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }

@@ -158,7 +158,9 @@ pub use context::{ActiveDrag, DragContext, DragContextProvider};
 pub use primitives::{DragOverlay, Draggable, DropZone};
 
 // Sortable pattern components
-pub use patterns::sortable::{DropIndicator, SortableContext, SortableGroup, SortableItem};
+pub use patterns::sortable::{
+    DropIndicator, ReorderButtons, SortableContext, SortableGroup, SortableItem,
+};
 
 // Collision strategy
 pub use collision::CollisionStrategy;

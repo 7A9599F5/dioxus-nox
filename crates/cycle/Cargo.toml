@@ -1,0 +1,13 @@
+[package]
+name = "dioxus-nox-cycle"
+version.workspace = true
+edition.workspace = true
+description = "Generic value cycling hook for Dioxus"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "cycle", "toggle", "hook", "headless"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }

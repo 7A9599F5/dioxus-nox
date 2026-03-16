@@ -19,6 +19,16 @@ members = [
     "crates/noxpad",
     "crates/suggest/examples/suggest-demo",
     "crates/tabs",
+    "crates/internal",
+    "crates/timer",
+    "crates/modal",
+    "crates/drawer",
+    "crates/toast",
+    "crates/master-detail",
+    "crates/cycle",
+    "crates/inline-confirm",
+    "crates/toggle-group",
+    "crates/password-strength",
 ]
 resolver = "2"
 
@@ -50,5 +60,16 @@ dioxus-nox-preview = { path = "crates/preview", version = "=0.13.0" }
 dioxus-nox-extensions = { path = "crates/extensions", version = "=0.13.0" }
 dioxus-nox-gestures = { path = "crates/gestures", version = "=0.13.0" }
 dioxus-nox-tabs = { path = "crates/tabs", version = "=0.13.0" }
+dioxus-nox-internal = { path = "crates/internal", version = "=0.13.0" }
+dioxus-nox-timer = { path = "crates/timer", version = "=0.13.0" }
+dioxus-nox-modal = { path = "crates/modal", version = "=0.13.0" }
+dioxus-nox-drawer = { path = "crates/drawer", version = "=0.13.0" }
+dioxus-nox-toast = { path = "crates/toast", version = "=0.13.0" }
+dioxus-nox-master-detail = { path = "crates/master-detail", version = "=0.13.0" }
+dioxus-nox-cycle = { path = "crates/cycle", version = "=0.13.0" }
+dioxus-nox-inline-confirm = { path = "crates/inline-confirm", version = "=0.13.0" }
+dioxus-nox-toggle-group = { path = "crates/toggle-group", version = "=0.13.0" }
+dioxus-nox-password-strength = { path = "crates/password-strength", version = "=0.13.0" }
 dioxus-nox = { path = "crates/dioxus-nox", version = "=0.13.0" }
 syntect = { version = "5.3", default-features = false }
+uuid = "1"

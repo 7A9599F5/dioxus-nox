@@ -1,0 +1,17 @@
+[package]
+name = "dioxus-nox-password-strength"
+version.workspace = true
+edition.workspace = true
+description = "Pure-logic password strength assessment with optional Dioxus hook"
+license.workspace = true
+repository.workspace = true
+keywords = ["password", "strength", "validation", "dioxus", "headless"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true, optional = true }
+
+[features]
+default = ["dioxus"]
+dioxus = ["dep:dioxus"]

@@ -1,0 +1,20 @@
+[package]
+name = "dioxus-nox-timer"
+version.workspace = true
+edition.workspace = true
+description = "Headless countdown and stopwatch timer hooks for Dioxus"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "timer", "countdown", "stopwatch", "headless"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { workspace = true }
+js-sys = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["time"] }

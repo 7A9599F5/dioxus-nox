@@ -1,0 +1,24 @@
+[package]
+name = "dioxus-nox-toast"
+version.workspace = true
+edition.workspace = true
+description = "Headless toast notification system with queue management and auto-dismiss"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "toast", "notification", "headless", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
+uuid = { version = "1", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { workspace = true }
+js-sys = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["time"] }
+
+[features]
+uuid = ["dep:uuid"]
