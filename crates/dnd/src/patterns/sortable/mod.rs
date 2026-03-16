@@ -90,8 +90,10 @@ pub mod context;
 pub mod group;
 pub mod indicator;
 pub mod item;
+pub mod reorder_buttons;
 
 pub use context::SortableContext;
 pub use group::{SortableGroup, SortableGroupContext};
 pub use indicator::DropIndicator;
 pub use item::{IndicatorPosition, SortableItem, SortableItemProps, SortableItemState};
+pub use reorder_buttons::ReorderButtons;

@@ -54,6 +54,33 @@ pub use dioxus_nox_gestures as gestures;
 #[cfg(feature = "tabs")]
 pub use dioxus_nox_tabs as tabs;
 
+#[cfg(feature = "timer")]
+pub use dioxus_nox_timer as timer;
+
+#[cfg(feature = "modal")]
+pub use dioxus_nox_modal as modal;
+
+#[cfg(feature = "drawer")]
+pub use dioxus_nox_drawer as drawer;
+
+#[cfg(feature = "toast")]
+pub use dioxus_nox_toast as toast;
+
+#[cfg(feature = "master-detail")]
+pub use dioxus_nox_master_detail as master_detail;
+
+#[cfg(feature = "cycle")]
+pub use dioxus_nox_cycle as cycle;
+
+#[cfg(feature = "inline-confirm")]
+pub use dioxus_nox_inline_confirm as inline_confirm;
+
+#[cfg(feature = "toggle-group")]
+pub use dioxus_nox_toggle_group as toggle_group;
+
+#[cfg(feature = "password-strength")]
+pub use dioxus_nox_password_strength as password_strength;
+
 /// Convenience re-exports of the most commonly used types.
 ///
 /// ```rust,ignore
@@ -106,4 +133,37 @@ pub mod prelude {
 
     #[cfg(feature = "tabs")]
     pub use dioxus_nox_tabs::{ActivationMode, Orientation as TabsOrientation, tabs};
+
+    #[cfg(feature = "timer")]
+    pub use dioxus_nox_timer::{
+        CountdownControls, TimerState, format_duration, use_countdown, use_stopwatch,
+    };
+
+    #[cfg(feature = "modal")]
+    pub use dioxus_nox_modal::{ModalHandle, modal, use_modal};
+
+    #[cfg(feature = "drawer")]
+    pub use dioxus_nox_drawer::{DrawerSide, drawer};
+
+    #[cfg(feature = "toast")]
+    pub use dioxus_nox_toast::{Toast, ToastId, ToastManager, ToastViewport, use_toast_manager};
+
+    #[cfg(feature = "master-detail")]
+    pub use dioxus_nox_master_detail::master_detail;
+
+    #[cfg(feature = "cycle")]
+    pub use dioxus_nox_cycle::{CycleState, use_cycle};
+
+    #[cfg(feature = "inline-confirm")]
+    pub use dioxus_nox_inline_confirm::{
+        ConfirmState, InlineConfirmHandle, inline_confirm, use_inline_confirm,
+    };
+
+    #[cfg(feature = "toggle-group")]
+    pub use dioxus_nox_toggle_group::{Orientation as ToggleGroupOrientation, toggle_group};
+
+    #[cfg(feature = "password-strength")]
+    pub use dioxus_nox_password_strength::{
+        StrengthLevel, StrengthResult, assess_password_strength_default,
+    };
 }

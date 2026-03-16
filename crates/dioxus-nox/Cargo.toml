@@ -20,28 +20,48 @@ dioxus-nox-virtualize = { workspace = true, optional = true }
 dioxus-nox-preview    = { workspace = true, optional = true }
 dioxus-nox-extensions = { workspace = true, optional = true }
 dioxus-nox-gestures   = { workspace = true, optional = true }
-dioxus-nox-tabs       = { workspace = true, optional = true }
+dioxus-nox-tabs               = { workspace = true, optional = true }
+dioxus-nox-timer              = { workspace = true, optional = true }
+dioxus-nox-modal              = { workspace = true, optional = true }
+dioxus-nox-drawer             = { workspace = true, optional = true }
+dioxus-nox-toast              = { workspace = true, optional = true }
+dioxus-nox-master-detail      = { workspace = true, optional = true }
+dioxus-nox-cycle              = { workspace = true, optional = true }
+dioxus-nox-inline-confirm     = { workspace = true, optional = true }
+dioxus-nox-toggle-group       = { workspace = true, optional = true }
+dioxus-nox-password-strength  = { workspace = true, optional = true }
 
 [features]
 default = ["shell", "cmdk", "dnd", "tag-input", "suggest", "preview", "tabs"]
 
 # Per-crate gates
-cmdk       = ["dep:dioxus-nox-cmdk"]
-dnd        = ["dep:dioxus-nox-dnd"]
-markdown   = ["dep:dioxus-nox-markdown"]
-shell      = ["dep:dioxus-nox-shell"]
-suggest    = ["dep:dioxus-nox-suggest"]
-tag-input  = ["dep:dioxus-nox-tag-input"]
-virtualize = ["dep:dioxus-nox-virtualize"]
-preview    = ["dep:dioxus-nox-preview"]
-extensions = ["dep:dioxus-nox-extensions"]
-gestures   = ["dep:dioxus-nox-gestures"]
-tabs       = ["dep:dioxus-nox-tabs"]
+cmdk              = ["dep:dioxus-nox-cmdk"]
+dnd               = ["dep:dioxus-nox-dnd"]
+markdown          = ["dep:dioxus-nox-markdown"]
+shell             = ["dep:dioxus-nox-shell"]
+suggest           = ["dep:dioxus-nox-suggest"]
+tag-input         = ["dep:dioxus-nox-tag-input"]
+virtualize        = ["dep:dioxus-nox-virtualize"]
+preview           = ["dep:dioxus-nox-preview"]
+extensions        = ["dep:dioxus-nox-extensions"]
+gestures          = ["dep:dioxus-nox-gestures"]
+tabs              = ["dep:dioxus-nox-tabs"]
+timer             = ["dep:dioxus-nox-timer"]
+modal             = ["dep:dioxus-nox-modal"]
+drawer            = ["dep:dioxus-nox-drawer"]
+toast             = ["dep:dioxus-nox-toast"]
+master-detail     = ["dep:dioxus-nox-master-detail"]
+cycle             = ["dep:dioxus-nox-cycle"]
+inline-confirm    = ["dep:dioxus-nox-inline-confirm"]
+toggle-group      = ["dep:dioxus-nox-toggle-group"]
+password-strength = ["dep:dioxus-nox-password-strength"]
 
 # All-in-one
 full = [
     "cmdk", "dnd", "markdown", "shell", "suggest",
     "tag-input", "virtualize", "preview", "extensions", "gestures", "tabs",
+    "timer", "modal", "drawer", "toast", "master-detail",
+    "cycle", "inline-confirm", "toggle-group", "password-strength",
 ]
 
 # Sub-crate feature pass-through

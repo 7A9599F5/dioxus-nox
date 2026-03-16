@@ -154,6 +154,10 @@ pub fn AppShell(
     /// Optional floating action button slot. Renders as `[data-shell-fab]`.
     #[props(default)]
     fab: Option<Element>,
+    /// Optional bottom action bar slot. Renders as `[data-shell-action-bar]`.
+    /// Typically used for mobile-only fixed bottom action patterns.
+    #[props(default)]
+    action_bar: Option<Element>,
     /// Optional search overlay slot. Renders as `[data-shell-search]`.
     #[props(default)]
     search: Option<Element>,
@@ -340,6 +344,16 @@ pub fn AppShell(
                 div {
                     "data-shell-fab": "",
                     {fab_el}
+                }
+            }
+
+            // Bottom action bar (mobile pattern).
+            if let Some(action_bar_el) = action_bar {
+                div {
+                    role: "toolbar",
+                    aria_label: "Actions",
+                    "data-shell-action-bar": "",
+                    {action_bar_el}
                 }
             }
 

@@ -1,0 +1,14 @@
+[package]
+name = "dioxus-nox-modal"
+version.workspace = true
+edition.workspace = true
+description = "Headless modal dialog primitive for Dioxus with focus trap and ARIA"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "modal", "dialog", "headless", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
+dioxus-nox-internal = { path = "../internal" }

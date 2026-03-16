@@ -1,0 +1,24 @@
+[package]
+name = "dioxus-nox-internal"
+version.workspace = true
+edition.workspace = true
+description = "Shared internal utilities for dioxus-nox crates (not published)"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+dioxus = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlBodyElement",
+    "HtmlCollection",
+    "HtmlElement",
+    "NodeList",
+    "CssStyleDeclaration",
+] }

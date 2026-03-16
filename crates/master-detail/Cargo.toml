@@ -1,0 +1,13 @@
+[package]
+name = "dioxus-nox-master-detail"
+version.workspace = true
+edition.workspace = true
+description = "Headless adaptive master-detail layout for Dioxus"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "layout", "master-detail", "responsive", "headless"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
