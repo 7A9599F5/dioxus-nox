@@ -1,11 +1,12 @@
 [package]
-name = "dioxus-nox-internal"
+name = "dioxus-nox-core"
 version.workspace = true
 edition.workspace = true
-description = "Shared internal utilities for dioxus-nox crates (not published)"
+description = "Core utilities for dioxus-nox — focus trap, scroll lock, and inert management"
 license.workspace = true
 repository.workspace = true
-publish = false
+keywords = ["dioxus", "a11y", "focus-trap", "modal", "ui"]
+categories = ["gui", "web-programming", "accessibility"]
 
 [dependencies]
 dioxus = { workspace = true }

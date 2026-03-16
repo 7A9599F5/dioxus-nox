@@ -37,14 +37,14 @@ Follow existing patterns from `dioxus-nox-tabs`, `dioxus-nox-shell`, etc.:
 
 Focus trap and scroll lock are needed by both `dioxus-nox-modal` and `dioxus-nox-drawer`. Rather than duplicating, create a shared internal crate.
 
-### Plan: `dioxus-nox-internal` (private, not published)
+### Plan: `dioxus-nox-core`
 
 **Rationale:** cmdk already has focus trap (`crates/cmdk/src/helpers.rs:195-238`) and inert sibling management (`helpers.rs:122-192`). Extract these into a shared private crate so modal, drawer, and cmdk can all depend on it.
 
 **File tree:**
 ```
-crates/internal/
-├── Cargo.toml              — private crate (publish = false), deps: dioxus, web-sys, wasm-bindgen
+crates/core/
+├── Cargo.toml              — deps: dioxus, web-sys, wasm-bindgen
 ├── src/
 │   ├── lib.rs              — module declarations, re-exports
 │   ├── focus_trap.rs       — get_focusable_elements_in_container(), cycle_focus_forward/backward()
@@ -59,7 +59,7 @@ crates/internal/
 - `pub fn set_siblings_inert(root_id: &str, inert: bool)` — background inert management
 - `pub fn lock_body_scroll()` / `pub fn unlock_body_scroll()` — body overflow toggling
 
-**Migration:** After creating this crate, update `dioxus-nox-cmdk` to depend on `dioxus-nox-internal` and remove the duplicated helpers from `cmdk/src/helpers.rs`.
+**Migration:** After creating this crate, update `dioxus-nox-cmdk` to depend on `dioxus-nox-core` and remove the duplicated helpers from `cmdk/src/helpers.rs`.
 
 ---
 
@@ -135,7 +135,7 @@ crates/timer/
 **File tree:**
 ```
 crates/modal/
-├── Cargo.toml              — deps: dioxus, dioxus-nox-internal
+├── Cargo.toml              — deps: dioxus, dioxus-nox-core
 ├── README.md               — usage examples with compound component pattern
 ├── src/
 │   ├── lib.rs              — module declarations, re-exports, `pub mod modal { ... }` namespace
@@ -157,7 +157,7 @@ crates/modal/
 - `ModalHandle` from `use_modal(initial_open)`: `open: Signal<bool>`, `show/close/toggle: Callback<()>`
 - Compound pattern: `ModalRoot` provides `ModalContext` via `use_context_provider`, `ModalOverlay`/`ModalContent` consume it
 - `ModalRoot` renders nothing when `open = false`
-- Use `dioxus-nox-internal` for focus trap and scroll lock
+- Use `dioxus-nox-core` for focus trap and scroll lock
 - Generate unique IDs for `aria-labelledby` association
 
 **ARIA contract:**
@@ -185,7 +185,7 @@ crates/modal/
 **File tree:**
 ```
 crates/drawer/
-├── Cargo.toml              — deps: dioxus, dioxus-nox-internal
+├── Cargo.toml              — deps: dioxus, dioxus-nox-core
 ├── README.md               — usage examples showing all four sides
 ├── src/
 │   ├── lib.rs              — module declarations, re-exports, `pub mod drawer { ... }` namespace
@@ -205,7 +205,7 @@ crates/drawer/
 - `DrawerSide` enum: `Left`, `Right` (default), `Bottom`, `Top`
 - `DrawerRoot` props: `open: bool`, `on_close: EventHandler<()>`, `side: DrawerSide`, `close_on_escape: bool`, `close_on_overlay: bool`, `lock_scroll: bool`
 - Compound pattern: `DrawerRoot` provides `DrawerContext`, `DrawerOverlay`/`DrawerContent` consume it
-- Shares focus-trap and scroll-lock with modal via `dioxus-nox-internal`
+- Shares focus-trap and scroll-lock with modal via `dioxus-nox-core`
 - Renders nothing when `open = false`
 
 **ARIA contract:**
@@ -620,7 +620,7 @@ dioxus = ["dep:dioxus"]
 3. Verify umbrella crate: `cargo check -p dioxus-nox --features full`
 
 ### Integration checks
-- After Wave 1: verify `dioxus-nox-internal` is used by both modal and drawer (no duplicated focus trap code)
+- After Wave 1: verify `dioxus-nox-core` is used by both modal and drawer (no duplicated focus trap code)
 - After Wave 4: verify `dioxus-nox-cmdk` still works after extracting helpers to internal crate
 - After Wave 4: verify `dioxus-nox-shell` and `dioxus-nox-dnd` pass existing tests after enhancements
 
@@ -633,7 +633,7 @@ dioxus = ["dep:dioxus"]
 
 1. **Timer time dependency**: Use raw i64 millisecond timestamps with platform-specific `now_ms()`. Wasm: `js_sys::Date::now()`. Desktop/iOS/Android: `std::time::SystemTime`. No chrono dependency.
 2. **Toast IDs**: Default `u64` atomic counter (zero deps). Optional `uuid` feature flag for persistence scenarios.
-3. **Shared utilities**: Separate `dioxus-nox-internal` crate (`publish = false`). Modal, drawer, and cmdk all depend on it.
+3. **Shared utilities**: Separate `dioxus-nox-core` crate. Modal, drawer, and cmdk all depend on it.
 4. **Password extensibility**: `assess_password_strength` accepts custom check functions. `default_checks()` provided as convenience.
 
 ## Open Questions

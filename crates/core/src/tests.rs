@@ -1,4 +1,4 @@
-//! Unit tests for dioxus-nox-internal.
+//! Unit tests for dioxus-nox-core.
 //!
 //! Note: DOM-dependent functions (focus trap, inert, scroll lock) are no-ops
 //! on non-wasm targets. These tests verify the non-wasm stubs compile and

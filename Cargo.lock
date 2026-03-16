@@ -1284,6 +1284,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dioxus-nox-core"
+version = "0.13.0"
+dependencies = [
+ "dioxus",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "dioxus-nox-cycle"
 version = "0.13.0"
 dependencies = [
@@ -1309,7 +1318,7 @@ name = "dioxus-nox-drawer"
 version = "0.13.0"
 dependencies = [
  "dioxus",
- "dioxus-nox-internal",
+ "dioxus-nox-core",
 ]
 
 [[package]]
@@ -1340,15 +1349,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dioxus-nox-internal"
-version = "0.13.0"
-dependencies = [
- "dioxus",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "dioxus-nox-markdown"
 version = "0.13.0"
 dependencies = [
@@ -1373,7 +1373,7 @@ name = "dioxus-nox-modal"
 version = "0.13.0"
 dependencies = [
  "dioxus",
- "dioxus-nox-internal",
+ "dioxus-nox-core",
 ]
 
 [[package]]

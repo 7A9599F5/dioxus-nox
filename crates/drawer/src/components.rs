@@ -55,23 +55,23 @@ pub fn Root(
     // Scroll lock effect.
     use_effect(move || {
         if open && lock_scroll {
-            dioxus_nox_internal::lock_body_scroll();
+            dioxus_nox_core::lock_body_scroll();
         } else {
-            dioxus_nox_internal::unlock_body_scroll();
+            dioxus_nox_core::unlock_body_scroll();
         }
     });
 
     // Background inert effect.
     let root_id_for_inert = root_id.clone();
     use_effect(move || {
-        dioxus_nox_internal::set_siblings_inert(&root_id_for_inert, open);
+        dioxus_nox_core::set_siblings_inert(&root_id_for_inert, open);
     });
 
     // Cleanup on unmount.
     let root_id_for_cleanup = root_id.clone();
     use_drop(move || {
-        dioxus_nox_internal::unlock_body_scroll();
-        dioxus_nox_internal::set_siblings_inert(&root_id_for_cleanup, false);
+        dioxus_nox_core::unlock_body_scroll();
+        dioxus_nox_core::set_siblings_inert(&root_id_for_cleanup, false);
     });
 
     if !open {
@@ -92,7 +92,7 @@ pub fn Root(
                 if trap_focus && (evt.key() == Key::Tab) {
                     evt.prevent_default();
                     let forward = !evt.modifiers().shift();
-                    dioxus_nox_internal::cycle_focus(&root_id, forward);
+                    dioxus_nox_core::cycle_focus(&root_id, forward);
                 }
             },
             {children}
