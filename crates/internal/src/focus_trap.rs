@@ -60,23 +60,23 @@ pub fn cycle_focus(container_id: &str, forward: bool) {
         .and_then(|w| w.document())
         .and_then(|d| d.active_element());
 
-    let current_index = active.and_then(|active_el| {
-        use wasm_bindgen::JsCast;
-        let active_html: &web_sys::HtmlElement = active_el.unchecked_ref();
-        focusables
-            .iter()
-            .position(|el| std::ptr::eq(el as *const _, active_html as *const _))
-    });
-
-    // If we can't find the active element in our focusables, find by equality check
-    let current_index = current_index.or_else(|| {
-        active.and_then(|active_el| {
-            focusables.iter().position(|el| {
-                let el_ref: &web_sys::Element = el.as_ref();
-                *el_ref == active_el
-            })
+    let current_index = active
+        .as_ref()
+        .and_then(|active_el| {
+            use wasm_bindgen::JsCast;
+            let active_html: &web_sys::HtmlElement = active_el.unchecked_ref();
+            focusables
+                .iter()
+                .position(|el| std::ptr::eq(el as *const _, active_html as *const _))
         })
-    });
+        .or_else(|| {
+            active.as_ref().and_then(|active_el| {
+                focusables.iter().position(|el| {
+                    let el_ref: &web_sys::Element = el.as_ref();
+                    *el_ref == *active_el
+                })
+            })
+        });
 
     let next_index = match current_index {
         Some(idx) => {

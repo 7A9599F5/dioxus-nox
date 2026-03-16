@@ -12,7 +12,7 @@ use crate::types::Toast;
 #[component]
 pub fn ToastViewport<T: Clone + PartialEq + 'static>(
     /// Render function for each toast.
-    render_toast: fn(Toast<T>) -> Element,
+    render_toast: Callback<Toast<T>, Element>,
 ) -> Element {
     let mut manager: ToastManager<T> = use_context();
 
