@@ -12,14 +12,26 @@ Headless component library for [Dioxus 0.7](https://dioxuslabs.com/) (Rust/WASM)
 
 | Crate | Purpose |
 |---|---|
+| `dioxus-nox` | Umbrella crate — re-exports all components with feature flags |
+| `dioxus-nox-core` | Core utilities — focus trap, scroll lock, and inert management |
 | `dioxus-nox-cmdk` | Headless command palette primitive |
-| `dioxus-nox-virtualize` | Virtual list viewport math |
+| `dioxus-nox-cycle` | Generic value cycling hook |
 | `dioxus-nox-dnd` | Composable drag-and-drop |
+| `dioxus-nox-drawer` | Headless drawer/sheet primitive — slides from any edge |
 | `dioxus-nox-extensions` | Runtime plugin system |
 | `dioxus-nox-gestures` | Touch gesture primitives (swipe, long-press) |
+| `dioxus-nox-inline-confirm` | Headless inline confirmation pattern |
+| `dioxus-nox-markdown` | Headless markdown editor/previewer/display |
+| `dioxus-nox-master-detail` | Headless adaptive master-detail layout |
+| `dioxus-nox-modal` | Headless modal dialog with focus trap and ARIA |
+| `dioxus-nox-password-strength` | Pure-logic password strength assessment with optional Dioxus hook |
 | `dioxus-nox-preview` | Debounced preview hook + LRU cache |
 | `dioxus-nox-shell` | Application shell layout primitive |
 | `dioxus-nox-suggest` | Inline-trigger suggestion primitive |
+| `dioxus-nox-tabs` | Headless tab management primitives |
 | `dioxus-nox-tag-input` | Headless tag/multi-select input |
-| `dioxus-nox-markdown` | Headless markdown editor/previewer/display |
+| `dioxus-nox-timer` | Headless countdown and stopwatch timer hooks |
+| `dioxus-nox-toast` | Headless toast notification system with queue management and auto-dismiss |
+| `dioxus-nox-toggle-group` | Headless toggle group / segmented control with ARIA radiogroup semantics |
+| `dioxus-nox-virtualize` | Virtual list viewport math |
 | `noxpad` | Integration demo app |
