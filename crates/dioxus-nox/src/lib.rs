@@ -51,6 +51,9 @@ pub use dioxus_nox_extensions as extensions;
 #[cfg(feature = "gestures")]
 pub use dioxus_nox_gestures as gestures;
 
+#[cfg(feature = "tabs")]
+pub use dioxus_nox_tabs as tabs;
+
 /// Convenience re-exports of the most commonly used types.
 ///
 /// ```rust,ignore
@@ -100,4 +103,7 @@ pub mod prelude {
 
     #[cfg(feature = "gestures")]
     pub use dioxus_nox_gestures::{SwipeConfig, swipe_actions, use_long_press, use_swipe_gesture};
+
+    #[cfg(feature = "tabs")]
+    pub use dioxus_nox_tabs::{ActivationMode, Orientation as TabsOrientation, tabs};
 }

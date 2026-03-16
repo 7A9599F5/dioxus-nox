@@ -1255,6 +1255,7 @@ dependencies = [
  "dioxus-nox-preview",
  "dioxus-nox-shell",
  "dioxus-nox-suggest",
+ "dioxus-nox-tabs",
  "dioxus-nox-tag-input",
  "dioxus-nox-virtualize",
 ]
@@ -1337,6 +1338,13 @@ dependencies = [
 
 [[package]]
 name = "dioxus-nox-suggest"
+version = "0.13.0"
+dependencies = [
+ "dioxus",
+]
+
+[[package]]
+name = "dioxus-nox-tabs"
 version = "0.13.0"
 dependencies = [
  "dioxus",

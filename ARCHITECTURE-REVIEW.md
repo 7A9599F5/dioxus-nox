@@ -12,14 +12,14 @@
 
 ---
 
-### [PARTIALLY IMPLEMENTED] [PRIORITY: High]
+### [IMPLEMENTED] ~~[PRIORITY: High]~~
 **Area:** Feature Assessment — Incomplete/Stub Crates
 **Problem:** Two workspace-declared crates are completely empty:
 - ~~`crates/extensions/src/lib.rs` (13 lines) — only doc comments describing a "Planned API" with references to non-existent SPEC.md and BUILD_PROMPT.md~~ **IMPLEMENTED**: extensions crate now provides a runtime plugin system with `Extension` trait, `PluginCommand` struct, `ExtensionContext` (signal-based registry with O(1) lookup), `use_extensions` hook returning `ExtensionHandle`, and `filter_commands` search. 21 unit tests covering types, trait implementation, lifecycle tracking, and command filtering.
 - ~~`crates/gestures/src/lib.rs` (11 lines) — same pattern, only planned API docs~~ **IMPLEMENTED**: gestures crate now provides a layered API (pure math, hooks, compound components) for swipe-to-reveal and long-press gestures, integrated into noxpad sidebar.
-- `crates/tabs/` — empty directory with only a `.gitignore`, no `Cargo.toml`, not in workspace
+- ~~`crates/tabs/` — empty directory with only a `.gitignore`, no `Cargo.toml`, not in workspace~~ **IMPLEMENTED**: tabs crate now provides headless tab management primitives following the WAI-ARIA Tabs pattern. Compound components (`tabs::Root`, `tabs::List`, `tabs::Trigger`, `tabs::Content`) with proper ARIA roles (`tablist`, `tab`, `tabpanel`), `aria-selected`, `aria-controls`/`aria-labelledby` linking, keyboard navigation (Arrow keys, Home/End with orientation-aware axis), automatic/manual activation modes, disabled tab support, data attributes for styling (`data-state`, `data-tabs-orientation`, `data-disabled`), controlled/uncontrolled state management, and tab close with smart active-tab fallback. 14 unit tests covering navigation, orientation, activation modes, and ID generation.
 
-**Suggestion:** ~~These stub crates MUST be implemented with their planned APIs. The `extensions` crate should implement its runtime plugin system (`Extension` trait, `PluginCommand`, `ExtensionHandle`).~~ Done. The `tabs/` directory needs a `Cargo.toml` and implementation of a headless tab management crate. Do NOT remove these crates — they represent planned functionality.
+**Suggestion:** ~~These stub crates MUST be implemented with their planned APIs. The `extensions` crate should implement its runtime plugin system (`Extension` trait, `PluginCommand`, `ExtensionHandle`).~~ Done. ~~The `tabs/` directory needs a `Cargo.toml` and implementation of a headless tab management crate.~~ Done. Do NOT remove these crates — they represent planned functionality.
 
 **Expected Impact:** Complete component library coverage; all workspace crates deliver real functionality.
 

@@ -18,6 +18,7 @@ members = [
     "crates/cmdk/examples/command_palette_pages",
     "crates/noxpad",
     "crates/suggest/examples/suggest-demo",
+    "crates/tabs",
 ]
 resolver = "2"
 
@@ -48,5 +49,6 @@ dioxus-nox-tag-input = { path = "crates/tag-input", version = "=0.13.0" }
 dioxus-nox-preview = { path = "crates/preview", version = "=0.13.0" }
 dioxus-nox-extensions = { path = "crates/extensions", version = "=0.13.0" }
 dioxus-nox-gestures = { path = "crates/gestures", version = "=0.13.0" }
+dioxus-nox-tabs = { path = "crates/tabs", version = "=0.13.0" }
 dioxus-nox = { path = "crates/dioxus-nox", version = "=0.13.0" }
 syntect = { version = "5.3", default-features = false }

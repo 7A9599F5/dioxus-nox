@@ -20,9 +20,10 @@ dioxus-nox-virtualize = { workspace = true, optional = true }
 dioxus-nox-preview    = { workspace = true, optional = true }
 dioxus-nox-extensions = { workspace = true, optional = true }
 dioxus-nox-gestures   = { workspace = true, optional = true }
+dioxus-nox-tabs       = { workspace = true, optional = true }
 
 [features]
-default = ["shell", "cmdk", "dnd", "tag-input", "suggest", "preview"]
+default = ["shell", "cmdk", "dnd", "tag-input", "suggest", "preview", "tabs"]
 
 # Per-crate gates
 cmdk       = ["dep:dioxus-nox-cmdk"]
@@ -35,11 +36,12 @@ virtualize = ["dep:dioxus-nox-virtualize"]
 preview    = ["dep:dioxus-nox-preview"]
 extensions = ["dep:dioxus-nox-extensions"]
 gestures   = ["dep:dioxus-nox-gestures"]
+tabs       = ["dep:dioxus-nox-tabs"]
 
 # All-in-one
 full = [
     "cmdk", "dnd", "markdown", "shell", "suggest",
-    "tag-input", "virtualize", "preview", "extensions", "gestures",
+    "tag-input", "virtualize", "preview", "extensions", "gestures", "tabs",
 ]
 
 # Sub-crate feature pass-through
