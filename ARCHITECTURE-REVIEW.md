@@ -150,13 +150,15 @@ DragContext fields changed from private to `pub(super)` for submodule access. No
 
 ---
 
-### [PRIORITY: Medium]
+### [IMPLEMENTED] ~~[PRIORITY: Medium]~~
 **Area:** Performance — cmdk CommandContext Signal Count
 **Problem:** `CommandContext` (crates/cmdk/src/context.rs) contains 30+ signals/memos. Every palette instance allocates this entire state surface. While Dioxus signals are lightweight, the derived memos (`scored_items`, `filtered_count`, `visible_items`, `visible_item_ids`, `visible_item_set`, `visible_group_ids`, `active_mode`, `mode_query`, `active_page`) create a complex dependency graph that re-evaluates on many state changes.
 
 The comments reference optimization tickets (P-050, P-051, P-052) indicating awareness of this, and the optimizations applied (Rc wrapping, HashMap index, merged memo) are sensible.
 
-**Suggestion:** Consider lazy initialization for rarely-used features (action panel, page navigation, modes) — initialize those signals only when the feature is first used. This would reduce baseline memory for simple palette use cases.
+**Suggestion:** ~~Consider lazy initialization for rarely-used features (action panel, page navigation, modes) — initialize those signals only when the feature is first used. This would reduce baseline memory for simple palette use cases.~~
+
+**IMPLEMENTED**: Grouped 9 optional signals into 3 lazily-initialized feature sub-structs (`PageFeature`, `ModeFeature`, `ActionPanelFeature`), each stored behind a `Signal<Option<T>>` on `CommandContext`. Simple palettes that don't use pages, modes, or action panels now allocate 3 wrapper signals instead of 9 individual signals. Features are lazily initialized via `ensure_pages()`, `ensure_modes()`, `ensure_action_panel()` on first use (e.g., `register_page`, `register_mode`, `CommandAction` mount). Memos (`active_page`, `active_mode`) read the wrapper signals reactively and short-circuit to `None` when the feature is uninitialized — identical behavior to the previous empty-collection case. Helper methods (`peek_action_panel_open`, `read_action_panel`, etc.) provide clean access patterns. All 329 cmdk tests pass. No public API changes for consumers — the feature structs and `CommandContext` fields are pub.
 
 **Expected Impact:** Lower memory footprint and fewer memo re-evaluations for the common "simple search palette" case.
 

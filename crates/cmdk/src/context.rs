@@ -21,6 +21,31 @@ use crate::types::{
     ModeRegistration, PageRegistration, ScoredItem, ScoringStrategy,
 };
 
+/// Lazily initialized page navigation state.
+/// Created on first `register_page` / `push_page` call — simple palettes that
+/// don't use pages never allocate these signals.
+#[derive(Clone, Copy)]
+pub struct PageFeature {
+    pub pages: Signal<Vec<PageRegistration>>,
+    pub page_stack: Signal<Vec<String>>,
+    pub page_data: Signal<Option<Rc<dyn Any>>>,
+}
+
+/// Lazily initialized command mode state.
+/// Created on first `register_mode` call.
+#[derive(Clone, Copy)]
+pub struct ModeFeature {
+    pub modes: Signal<Vec<ModeRegistration>>,
+}
+
+/// Lazily initialized action panel state (P-039).
+/// Created on first `open_action_panel` or `CommandAction` mount.
+#[derive(Clone, Copy)]
+pub struct ActionPanelFeature {
+    pub panel: Signal<Option<ActionPanelState>>,
+    pub items: Signal<Vec<ActionRegistration>>,
+}
+
 /// Central state for a command palette instance.
 #[derive(Clone, Copy)]
 pub struct CommandContext {
@@ -50,13 +75,12 @@ pub struct CommandContext {
     /// measure the reference element's bounding rect for placement computation.
     /// Falls back to `input_element` when `None`.
     pub anchor_element: Signal<Option<Rc<MountedData>>>,
-    pub pages: Signal<Vec<PageRegistration>>,
-    pub page_stack: Signal<Vec<String>>,
+    /// Lazily initialized page navigation. `None` until first page registration or push.
+    pub page_feature: Signal<Option<PageFeature>>,
     pub active_page: Memo<Option<String>>,
     pub scoring_strategy: Signal<Option<Rc<dyn ScoringStrategy>>>,
-    /// Arbitrary data passed during page navigation.
-    pub page_data: Signal<Option<Rc<dyn Any>>>,
-    pub modes: Signal<Vec<ModeRegistration>>,
+    /// Lazily initialized command modes. `None` until first mode registration.
+    pub mode_feature: Signal<Option<ModeFeature>>,
     /// The currently active mode, derived from the search prefix.
     pub active_mode: Memo<Option<ModeRegistration>>,
     /// The search query with the mode prefix stripped.
@@ -89,10 +113,8 @@ pub struct CommandContext {
     /// Used to restore focus when the palette closes. `None` on non-wasm or if
     /// the previously focused element had no `id` attribute.
     pub focused_before_id: Signal<Option<String>>,
-    /// P-039: State for the action panel overlay (which item, active action index).
-    pub action_panel: Signal<Option<ActionPanelState>>,
-    /// P-039: Actions registered by the currently visible [`CommandActionPanel`](crate::CommandActionPanel).
-    pub action_items: Signal<Vec<ActionRegistration>>,
+    /// P-039: Lazily initialized action panel. `None` until first action registration or open.
+    pub action_panel_feature: Signal<Option<ActionPanelFeature>>,
     pub(crate) instance_id: u32,
 }
 
@@ -103,6 +125,80 @@ impl PartialEq for CommandContext {
 }
 
 impl CommandContext {
+    // ── Lazy feature initialization ─────────────────────────────────────
+
+    /// Lazily initialize the page navigation feature, returning the inner struct.
+    pub(crate) fn ensure_pages(&self) -> PageFeature {
+        if let Some(feat) = *self.page_feature.peek() {
+            return feat;
+        }
+        let feat = PageFeature {
+            pages: Signal::new(Vec::new()),
+            page_stack: Signal::new(Vec::new()),
+            page_data: Signal::new(None),
+        };
+        let mut pf = self.page_feature;
+        pf.set(Some(feat));
+        feat
+    }
+
+    /// Lazily initialize the mode feature, returning the inner struct.
+    pub(crate) fn ensure_modes(&self) -> ModeFeature {
+        if let Some(feat) = *self.mode_feature.peek() {
+            return feat;
+        }
+        let feat = ModeFeature {
+            modes: Signal::new(Vec::new()),
+        };
+        let mut mf = self.mode_feature;
+        mf.set(Some(feat));
+        feat
+    }
+
+    /// Lazily initialize the action panel feature, returning the inner struct.
+    pub(crate) fn ensure_action_panel(&self) -> ActionPanelFeature {
+        if let Some(feat) = *self.action_panel_feature.peek() {
+            return feat;
+        }
+        let feat = ActionPanelFeature {
+            panel: Signal::new(None),
+            items: Signal::new(Vec::new()),
+        };
+        let mut af = self.action_panel_feature;
+        af.set(Some(feat));
+        feat
+    }
+
+    // ── Feature read helpers ────────────────────────────────────────────
+
+    /// Check if the action panel is currently open (non-reactive peek).
+    pub(crate) fn peek_action_panel_open(&self) -> bool {
+        let feat = self.action_panel_feature.peek();
+        if let Some(ref af) = *feat {
+            af.panel.peek().is_some()
+        } else {
+            false
+        }
+    }
+
+    /// Check if there are registered action items (non-reactive peek).
+    pub(crate) fn peek_has_action_items(&self) -> bool {
+        let feat = self.action_panel_feature.peek();
+        if let Some(ref af) = *feat {
+            !af.items.peek().is_empty()
+        } else {
+            false
+        }
+    }
+
+    /// Read the action panel state reactively.
+    pub fn read_action_panel(&self) -> Option<ActionPanelState> {
+        let feat = *self.action_panel_feature.read();
+        feat.and_then(|af| af.panel.read().clone())
+    }
+
+    // ── Item registration ───────────────────────────────────────────────
+
     /// Register an item. Called by CommandItem on mount.
     pub fn register_item(&self, reg: ItemRegistration) {
         let id = reg.id.clone();
@@ -140,22 +236,26 @@ impl CommandContext {
 
     /// Register a page. Called by CommandPage on mount.
     pub fn register_page(&self, reg: PageRegistration) {
-        let mut pages = self.pages;
+        let pf = self.ensure_pages();
+        let mut pages = pf.pages;
         pages.write().push(reg);
     }
 
     /// Unregister a page by ID. Called by CommandPage on drop.
     /// Also removes the page from the stack if present.
     pub fn unregister_page(&self, id: &str) {
-        let mut pages = self.pages;
-        pages.write().retain(|p| p.id != id);
-        let mut stack = self.page_stack;
-        stack.write().retain(|s| s != id);
+        if let Some(pf) = *self.page_feature.peek() {
+            let mut pages = pf.pages;
+            pages.write().retain(|p| p.id != id);
+            let mut stack = pf.page_stack;
+            stack.write().retain(|s| s != id);
+        }
     }
 
     /// Push a page onto the navigation stack and clear search.
     pub fn push_page(&self, page_id: &str) {
-        let mut stack = self.page_stack;
+        let pf = self.ensure_pages();
+        let mut stack = pf.page_stack;
         stack.write().push(page_id.to_string());
         let mut search = self.search;
         search.set(String::new());
@@ -163,26 +263,30 @@ impl CommandContext {
 
     /// Push a page with associated data.
     pub fn push_page_with_data(&self, page_id: &str, data: Rc<dyn Any>) {
-        let mut pd = self.page_data;
+        let pf = self.ensure_pages();
+        let mut pd = pf.page_data;
         pd.set(Some(data));
         self.push_page(page_id);
     }
 
     /// Get the current page's data, downcast to the expected type.
     pub fn get_page_data<T: 'static>(&self) -> Option<Rc<T>> {
-        let data = self.page_data.read();
+        let feat = self.page_feature.peek();
+        let pf = (*feat).as_ref()?;
+        let data = pf.page_data.read();
         data.as_ref().and_then(|d| d.clone().downcast::<T>().ok())
     }
 
     /// Pop the top page from the stack and clear search.
     /// Returns the popped page ID, or None if stack was empty.
     pub fn pop_page(&self) -> Option<String> {
-        let mut stack = self.page_stack;
+        let pf = (*self.page_feature.peek())?;
+        let mut stack = pf.page_stack;
         let popped = stack.write().pop();
         if popped.is_some() {
             let mut search = self.search;
             search.set(String::new());
-            let mut pd = self.page_data;
+            let mut pd = pf.page_data;
             pd.set(None);
         }
         popped
@@ -190,13 +294,15 @@ impl CommandContext {
 
     /// Clear the page stack (return to root) and clear search.
     pub fn clear_pages(&self) {
-        let mut stack = self.page_stack;
-        if !stack.read().is_empty() {
-            stack.write().clear();
-            let mut search = self.search;
-            search.set(String::new());
-            let mut pd = self.page_data;
-            pd.set(None);
+        if let Some(pf) = *self.page_feature.peek() {
+            let mut stack = pf.page_stack;
+            if !stack.read().is_empty() {
+                stack.write().clear();
+                let mut search = self.search;
+                search.set(String::new());
+                let mut pd = pf.page_data;
+                pd.set(None);
+            }
         }
     }
 
@@ -230,14 +336,17 @@ impl CommandContext {
 
     /// Register a mode.
     pub fn register_mode(&self, reg: ModeRegistration) {
-        let mut modes = self.modes;
+        let mf = self.ensure_modes();
+        let mut modes = mf.modes;
         modes.write().push(reg);
     }
 
     /// Unregister a mode by ID.
     pub fn unregister_mode(&self, id: &str) {
-        let mut modes = self.modes;
-        modes.write().retain(|m| m.id != id);
+        if let Some(mf) = *self.mode_feature.peek() {
+            let mut modes = mf.modes;
+            modes.write().retain(|m| m.id != id);
+        }
     }
 
     /// Navigate to the next visible item.
@@ -480,7 +589,8 @@ impl CommandContext {
 
     /// Open the action panel for the item with the given ID.
     pub fn open_action_panel(&mut self, item_id: String) {
-        self.action_panel.set(Some(ActionPanelState {
+        let mut af = self.ensure_action_panel();
+        af.panel.set(Some(ActionPanelState {
             item_id,
             active_idx: 0,
         }));
@@ -488,16 +598,21 @@ impl CommandContext {
 
     /// Close the action panel.
     pub fn close_action_panel(&mut self) {
-        self.action_panel.set(None);
+        if let Some(mut af) = *self.action_panel_feature.peek() {
+            af.panel.set(None);
+        }
     }
 
     /// Move selection to the next action in the panel.
     pub fn select_next_action(&mut self) {
-        let count = self.action_items.read().len();
+        let Some(mut af) = *self.action_panel_feature.peek() else {
+            return;
+        };
+        let count = af.items.read().len();
         if count == 0 {
             return;
         }
-        let mut panel = self.action_panel.write();
+        let mut panel = af.panel.write();
         if let Some(ref mut state) = *panel {
             state.active_idx = (state.active_idx + 1) % count;
         }
@@ -505,11 +620,14 @@ impl CommandContext {
 
     /// Move selection to the previous action in the panel.
     pub fn select_prev_action(&mut self) {
-        let count = self.action_items.read().len();
+        let Some(mut af) = *self.action_panel_feature.peek() else {
+            return;
+        };
+        let count = af.items.read().len();
         if count == 0 {
             return;
         }
-        let mut panel = self.action_panel.write();
+        let mut panel = af.panel.write();
         if let Some(ref mut state) = *panel {
             state.active_idx = if state.active_idx == 0 {
                 count - 1
@@ -521,9 +639,12 @@ impl CommandContext {
 
     /// Execute the currently active action, or fall back to the default on_select.
     pub fn confirm_action(&mut self) {
-        let panel_state = self.action_panel.read().clone();
+        let Some(af) = *self.action_panel_feature.peek() else {
+            return;
+        };
+        let panel_state = af.panel.read().clone();
         let Some(state) = panel_state else { return };
-        let items = self.action_items.read();
+        let items = af.items.read();
         let handler = items.get(state.active_idx).and_then(|reg| reg.on_action);
         let has_action = items.get(state.active_idx).is_some();
         drop(items);
@@ -598,12 +719,12 @@ pub(crate) fn init_command_context(
     let custom_filter_sig: Signal<Option<CustomFilter>> = use_signal(|| custom_filter);
     let input_element: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
     let anchor_element: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
-    let pages: Signal<Vec<PageRegistration>> = use_signal(Vec::new);
-    let page_stack: Signal<Vec<String>> = use_signal(Vec::new);
+    // Lazy feature wrappers — None until the feature is first used.
+    let page_feature: Signal<Option<PageFeature>> = use_signal(|| None);
+    let mode_feature: Signal<Option<ModeFeature>> = use_signal(|| None);
+    let action_panel_feature: Signal<Option<ActionPanelFeature>> = use_signal(|| None);
     let scoring_strategy_sig: Signal<Option<Rc<dyn ScoringStrategy>>> =
         use_signal(|| scoring_strategy);
-    let page_data: Signal<Option<Rc<dyn Any>>> = use_signal(|| None);
-    let modes: Signal<Vec<ModeRegistration>> = use_signal(Vec::new);
     let label_sig: Signal<Option<String>> = use_signal(|| label);
     let disable_pointer_selection_sig = use_signal(|| disable_pointer_selection);
     let vim_bindings_sig = use_signal(|| vim_bindings);
@@ -618,16 +739,22 @@ pub(crate) fn init_command_context(
     let debounce_task: Rc<RefCell<Option<dioxus_core::Task>>> =
         use_hook(|| Rc::new(RefCell::new(None)));
 
-    // Active page = top of stack (None = root)
-    let active_page = use_memo(move || page_stack.read().last().cloned());
+    // Active page = top of stack (None = root). Reads page_feature wrapper reactively.
+    let active_page = use_memo(move || {
+        let feat = page_feature.read();
+        feat.as_ref()
+            .and_then(|pf| pf.page_stack.read().last().cloned())
+    });
 
-    // Derive active mode from search prefix
+    // Derive active mode from search prefix. Reads mode_feature wrapper reactively.
     let active_mode = use_memo(move || {
         let query = search.read();
         if query.is_empty() {
             return None;
         }
-        let modes_list = modes.read();
+        let feat = mode_feature.read();
+        let mf = feat.as_ref()?;
+        let modes_list = mf.modes.read();
         modes_list
             .iter()
             .find(|m| query.starts_with(&m.prefix))
@@ -916,12 +1043,10 @@ pub(crate) fn init_command_context(
         custom_filter: custom_filter_sig,
         input_element,
         anchor_element,
-        pages,
-        page_stack,
+        page_feature,
         active_page,
         scoring_strategy: scoring_strategy_sig,
-        page_data,
-        modes,
+        mode_feature,
         active_mode,
         mode_query,
         label: label_sig,
@@ -934,8 +1059,7 @@ pub(crate) fn init_command_context(
         inert_background,
         announcer,
         focused_before_id,
-        action_panel: Signal::new(None),
-        action_items: Signal::new(Vec::new()),
+        action_panel_feature,
         instance_id,
     };
 
