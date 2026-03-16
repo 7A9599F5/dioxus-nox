@@ -1,0 +1,13 @@
+[package]
+name = "dioxus-nox-tabs"
+version.workspace = true
+edition.workspace = true
+description = "Headless tab management primitives for Dioxus applications"
+license.workspace = true
+repository.workspace = true
+keywords = ["dioxus", "tabs", "headless", "ui", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
