@@ -30,6 +30,7 @@ dioxus-nox-cycle              = { workspace = true, optional = true }
 dioxus-nox-inline-confirm     = { workspace = true, optional = true }
 dioxus-nox-toggle-group       = { workspace = true, optional = true }
 dioxus-nox-password-strength  = { workspace = true, optional = true }
+dioxus-nox-select             = { workspace = true, optional = true }
 
 [features]
 default = ["shell", "cmdk", "dnd", "tag-input", "suggest", "preview", "tabs"]
@@ -55,13 +56,14 @@ cycle             = ["dep:dioxus-nox-cycle"]
 inline-confirm    = ["dep:dioxus-nox-inline-confirm"]
 toggle-group      = ["dep:dioxus-nox-toggle-group"]
 password-strength = ["dep:dioxus-nox-password-strength"]
+select            = ["dep:dioxus-nox-select"]
 
 # All-in-one
 full = [
     "cmdk", "dnd", "markdown", "shell", "suggest",
     "tag-input", "virtualize", "preview", "extensions", "gestures", "tabs",
     "timer", "modal", "drawer", "toast", "master-detail",
-    "cycle", "inline-confirm", "toggle-group", "password-strength",
+    "cycle", "inline-confirm", "toggle-group", "password-strength", "select",
 ]
 
 # Sub-crate feature pass-through
