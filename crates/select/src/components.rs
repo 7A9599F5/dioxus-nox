@@ -254,25 +254,13 @@ pub fn Trigger(
         }
     };
 
-    // Close on blur (click-outside)
+    // Close on blur (click-outside).
+    // Content uses `onmousedown: prevent_default()` which prevents the browser
+    // from moving focus away when clicking inside the listbox. So blur only
+    // fires when focus genuinely leaves the select — exactly when we want to close.
     let onblur = move |_: FocusEvent| {
-        // Use a small delay to allow click on items to fire first
         let mut ctx: SelectContext = consume_context();
-        // VERIFY: In Dioxus 0.7 onblur fires synchronously. We need a
-        // mechanism to delay the close so that mousedown on Item can fire.
-        // For now we use spawn to defer.
-        spawn(async move {
-            #[cfg(target_arch = "wasm32")]
-            {
-                // Small delay to allow mousedown to fire
-                _ = document::eval("await new Promise(r => setTimeout(r, 100))").await;
-            }
-            // Re-check: if focus moved to content, don't close
-            // This is a simplified approach; production would check activeElement
-            if ctx.is_open() {
-                ctx.set_open(false);
-            }
-        });
+        ctx.set_open(false);
     };
 
     rsx! {
@@ -478,15 +466,7 @@ pub fn Input(
 
     let onblur = move |_: FocusEvent| {
         let mut ctx: SelectContext = consume_context();
-        spawn(async move {
-            #[cfg(target_arch = "wasm32")]
-            {
-                _ = document::eval("await new Promise(r => setTimeout(r, 100))").await;
-            }
-            if ctx.is_open() {
-                ctx.set_open(false);
-            }
-        });
+        ctx.set_open(false);
     };
 
     rsx! {
@@ -859,8 +839,13 @@ pub fn Empty(
         return rsx! {};
     }
 
-    // Only show when there's a query (otherwise all items are visible)
+    // Don't show when there's no query (all items are visible when unfiltered)
     if ctx.search_query.read().is_empty() {
+        return rsx! {};
+    }
+
+    // Don't show if no items have registered yet — they may still be mounting
+    if ctx.items.read().is_empty() {
         return rsx! {};
     }
 

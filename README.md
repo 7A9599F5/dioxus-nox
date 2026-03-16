@@ -26,6 +26,7 @@ Headless component library for [Dioxus 0.7](https://dioxuslabs.com/) (Rust/WASM)
 | `dioxus-nox-modal` | Headless modal dialog with focus trap and ARIA |
 | `dioxus-nox-password-strength` | Pure-logic password strength assessment with optional Dioxus hook |
 | `dioxus-nox-preview` | Debounced preview hook + LRU cache |
+| `dioxus-nox-select` | Headless select / combobox / multiselect primitives |
 | `dioxus-nox-shell` | Application shell layout primitive |
 | `dioxus-nox-suggest` | Inline-trigger suggestion primitive |
 | `dioxus-nox-tabs` | Headless tab management primitives |

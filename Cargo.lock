@@ -1259,6 +1259,7 @@ dependencies = [
  "dioxus-nox-modal",
  "dioxus-nox-password-strength",
  "dioxus-nox-preview",
+ "dioxus-nox-select",
  "dioxus-nox-shell",
  "dioxus-nox-suggest",
  "dioxus-nox-tabs",

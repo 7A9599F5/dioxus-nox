@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 use nucleo_matcher::{Config, Matcher};
 
@@ -394,15 +397,15 @@ pub(crate) fn init_select_context(
     let has_input = use_signal(|| false);
     let custom_filter_sig = use_signal(|| custom_filter);
 
+    // Persist the nucleo Matcher across renders — allocated once (same pattern as cmdk).
+    let matcher = use_hook(|| Rc::new(RefCell::new(Matcher::new(Config::DEFAULT))));
+
     // Reactive memo for scored items (recalculates on items/query/filter change).
-    // The Matcher is kept alive across renders via use_hook to avoid re-allocation.
     let scored_items = use_memo(move || {
         let query = search_query.read().clone();
         let all_items = items.read();
         let cf = custom_filter_sig.read();
-        // VERIFY: use_hook inside use_memo may not work as expected in Dioxus 0.7.
-        // We create a fresh matcher per memo evaluation instead.
-        let mut m = Matcher::new(Config::DEFAULT);
+        let mut m = matcher.borrow_mut();
         filter::score_items(&all_items, &query, cf.as_ref(), &mut m)
     });
 

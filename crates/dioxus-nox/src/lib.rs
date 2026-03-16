@@ -81,6 +81,9 @@ pub use dioxus_nox_toggle_group as toggle_group;
 #[cfg(feature = "password-strength")]
 pub use dioxus_nox_password_strength as password_strength;
 
+#[cfg(feature = "select")]
+pub use dioxus_nox_select as select;
+
 /// Convenience re-exports of the most commonly used types.
 ///
 /// ```rust,ignore
@@ -166,4 +169,7 @@ pub mod prelude {
     pub use dioxus_nox_password_strength::{
         StrengthLevel, StrengthResult, assess_password_strength_default,
     };
+
+    #[cfg(feature = "select")]
+    pub use dioxus_nox_select::{AutoComplete, CustomFilter, SelectContext, select};
 }
