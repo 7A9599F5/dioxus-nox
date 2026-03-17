@@ -199,6 +199,97 @@ pub fn CommandRoot(
         }
     });
 
+    // Capture-phase keydown listener to preventDefault() on registered item shortcuts
+    // while the palette is open. Without this, browser defaults (Ctrl+P=print, Ctrl+S=save,
+    // Ctrl+H=history, Ctrl+N=new window, Ctrl+L=address bar) fire before Dioxus's
+    // delegated onkeydown handler can intercept them.
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::prelude::*;
+
+        let items = ctx.items;
+        let is_open = ctx.is_open;
+        type KbClosureHolder =
+            Rc<RefCell<Option<Closure<dyn FnMut(web_sys::KeyboardEvent)>>>>;
+        let shortcut_closure_holder: KbClosureHolder =
+            use_hook(|| Rc::new(RefCell::new(None)));
+
+        let ch = shortcut_closure_holder.clone();
+        use_effect(move || {
+            // Remove old listener first
+            if let Some(old_cl) = ch.borrow_mut().take() {
+                use wasm_bindgen::JsCast;
+                if let Some(w) = web_sys::window() {
+                    let _ = w.remove_event_listener_with_callback_and_bool(
+                        "keydown",
+                        old_cl.as_ref().unchecked_ref(),
+                        true,
+                    );
+                }
+            }
+
+            if !is_open() {
+                return;
+            }
+
+            let closure = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+                // Skip events without modifiers — no registered shortcut can match
+                if !event.ctrl_key() && !event.meta_key() && !event.alt_key() {
+                    return;
+                }
+                let key = event.key();
+                let items_list = items.peek();
+                for item in items_list.iter() {
+                    if item.disabled {
+                        continue;
+                    }
+                    if let Some(ref hk) = item.shortcut
+                        && hk.matches_raw(
+                            &key,
+                            event.ctrl_key(),
+                            event.shift_key(),
+                            event.alt_key(),
+                            event.meta_key(),
+                        )
+                    {
+                        event.prevent_default();
+                        return;
+                    }
+                }
+            })
+                as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+
+            if let Some(w) = web_sys::window() {
+                use wasm_bindgen::JsCast;
+                let _ = w.add_event_listener_with_callback_and_bool(
+                    "keydown",
+                    closure.as_ref().unchecked_ref(),
+                    true, // capture phase — fires before browser defaults
+                );
+            }
+            *ch.borrow_mut() = Some(closure);
+        });
+
+        let ch2 = shortcut_closure_holder.clone();
+        use_drop(move || {
+            if let Some(cl) = ch2.borrow_mut().take() {
+                use wasm_bindgen::JsCast;
+                if let Some(w) = web_sys::window() {
+                    let _ = w.remove_event_listener_with_callback_and_bool(
+                        "keydown",
+                        cl.as_ref().unchecked_ref(),
+                        true,
+                    );
+                }
+            }
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // Non-wasm: no browser shortcuts to intercept.
+        let _ = &ctx;
+    }
+
     // P-022: Tab/Shift+Tab focus trap — cycles within the palette container.
     let palette_root_id_trap = palette_root_dom_id.clone();
     let onkeydown_root = move |event: KeyboardEvent| {

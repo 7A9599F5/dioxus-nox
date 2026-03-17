@@ -1,13 +1,14 @@
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use nucleo_matcher::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
-use nucleo_matcher::{Matcher, Utf32Str};
+use nucleo_matcher::Matcher;
 
 use crate::types::{CustomFilter, ItemRegistration, ScoredItem, ScoringStrategy};
 
-/// Pure scoring function. Scores all items against the query, returning
-/// visible items sorted by descending score. Re-uses caller-owned `Matcher`
-/// and internal `Vec<char>` buffers to avoid per-call allocation.
+/// Score command items against a query.
+///
+/// Constructs a `ScoringConfig` from cmdk-specific item fields (hidden, force_mount,
+/// boost) and delegates to `dioxus_nox_collection::score_items`.
 pub fn score_items(
     items: &[Rc<ItemRegistration>],
     query: &str,
@@ -15,128 +16,76 @@ pub fn score_items(
     scoring_strategy: Option<&dyn ScoringStrategy>,
     matcher: &mut Matcher,
 ) -> Vec<ScoredItem> {
-    // Exclude hidden items before any scoring
-    let active_items: Vec<&ItemRegistration> = items
+    // Build ScoringConfig from per-item flags
+    let hidden_values: HashSet<String> = items
         .iter()
-        .map(|i| i.as_ref())
-        .filter(|i| !i.hidden)
+        .filter(|i| i.hidden)
+        .map(|i| i.id.clone())
+        .collect();
+    let force_mount_values: HashSet<String> = items
+        .iter()
+        .filter(|i| i.force_mount)
+        .map(|i| i.id.clone())
+        .collect();
+    let boosts: HashMap<String, i32> = items
+        .iter()
+        .filter(|i| i.boost != 0)
+        .map(|i| (i.id.clone(), i.boost))
         .collect();
 
-    if query.is_empty() {
-        return active_items
-            .iter()
-            .map(|item| ScoredItem {
-                id: item.id.clone(),
-                score: None,
-                match_indices: None,
-            })
-            .collect();
-    }
+    let has_config = !hidden_values.is_empty()
+        || !force_mount_values.is_empty()
+        || !boosts.is_empty()
+        || scoring_strategy.is_some();
 
-    // Custom filter path
-    if let Some(cf) = custom_filter {
-        return active_items
-            .iter()
-            .filter_map(|item| {
-                if item.force_mount {
-                    return Some(ScoredItem {
-                        id: item.id.clone(),
-                        score: None,
-                        match_indices: None,
-                    });
-                }
-                (cf.0)(query, &item.label, &item.keywords_cached).map(|score| ScoredItem {
-                    id: item.id.clone(),
-                    score: Some(score),
-                    match_indices: None,
-                })
-            })
-            .collect();
-    }
-
-    // Nucleo fuzzy matching with reused buffers
-    let pattern = Pattern::new(
-        query,
-        CaseMatching::Ignore,
-        Normalization::Smart,
-        AtomKind::Fuzzy,
-    );
-
-    let mut buf: Vec<char> = Vec::new();
-
-    let mut results: Vec<ScoredItem> = active_items
-        .iter()
-        .filter_map(|item| {
-            if item.force_mount {
-                return Some(ScoredItem {
-                    id: item.id.clone(),
-                    score: None,
-                    match_indices: None,
-                });
+    // Wrap the strategy reference in Rc for config (safe: lives for this call)
+    let strategy_rc: Option<Rc<dyn ScoringStrategy>> = scoring_strategy.map(|s| {
+        // Create a wrapper that holds a raw pointer — only valid for this call scope
+        struct StrategyRef(*const dyn ScoringStrategy);
+        impl ScoringStrategy for StrategyRef {
+            fn adjust_score(&self, value: &str, raw_score: u32, query: &str) -> Option<u32> {
+                unsafe { (*self.0).adjust_score(value, raw_score, query) }
             }
-            // Score against label with indices
-            buf.clear();
-            let haystack = Utf32Str::new(&item.label, &mut buf);
-            let mut label_indices: Vec<u32> = Vec::new();
-            let label_score = pattern.indices(haystack, matcher, &mut label_indices);
-
-            // Score against cached keywords (indices not needed — we only highlight the label)
-            buf.clear();
-            let kw_haystack = Utf32Str::new(&item.keywords_cached, &mut buf);
-            let kw_score = pattern.score(kw_haystack, matcher);
-
-            // Take the best score
-            let best = match (label_score, kw_score) {
-                (Some(a), Some(b)) => Some(a.max(b)),
-                (Some(a), None) => Some(a),
-                (None, Some(b)) => Some(b),
-                (None, None) => None,
-            };
-
-            let final_indices = if label_score.is_some() {
-                Some(label_indices)
-            } else {
-                None // Matched via keywords, no label highlights
-            };
-
-            best.map(|score| ScoredItem {
-                id: item.id.clone(),
-                score: Some((score as i32 + item.boost).max(0) as u32),
-                match_indices: final_indices,
-            })
-        })
-        .collect();
-
-    // Sort by score descending
-    results.sort_by(|a, b| {
-        let sa = a.score.unwrap_or(0);
-        let sb = b.score.unwrap_or(0);
-        sb.cmp(&sa)
+        }
+        Rc::new(StrategyRef(s as *const dyn ScoringStrategy)) as Rc<dyn ScoringStrategy>
     });
 
-    // Apply scoring strategy if provided
-    if let Some(strategy) = scoring_strategy {
-        results = results
-            .into_iter()
-            .filter_map(|si| match si.score {
-                Some(raw) => strategy
-                    .adjust_score(&si.id, raw, query)
-                    .map(|adjusted| ScoredItem {
-                        id: si.id,
-                        score: Some(adjusted),
-                        match_indices: si.match_indices,
-                    }),
-                None => Some(si), // force_mount / empty query — pass through
-            })
-            .collect();
+    let config = if has_config {
+        Some(dioxus_nox_collection::ScoringConfig {
+            hidden_values,
+            force_mount_values,
+            boosts,
+            strategy: strategy_rc,
+        })
+    } else {
+        None
+    };
 
-        // Re-sort after strategy adjustment
-        results.sort_by(|a, b| {
-            let sa = a.score.unwrap_or(0);
-            let sb = b.score.unwrap_or(0);
-            sb.cmp(&sa)
-        });
-    }
+    // Bridge custom filter
+    let cf_bridge = custom_filter.map(|cf| {
+        dioxus_nox_collection::CustomFilter::new(move |q: &str, l: &str, kw: &str| {
+            (cf.0)(q, l, kw)
+        })
+    });
 
-    results
+    // Deref Rc for ListItem trait access
+    let items_ref: Vec<&ItemRegistration> = items.iter().map(|i| i.as_ref()).collect();
+
+    let collection_results = dioxus_nox_collection::score_items(
+        &items_ref,
+        query,
+        cf_bridge.as_ref(),
+        config.as_ref(),
+        matcher,
+    );
+
+    // Map collection ScoredItem (value) → cmdk ScoredItem (id)
+    collection_results
+        .into_iter()
+        .map(|si| ScoredItem {
+            id: si.value,
+            score: si.score,
+            match_indices: si.match_indices,
+        })
+        .collect()
 }

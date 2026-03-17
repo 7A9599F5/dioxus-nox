@@ -1275,6 +1275,7 @@ name = "dioxus-nox-cmdk"
 version = "0.13.0"
 dependencies = [
  "dioxus",
+ "dioxus-nox-collection",
  "dioxus-nox-virtualize",
  "dioxus-router",
  "gloo-timers",
@@ -1282,6 +1283,13 @@ dependencies = [
  "nucleo-matcher",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "dioxus-nox-collection"
+version = "0.13.0"
+dependencies = [
+ "nucleo-matcher",
 ]
 
 [[package]]
@@ -1397,6 +1405,7 @@ name = "dioxus-nox-select"
 version = "0.13.0"
 dependencies = [
  "dioxus",
+ "dioxus-nox-collection",
  "nucleo-matcher",
 ]
 
@@ -1429,6 +1438,7 @@ version = "0.13.0"
 dependencies = [
  "dioxus",
  "dioxus-nox-dnd",
+ "dioxus-nox-select",
  "wasm-bindgen",
  "web-sys",
 ]

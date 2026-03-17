@@ -19,8 +19,6 @@ pub struct RootProps<T: TagLike + 'static> {
     pub value: Option<Signal<Vec<T>>>,
     #[props(default)]
     pub query: Option<Signal<String>>,
-    #[props(default)]
-    pub open: Option<Signal<bool>>,
 
     // Config props
     #[props(default)]
@@ -36,8 +34,6 @@ pub struct RootProps<T: TagLike + 'static> {
     #[props(default)]
     pub select_mode: bool,
     #[props(default)]
-    pub is_loading: bool,
-    #[props(default)]
     pub deny_list: Option<Vec<String>>,
     #[props(default)]
     pub paste_delimiters: Option<Vec<char>>,
@@ -46,8 +42,6 @@ pub struct RootProps<T: TagLike + 'static> {
     #[props(default)]
     pub min_tags: Option<usize>,
     #[props(default)]
-    pub max_suggestions: Option<usize>,
-    #[props(default)]
     pub max_tag_length: Option<usize>,
     #[props(default)]
     pub max_visible_tags: Option<usize>,
@@ -55,8 +49,6 @@ pub struct RootProps<T: TagLike + 'static> {
     pub filter: Option<fn(&T, &str) -> bool>,
     #[props(default)]
     pub sort_selected: Option<fn(&T, &T) -> Ordering>,
-    #[props(default)]
-    pub async_suggestions: Option<Vec<T>>,
     #[props(default)]
     pub validate: Option<Callback<T, Result<(), String>>>,
 
@@ -88,9 +80,12 @@ pub struct RootProps<T: TagLike + 'static> {
     /// Fire-and-forget notification when tags are reordered (from_index, to_index).
     #[props(default)]
     pub on_reorder: Option<EventHandler<(usize, usize)>>,
-    /// Fire-and-forget notification when the search query changes (for async search).
+    /// Fire-and-forget notification when the search query changes.
     #[props(default)]
-    pub on_search: Option<EventHandler<String>>,
+    pub on_query_change: Option<EventHandler<String>>,
+    /// Fire-and-forget notification when user commits text without on_create.
+    #[props(default)]
+    pub on_commit: Option<EventHandler<String>>,
 
     // Grouping config
     #[props(default)]
@@ -109,7 +104,7 @@ pub struct RootProps<T: TagLike + 'static> {
 ///
 /// Renders a `<div role="group">` with data attributes:
 /// `data-disabled`, `data-readonly`, `data-state` ("valid"/"invalid"),
-/// `data-at-limit`, `data-below-minimum`, `data-loading`.
+/// `data-at-limit`, `data-below-minimum`.
 pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
     let has_grouping = props.sort_items.is_some()
         || props.sort_groups.is_some()
@@ -125,7 +120,6 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
             max_items_per_group: props.max_items_per_group,
             value: props.value,
             query: props.query,
-            open: props.open,
         })
     } else {
         use_tag_input_with(TagInputConfig {
@@ -133,7 +127,6 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
             initial_selected: props.initial_selected.clone(),
             value: props.value,
             query: props.query,
-            open: props.open,
         })
     };
 
@@ -145,17 +138,14 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
     let allow_duplicates = props.allow_duplicates;
     let enforce_allow_list = props.enforce_allow_list;
     let select_mode = props.select_mode;
-    let is_loading = props.is_loading;
     let deny_list = props.deny_list.clone();
     let paste_delimiters = props.paste_delimiters.clone();
     let delimiters = props.delimiters.clone();
     let min_tags = props.min_tags;
-    let max_suggestions = props.max_suggestions;
     let max_tag_length = props.max_tag_length;
     let max_visible_tags = props.max_visible_tags;
     let filter = props.filter;
     let sort_selected = props.sort_selected;
-    let async_suggestions = props.async_suggestions.clone();
     let validate = props.validate;
     let on_create = props.on_create;
     let on_paste = props.on_paste;
@@ -164,7 +154,8 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
     let on_remove = props.on_remove;
     let on_duplicate = props.on_duplicate;
     let on_reorder = props.on_reorder;
-    let on_search = props.on_search;
+    let on_query_change = props.on_query_change;
+    let on_commit = props.on_commit;
 
     use_effect(move || {
         state.max_tags.set(max_tags);
@@ -173,17 +164,14 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
         state.allow_duplicates.set(allow_duplicates);
         state.enforce_allow_list.set(enforce_allow_list);
         state.select_mode.set(select_mode);
-        state.is_loading.set(is_loading);
         state.deny_list.set(deny_list.clone());
         state.paste_delimiters.set(paste_delimiters.clone());
         state.delimiters.set(delimiters.clone());
         state.min_tags.set(min_tags);
-        state.max_suggestions.set(max_suggestions);
         state.max_tag_length.set(max_tag_length);
         state.max_visible_tags.set(max_visible_tags);
         state.filter.set(filter);
         state.sort_selected.set(sort_selected);
-        state.async_suggestions.set(async_suggestions.clone());
 
         // Wire validate
         if let Some(cb) = validate {
@@ -246,22 +234,9 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
             state.on_reorder.set(None);
         }
 
-        if let Some(handler) = on_search {
-            state
-                .on_search
-                .set(Some(Callback::new(move |query: String| {
-                    handler.call(query);
-                })));
-        } else {
-            state.on_search.set(None);
-        }
-    });
-
-    // Announce suggestion count changes
-    let suggestion_count = state.suggestion_count;
-    use_effect(move || {
-        let count = *suggestion_count.read();
-        state.announce_suggestions(count);
+        // Wire new EventHandler callbacks directly
+        state.on_query_change.set(on_query_change);
+        state.on_commit.set(on_commit);
     });
 
     // Provide state via context for child components
@@ -276,7 +251,6 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
             "data-state": if state.validation_error.read().is_some() { "invalid" } else { "valid" },
             "data-at-limit": *state.is_at_limit.read(),
             "data-below-minimum": *state.is_below_minimum.read(),
-            "data-loading": *state.is_loading.read(),
             ..props.attributes,
             {props.children}
         }

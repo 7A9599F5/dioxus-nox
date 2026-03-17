@@ -12,3 +12,4 @@ readme = "../../README.md"
 [dependencies]
 dioxus = { workspace = true }
 nucleo-matcher = { workspace = true }
+dioxus-nox-collection = { workspace = true }

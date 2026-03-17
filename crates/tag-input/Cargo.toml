@@ -11,6 +11,7 @@ readme = "../../README.md"
 
 [dependencies]
 dioxus = { workspace = true }
+dioxus-nox-select = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { workspace = true }
@@ -20,8 +21,9 @@ web-sys = { workspace = true, features = ["Window", "Document", "Element", "Scro
 dioxus-nox-dnd = { workspace = true }
 
 [features]
-default = ["web"]
+default = ["web", "combobox"]
 web = ["dioxus/web"]
+combobox = ["dep:dioxus-nox-select"]
 
 [[example]]
 name = "demo"

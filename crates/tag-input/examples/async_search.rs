@@ -1,6 +1,7 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{Tag, TagLike, extract_clipboard_text, use_tag_input};
+use dioxus_nox_select::{select, AutoComplete, SelectContext};
+use dioxus_nox_tag_input::{Tag, TagInputState, extract_clipboard_text, use_tag_input};
 
 fn main() {
     dioxus::launch(App);
@@ -32,42 +33,60 @@ fn all_tags() -> Vec<Tag> {
     ]
 }
 
-/// Simulate a server search. In a real app this would be `fetch()` or `reqwest`.
-fn search_tags(query: &str) -> Vec<Tag> {
-    let query_lower = query.to_lowercase();
-    all_tags()
-        .into_iter()
-        .filter(|t| t.name().to_lowercase().contains(&query_lower))
-        .collect()
+/// Bridge component that syncs select context values with tag-input state.
+///
+/// When the select confirms a value (via Enter or click), the bridge detects
+/// the new value in `select_ctx.current_values()` and adds the corresponding
+/// tag. Conversely, when a tag is removed from tag-input, the bridge toggles
+/// the value off in the select context.
+#[component]
+fn SelectTagBridge(available: Vec<Tag>, children: Element) -> Element {
+    let mut state = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+
+    // Select -> TagInput: when select adds a value, add the tag
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id.clone())
+            .collect();
+        for val in &selected_values {
+            if !tag_ids.contains(val) {
+                if let Some(tag) = available.iter().find(|t| t.id == val.as_str()) {
+                    state.add_tag(tag.clone());
+                }
+            }
+        }
+    });
+
+    // TagInput -> Select: when a tag is removed, deselect in select context
+    use_effect(move || {
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id.clone())
+            .collect();
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
+
+    rsx! { {children} }
 }
 
 #[component]
 fn App() -> Element {
-    // Start with empty available_tags — they come from async search
-    let mut state = use_tag_input(vec![], vec![]);
+    let tags = all_tags();
+    let mut state = use_tag_input(tags.clone(), vec![]);
 
-    // Wire up async search callback
-    use_effect(move || {
-        state
-            .on_search
-            .set(Some(Callback::new(move |query: String| {
-                if query.is_empty() {
-                    state.async_suggestions.set(None);
-                    state.is_loading.set(false);
-                    return;
-                }
-                // In a real app: spawn(async move { fetch(...).await; })
-                // For this demo, search synchronously to avoid extra deps.
-                let results = search_tags(&query);
-                state.async_suggestions.set(Some(results));
-            })));
-    });
-
-    // Announce suggestion count
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
+    // Provide TagInputState as context so the bridge can access it
+    use_context_provider(|| state);
 
     rsx! {
         Stylesheet { href: asset!("/assets/tailwind.css") }
@@ -80,114 +99,63 @@ fn App() -> Element {
 
                 h1 {
                     class: "text-xl font-bold mb-1 text-slate-50",
-                    "Async Tag Search"
+                    "Tag Search"
                 }
                 p {
                     class: "text-sm text-slate-400 mb-4",
-                    "Type to search programming languages. Results are loaded via on_search callback."
+                    "Type to search programming languages. Select from the dropdown to add tags."
                 }
 
-                div {
+                select::Root {
+                    multiple: true,
+                    autocomplete: AutoComplete::List,
+                    open_on_focus: true,
                     class: "relative",
 
-                    div {
-                        class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500/50 transition-all motion-reduce:transition-none",
+                    SelectTagBridge { available: tags.clone(),
 
-                        for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
-                            {
-                                let is_pill_active = (*state.active_pill.read()) == Some(i);
-                                let pill_ring = if is_pill_active { "ring-2 ring-cyan-400" } else { "" };
-                                rsx! {
-                                    span {
-                                        key: "{tag.id}",
-                                        id: state.pill_id(i),
-                                        class: "inline-flex items-center gap-1 rounded-lg bg-cyan-600/30 border border-cyan-500/40 px-2.5 py-0.5 text-sm text-cyan-200 transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-cyan-400 {pill_ring}",
-                                        "{tag.name}"
-                                        button {
-                                            r#type: "button",
-                                            class: "ml-0.5 rounded hover:bg-cyan-500/30 px-1 transition-colors motion-reduce:transition-none",
-                                            onclick: move |_| state.remove_tag(&tag.id),
-                                            "\u{00D7}"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        input {
-                            r#type: "text",
-                            role: "combobox",
-                            aria_expanded: state.aria_expanded(),
-                            aria_controls: state.listbox_id(),
-                            aria_activedescendant: state.active_descendant(),
-                            aria_autocomplete: "list",
-                            class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
-                            placeholder: "Search languages\u{2026}",
-                            value: "{state.search_query}",
-                            oninput: move |evt| state.set_query(evt.value()),
-                            onkeydown: move |evt| state.handle_keydown(evt),
-                            onclick: move |_| state.handle_click(),
-                            onfocus: move |_| state.is_dropdown_open.set(true),
-                            onblur: move |_| state.close_dropdown(),
-                            onpaste: move |evt: Event<ClipboardData>| {
-                                if let Some(text) = extract_clipboard_text(&evt) {
-                                    evt.prevent_default();
-                                    state.handle_paste(text);
-                                }
-                            },
-                        }
-
-                        if *state.is_loading.read() {
-                            span {
-                                class: "text-xs text-cyan-400 animate-pulse",
-                                "Loading\u{2026}"
-                            }
-                        }
-                    }
-
-                    // Dropdown
-                    if *state.is_dropdown_open.read()
-                        && !state.filtered_suggestions.read().is_empty()
-                        && !*state.is_loading.read()
-                    {
                         div {
-                            id: state.listbox_id(),
-                            role: "listbox",
-                            aria_multiselectable: "true",
-                            class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
+                            class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500/50 transition-all motion-reduce:transition-none",
 
-                            for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
+                            for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
                                 {
-                                    let is_active = *state.highlighted_index.read() == Some(i);
-                                    let bg = if is_active { "bg-cyan-600/80 text-white" } else { "" };
+                                    let is_pill_active = (*state.active_pill.read()) == Some(i);
+                                    let pill_ring = if is_pill_active { "ring-2 ring-cyan-400" } else { "" };
                                     rsx! {
-                                        div {
-                                            key: "{suggestion.id}",
-                                            id: state.suggestion_id(i),
-                                            role: "option",
-                                            aria_selected: if is_active { "true" } else { "false" },
-                                            class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                            onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                            onmousedown: move |evt: Event<MouseData>| {
-                                                evt.prevent_default();
-                                                state.add_tag(suggestion.clone());
-                                            },
-                                            "{suggestion.name}"
+                                        span {
+                                            key: "{tag.id}",
+                                            id: state.pill_id(i),
+                                            class: "inline-flex items-center gap-1 rounded-lg bg-cyan-600/30 border border-cyan-500/40 px-2.5 py-0.5 text-sm text-cyan-200 transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-cyan-400 {pill_ring}",
+                                            "{tag.name}"
+                                            button {
+                                                r#type: "button",
+                                                class: "ml-0.5 rounded hover:bg-cyan-500/30 px-1 transition-colors motion-reduce:transition-none",
+                                                onclick: move |_| state.remove_tag(&tag.id),
+                                                "\u{00D7}"
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
 
-                    // No matches
-                    if *state.is_dropdown_open.read()
-                        && *state.has_no_matches.read()
-                        && !*state.is_loading.read()
-                    {
-                        div {
-                            class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg px-3 py-4 text-sm text-slate-400 text-center",
-                            "No languages found."
+                            ComboInput { state }
+                        }
+
+                        // Dropdown
+                        select::Content {
+                            class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-60 overflow-y-auto",
+                            select::Empty {
+                                class: "px-3 py-2 text-sm text-slate-500",
+                                "No results found."
+                            }
+                            for tag in &tags {
+                                select::Item {
+                                    value: "{tag.id}",
+                                    label: tag.name.clone(),
+                                    class: "px-3 py-2 text-sm text-slate-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[state=checked]:text-indigo-300",
+                                    "{tag.name}"
+                                }
+                            }
                         }
                     }
                 }
@@ -202,9 +170,104 @@ fn App() -> Element {
 
                 p {
                     class: "mt-3 text-xs text-slate-500",
-                    "Demonstrates: is_loading, async_suggestions, on_search, has_no_matches"
+                    "Demonstrates: tag-input + select dropdown with fuzzy search"
                 }
             }
+        }
+    }
+}
+
+/// Combobox-style input that wires keyboard/mouse events to both
+/// tag-input state and select context.
+#[component]
+fn ComboInput(mut state: TagInputState<Tag>) -> Element {
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
+            placeholder: "Search languages\u{2026}",
+            value: "{state.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt| {
+                let val = evt.value();
+                state.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            state.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            state.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        state.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        state.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                state.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    state.handle_paste(text);
+                }
+            },
         }
     }
 }

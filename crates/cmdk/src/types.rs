@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use dioxus::prelude::{EventHandler, Signal};
+use dioxus_nox_collection::ListItem;
 
 use crate::shortcut::Hotkey;
 
@@ -85,6 +86,24 @@ pub struct ItemRegistration {
     pub mode_id: Option<String>,
     /// Item-level select callback. Takes precedence over root `on_select`.
     pub on_select: Option<ItemSelectCallback>,
+}
+
+impl ListItem for ItemRegistration {
+    fn value(&self) -> &str {
+        &self.id
+    }
+    fn label(&self) -> &str {
+        &self.label
+    }
+    fn keywords(&self) -> &str {
+        &self.keywords_cached
+    }
+    fn disabled(&self) -> bool {
+        self.disabled
+    }
+    fn group_id(&self) -> Option<&str> {
+        self.group_id.as_deref()
+    }
 }
 
 /// Registration data for a command group.
@@ -319,33 +338,22 @@ pub(crate) mod sheet_math {
 }
 
 // ---------------------------------------------------------------------------
-// Scoring strategy
+// Scoring strategy (re-exported from collection)
 // ---------------------------------------------------------------------------
 
-/// Trait for pluggable score adjustment after nucleo matching.
-///
-/// Implement this to add frecency weighting, recency boosts, or other
-/// domain-specific ranking adjustments.
-///
-/// The strategy is called for every item that passed nucleo's fuzzy filter.
-/// Return `None` to remove the item from results. Return `Some(score)` to
-/// set the final score.
-pub trait ScoringStrategy: 'static {
-    /// Adjust the score for a matched item.
-    ///
-    /// - `item_id`: The item's ID
-    /// - `raw_score`: The nucleo score (with boost already applied)
-    /// - `query`: The current search query
-    ///
-    /// Return `None` to filter the item out. Return `Some(score)` to set its final score.
-    fn adjust_score(&self, item_id: &str, raw_score: u32, query: &str) -> Option<u32>;
-}
+pub use dioxus_nox_collection::ScoringStrategy;
 
 /// Wrapper for `Rc<dyn ScoringStrategy>` that implements `PartialEq` + `Clone`
 /// for use as a Dioxus component prop. Always compares as not-equal to
 /// trigger re-renders (same pattern as `CustomFilter`).
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ScoringStrategyProp(pub Rc<dyn ScoringStrategy>);
+
+impl std::fmt::Debug for ScoringStrategyProp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ScoringStrategyProp(..)")
+    }
+}
 
 impl PartialEq for ScoringStrategyProp {
     fn eq(&self, _other: &Self) -> bool {
@@ -353,11 +361,7 @@ impl PartialEq for ScoringStrategyProp {
     }
 }
 
-impl std::fmt::Debug for dyn ScoringStrategy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ScoringStrategy")
-    }
-}
+// Debug for `dyn ScoringStrategy` is implemented in dioxus-nox-collection.
 
 // ---------------------------------------------------------------------------
 // Frecency scoring strategy

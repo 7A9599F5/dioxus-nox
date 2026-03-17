@@ -39,6 +39,8 @@
 //! the hook-level API.
 
 mod breakpoint;
+#[cfg(feature = "combobox")]
+pub mod combo;
 pub mod components;
 mod hook;
 mod tag;
@@ -48,6 +50,6 @@ mod tests;
 pub use breakpoint::{Breakpoint, use_breakpoint};
 pub use hook::{
     SuggestionGroup, TagInputConfig, TagInputGroupConfig, TagInputState, extract_clipboard_text,
-    find_match_ranges, use_tag_input, use_tag_input_grouped, use_tag_input_with,
+    find_match_ranges, is_denied, use_tag_input, use_tag_input_grouped, use_tag_input_with,
 };
 pub use tag::{Tag, TagLike};

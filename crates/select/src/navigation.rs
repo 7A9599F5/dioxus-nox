@@ -1,77 +1,27 @@
 use crate::types::ItemEntry;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum Direction {
-    Forward,
-    Backward,
-}
+pub use dioxus_nox_collection::Direction;
 
 /// Navigate to the next/previous non-disabled item among the filtered set, wrapping.
 ///
-/// `items` is the full registration list (needed for disabled checks).
-/// `filtered` is the ordered list of visible item values.
-/// `current` is the currently highlighted value (`None` means nothing highlighted).
+/// Delegates to `dioxus_nox_collection::navigate` with `loop_navigation: true`.
 pub fn navigate(
     items: &[ItemEntry],
     filtered: &[String],
     current: Option<&str>,
     direction: Direction,
 ) -> Option<String> {
-    if filtered.is_empty() {
-        return None;
-    }
-
-    let cur_idx = match current {
-        Some(val) => filtered.iter().position(|v| v == val),
-        None => None,
-    };
-
-    let len = filtered.len();
-    let start = match (cur_idx, direction) {
-        (Some(idx), _) => idx,
-        (None, Direction::Forward) => len.wrapping_sub(1), // so first step lands on 0
-        (None, Direction::Backward) => 0,                  // so first step lands on last
-    };
-
-    let step: isize = match direction {
-        Direction::Forward => 1,
-        Direction::Backward => -1,
-    };
-
-    for i in 1..=len {
-        let idx = ((start as isize + step * i as isize).rem_euclid(len as isize)) as usize;
-        let val = &filtered[idx];
-        let is_disabled = items.iter().any(|e| e.value == *val && e.disabled);
-        if !is_disabled {
-            return Some(val.clone());
-        }
-    }
-
-    None
+    dioxus_nox_collection::navigate(items, filtered, current, direction, true)
 }
 
 /// First non-disabled item in the filtered list.
 pub fn first(items: &[ItemEntry], filtered: &[String]) -> Option<String> {
-    filtered.iter().find_map(|val| {
-        let is_disabled = items.iter().any(|e| e.value == *val && e.disabled);
-        if !is_disabled {
-            Some(val.clone())
-        } else {
-            None
-        }
-    })
+    dioxus_nox_collection::first(items, filtered)
 }
 
 /// Last non-disabled item in the filtered list.
 pub fn last(items: &[ItemEntry], filtered: &[String]) -> Option<String> {
-    filtered.iter().rev().find_map(|val| {
-        let is_disabled = items.iter().any(|e| e.value == *val && e.disabled);
-        if !is_disabled {
-            Some(val.clone())
-        } else {
-            None
-        }
-    })
+    dioxus_nox_collection::last(items, filtered)
 }
 
 /// Type-ahead: find the first item whose label starts with `prefix` (case-insensitive),
@@ -82,37 +32,7 @@ pub fn type_ahead(
     current: Option<&str>,
     prefix: &str,
 ) -> Option<String> {
-    if filtered.is_empty() || prefix.is_empty() {
-        return None;
-    }
-
-    let prefix_lower = prefix.to_lowercase();
-    let len = filtered.len();
-
-    let start = match current {
-        Some(val) => filtered
-            .iter()
-            .position(|v| v == val)
-            .map(|i| i + 1)
-            .unwrap_or(0),
-        None => 0,
-    };
-
-    for i in 0..len {
-        let idx = (start + i) % len;
-        let val = &filtered[idx];
-        let is_disabled = items.iter().any(|e| e.value == *val && e.disabled);
-        if is_disabled {
-            continue;
-        }
-        if let Some(entry) = items.iter().find(|e| e.value == *val)
-            && entry.label.to_lowercase().starts_with(&prefix_lower)
-        {
-            return Some(val.clone());
-        }
-    }
-
-    None
+    dioxus_nox_collection::type_ahead(items, filtered, current, prefix)
 }
 
 #[cfg(test)]
@@ -262,7 +182,6 @@ mod tests {
     fn type_ahead_wraps_from_current() {
         let items = entries(&[("a", "Apple", false), ("b", "Avocado", false)]);
         let filtered = vals(&["a", "b"]);
-        // Starting after "a", should find "b" (Avocado starts with A)
         assert_eq!(
             type_ahead(&items, &filtered, Some("a"), "a"),
             Some("b".into())

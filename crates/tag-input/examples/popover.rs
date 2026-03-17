@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
+use dioxus_nox_select::{select, AutoComplete, SelectContext};
 use dioxus_nox_tag_input::{TagInputState, TagLike, extract_clipboard_text, use_tag_input};
 
 fn main() {
@@ -288,7 +289,7 @@ fn App() -> Element {
                     }
                     p {
                         class: "text-sm text-slate-400 mt-1",
-                        "Composable trigger patterns — each section combines different ways to open a popover."
+                        "Composable trigger patterns \u{2014} each section combines different ways to open a popover."
                     }
                 }
 
@@ -303,7 +304,156 @@ fn App() -> Element {
 }
 
 // ---------------------------------------------------------------------------
-// Section 1: Click + Keyboard (Recommended)
+// Bridge: syncs select values <-> tag-input tags
+// ---------------------------------------------------------------------------
+
+#[component]
+fn SelectTagBridge(available: Vec<SkillTag>, children: Element) -> Element {
+    let mut state = use_context::<TagInputState<SkillTag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+
+    // Forward sync: select values -> tag-input (add new selections)
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
+
+        for val in &selected_values {
+            if !tag_ids.contains(val)
+                && let Some(tag) = available.iter().find(|t| t.id() == val.as_str())
+            {
+                state.add_tag(tag.clone());
+            }
+        }
+    });
+
+    // Reverse sync: tag-input removals -> select values
+    use_effect(move || {
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
+
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
+
+    rsx! { {children} }
+}
+
+// ---------------------------------------------------------------------------
+// Combo input for sections with dropdown
+// ---------------------------------------------------------------------------
+
+#[component]
+fn SkillComboInput(mut state: TagInputState<SkillTag>, class: Option<String>) -> Element {
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+    let input_cls = class.unwrap_or_default();
+
+    use_hook(|| {
+        select_ctx.mark_has_input();
+    });
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm {input_cls}",
+            placeholder: "Type to search\u{2026}",
+            value: "{state.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt: Event<FormData>| {
+                let val = evt.value();
+                state.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt: Event<KeyboardData>| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            state.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            state.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        state.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        state.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                state.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    state.handle_paste(text);
+                }
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Section 1: Click + Keyboard (Recommended) — with dropdown
 // ---------------------------------------------------------------------------
 
 #[component]
@@ -327,116 +477,89 @@ fn ClickAndKeyboard() -> Element {
             ),
         ],
     );
-
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
+    // Provide via context for the bridge
+    use_context_provider(|| state);
+    let all_skills = skill_data();
 
     rsx! {
         SectionCard {
             title: "Click + Keyboard (Recommended)",
-            subtitle: "Click any pill to toggle its popover. Enter on an active pill also works.",
+            subtitle: "Click any pill to toggle its popover. Enter on an active pill also works. Dropdown for adding new skills.",
 
-            div {
-                class: "relative",
+            select::Root {
+                multiple: true,
+                autocomplete: AutoComplete::List,
 
-                // Click-outside overlay
-                if state.popover_pill.read().is_some() {
+                SelectTagBridge {
+                    available: all_skills.clone(),
+
                     div {
-                        class: "fixed inset-0 z-40",
-                        onclick: move |_| state.close_popover(),
-                    }
-                }
+                        class: "relative",
 
-                div {
-                    class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all motion-reduce:transition-none",
+                        // Click-outside overlay
+                        if state.popover_pill.read().is_some() {
+                            div {
+                                class: "fixed inset-0 z-40",
+                                onclick: move |_| state.close_popover(),
+                            }
+                        }
 
-                    for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
-                        {
-                            let is_pill_active = (*state.active_pill.read()) == Some(i);
-                            let pill_ring = if is_pill_active { "ring-2 ring-indigo-400" } else { "" };
-                            let is_popover_open = (*state.popover_pill.read()) == Some(i);
-                            rsx! {
-                                div {
-                                    key: "{tag.id}",
-                                    id: state.pill_id(i),
-                                    class: "relative z-50",
-                                    span {
-                                        class: "inline-flex items-center gap-1 rounded-lg bg-indigo-600/30 border border-indigo-500/40 px-2.5 py-0.5 text-sm text-indigo-200 cursor-pointer select-none transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 {pill_ring}",
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.toggle_popover(i);
-                                        },
-                                        "{tag.name}"
-                                        button {
-                                            r#type: "button",
-                                            class: "ml-0.5 rounded hover:bg-indigo-500/30 px-1 transition-colors motion-reduce:transition-none",
-                                            onmousedown: move |evt: Event<MouseData>| {
-                                                evt.prevent_default();
-                                                evt.stop_propagation();
-                                                state.remove_tag(&tag.id);
-                                            },
-                                            "\u{00D7}"
+                        div {
+                            class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all motion-reduce:transition-none",
+
+                            for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
+                                {
+                                    let is_pill_active = (*state.active_pill.read()) == Some(i);
+                                    let pill_ring = if is_pill_active { "ring-2 ring-indigo-400" } else { "" };
+                                    let is_popover_open = (*state.popover_pill.read()) == Some(i);
+                                    rsx! {
+                                        div {
+                                            key: "{tag.id}",
+                                            id: state.pill_id(i),
+                                            class: "relative z-50",
+                                            span {
+                                                class: "inline-flex items-center gap-1 rounded-lg bg-indigo-600/30 border border-indigo-500/40 px-2.5 py-0.5 text-sm text-indigo-200 cursor-pointer select-none transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 {pill_ring}",
+                                                onmousedown: move |evt: Event<MouseData>| {
+                                                    evt.prevent_default();
+                                                    state.toggle_popover(i);
+                                                },
+                                                "{tag.name}"
+                                                button {
+                                                    r#type: "button",
+                                                    class: "ml-0.5 rounded hover:bg-indigo-500/30 px-1 transition-colors motion-reduce:transition-none",
+                                                    onmousedown: move |evt: Event<MouseData>| {
+                                                        evt.prevent_default();
+                                                        evt.stop_propagation();
+                                                        state.remove_tag(&tag.id);
+                                                    },
+                                                    "\u{00D7}"
+                                                }
+                                            }
+                                            if is_popover_open {
+                                                PopoverCard { tag: tag.clone() }
+                                            }
                                         }
-                                    }
-                                    if is_popover_open {
-                                        PopoverCard { tag: tag.clone() }
                                     }
                                 }
                             }
+
+                            // Combo input (replaces bare input)
+                            SkillComboInput { state: state }
                         }
-                    }
 
-                    input {
-                        r#type: "text",
-                        role: "combobox",
-                        aria_expanded: state.aria_expanded(),
-                        aria_controls: state.listbox_id(),
-                        aria_activedescendant: state.active_descendant(),
-                        aria_autocomplete: "list",
-                        class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
-                        placeholder: "Type to search\u{2026}",
-                        value: "{state.search_query}",
-                        oninput: move |evt| state.set_query(evt.value()),
-                        onkeydown: move |evt| state.handle_keydown(evt),
-                        onclick: move |_| state.handle_click(),
-                        onfocus: move |_| state.is_dropdown_open.set(true),
-                        onblur: move |_| state.close_dropdown(),
-                        onpaste: move |evt: Event<ClipboardData>| {
-                            if let Some(text) = extract_clipboard_text(&evt) {
-                                evt.prevent_default();
-                                state.handle_paste(text);
+                        // Dropdown
+                        select::Content {
+                            class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-60 overflow-y-auto",
+                            select::Empty {
+                                class: "px-3 py-2 text-sm text-slate-500",
+                                "No skills found."
                             }
-                        },
-                    }
-                }
-
-                // Dropdown
-                if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                    div {
-                        id: state.listbox_id(),
-                        role: "listbox",
-                        aria_multiselectable: "true",
-                        class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-                        for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                            {
-                                let is_active = *state.highlighted_index.read() == Some(i);
-                                let bg = if is_active { "bg-indigo-600/80 text-white" } else { "" };
-                                rsx! {
-                                    div {
-                                        key: "{suggestion.id}",
-                                        id: state.suggestion_id(i),
-                                        role: "option",
-                                        aria_selected: if is_active { "true" } else { "false" },
-                                        class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                        onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.add_tag(suggestion.clone());
-                                        },
-                                        "{suggestion.name}"
-                                    }
+                            for tag in &all_skills {
+                                select::Item {
+                                    value: "{tag.id()}",
+                                    label: tag.name().to_string(),
+                                    class: "px-3 py-2 text-sm text-slate-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[state=checked]:text-indigo-300",
+                                    "{tag.name()}"
                                 }
                             }
                         }
@@ -472,11 +595,6 @@ fn InfoButtonAndKeyboard() -> Element {
             ),
         ],
     );
-
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
 
     rsx! {
         SectionCard {
@@ -540,56 +658,18 @@ fn InfoButtonAndKeyboard() -> Element {
 
                     input {
                         r#type: "text",
-                        role: "combobox",
-                        aria_expanded: state.aria_expanded(),
-                        aria_controls: state.listbox_id(),
-                        aria_activedescendant: state.active_descendant(),
-                        aria_autocomplete: "list",
                         class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
                         placeholder: "Type to search\u{2026}",
                         value: "{state.search_query}",
                         oninput: move |evt| state.set_query(evt.value()),
                         onkeydown: move |evt| state.handle_keydown(evt),
                         onclick: move |_| state.handle_click(),
-                        onfocus: move |_| state.is_dropdown_open.set(true),
-                        onblur: move |_| state.close_dropdown(),
                         onpaste: move |evt: Event<ClipboardData>| {
                             if let Some(text) = extract_clipboard_text(&evt) {
                                 evt.prevent_default();
                                 state.handle_paste(text);
                             }
                         },
-                    }
-                }
-
-                // Dropdown
-                if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                    div {
-                        id: state.listbox_id(),
-                        role: "listbox",
-                        aria_multiselectable: "true",
-                        class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-                        for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                            {
-                                let is_active = *state.highlighted_index.read() == Some(i);
-                                let bg = if is_active { "bg-emerald-600/80 text-white" } else { "" };
-                                rsx! {
-                                    div {
-                                        key: "{suggestion.id}",
-                                        id: state.suggestion_id(i),
-                                        role: "option",
-                                        aria_selected: if is_active { "true" } else { "false" },
-                                        class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                        onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.add_tag(suggestion.clone());
-                                        },
-                                        "{suggestion.name}"
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -629,11 +709,6 @@ fn AllTriggers() -> Element {
             ),
         ],
     );
-
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
 
     rsx! {
         SectionCard {
@@ -702,19 +777,12 @@ fn AllTriggers() -> Element {
 
                     input {
                         r#type: "text",
-                        role: "combobox",
-                        aria_expanded: state.aria_expanded(),
-                        aria_controls: state.listbox_id(),
-                        aria_activedescendant: state.active_descendant(),
-                        aria_autocomplete: "list",
                         class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
                         placeholder: "Type to search\u{2026}",
                         value: "{state.search_query}",
                         oninput: move |evt| state.set_query(evt.value()),
                         onkeydown: move |evt| state.handle_keydown(evt),
                         onclick: move |_| state.handle_click(),
-                        onfocus: move |_| state.is_dropdown_open.set(true),
-                        onblur: move |_| state.close_dropdown(),
                         onpaste: move |evt: Event<ClipboardData>| {
                             if let Some(text) = extract_clipboard_text(&evt) {
                                 evt.prevent_default();
@@ -723,44 +791,6 @@ fn AllTriggers() -> Element {
                         },
                     }
                 }
-
-                // Dropdown
-                if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                    div {
-                        id: state.listbox_id(),
-                        role: "listbox",
-                        aria_multiselectable: "true",
-                        class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-                        for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                            {
-                                let is_active = *state.highlighted_index.read() == Some(i);
-                                let bg = if is_active { "bg-violet-600/80 text-white" } else { "" };
-                                rsx! {
-                                    div {
-                                        key: "{suggestion.id}",
-                                        id: state.suggestion_id(i),
-                                        role: "option",
-                                        aria_selected: if is_active { "true" } else { "false" },
-                                        class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                        onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.add_tag(suggestion.clone());
-                                        },
-                                        "{suggestion.name}"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Live region for screen reader announcements
-            div {
-                role: "status",
-                aria_live: "polite",
-                class: "absolute w-px h-px p-0 -m-px overflow-hidden [clip:rect(0,0,0,0)] whitespace-nowrap border-0",
             }
 
             // Keyboard hints
@@ -792,11 +822,6 @@ fn AllTriggers() -> Element {
 #[component]
 fn EditablePopovers() -> Element {
     let mut state = use_tag_input(editable_tag_data(), editable_initial());
-
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
 
     rsx! {
         SectionCard {
@@ -867,60 +892,18 @@ fn EditablePopovers() -> Element {
 
                     input {
                         r#type: "text",
-                        role: "combobox",
-                        aria_expanded: state.aria_expanded(),
-                        aria_controls: state.listbox_id(),
-                        aria_activedescendant: state.active_descendant(),
-                        aria_autocomplete: "list",
                         class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
                         placeholder: "Type to search\u{2026}",
                         value: "{state.search_query}",
                         oninput: move |evt| state.set_query(evt.value()),
                         onkeydown: move |evt| state.handle_keydown(evt),
                         onclick: move |_| state.handle_click(),
-                        onfocus: move |_| state.is_dropdown_open.set(true),
-                        onblur: move |_| {
-                            // Only close dropdown — popover stays open for editing
-                            state.is_dropdown_open.set(false);
-                            state.highlighted_index.set(None);
-                        },
                         onpaste: move |evt: Event<ClipboardData>| {
                             if let Some(text) = extract_clipboard_text(&evt) {
                                 evt.prevent_default();
                                 state.handle_paste(text);
                             }
                         },
-                    }
-                }
-
-                // Dropdown
-                if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                    div {
-                        id: state.listbox_id(),
-                        role: "listbox",
-                        aria_multiselectable: "true",
-                        class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-                        for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                            {
-                                let is_active = *state.highlighted_index.read() == Some(i);
-                                let bg = if is_active { "bg-amber-600/80 text-white" } else { "" };
-                                rsx! {
-                                    div {
-                                        key: "{suggestion.id}",
-                                        id: state.suggestion_id(i),
-                                        role: "option",
-                                        aria_selected: if is_active { "true" } else { "false" },
-                                        class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                        onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.add_tag(suggestion.clone());
-                                        },
-                                        "{suggestion.name}"
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -1157,11 +1140,6 @@ fn KeyValuePopovers() -> Element {
         })));
     });
 
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
-
     rsx! {
         SectionCard {
             title: "Key : Value Pills",
@@ -1249,59 +1227,18 @@ fn KeyValuePopovers() -> Element {
 
                     input {
                         r#type: "text",
-                        role: "combobox",
-                        aria_expanded: state.aria_expanded(),
-                        aria_controls: state.listbox_id(),
-                        aria_activedescendant: state.active_descendant(),
-                        aria_autocomplete: "list",
                         class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
                         placeholder: "Type to search\u{2026}",
                         value: "{state.search_query}",
                         oninput: move |evt| state.set_query(evt.value()),
                         onkeydown: move |evt| state.handle_keydown(evt),
                         onclick: move |_| state.handle_click(),
-                        onfocus: move |_| state.is_dropdown_open.set(true),
-                        onblur: move |_| {
-                            state.is_dropdown_open.set(false);
-                            state.highlighted_index.set(None);
-                        },
                         onpaste: move |evt: Event<ClipboardData>| {
                             if let Some(text) = extract_clipboard_text(&evt) {
                                 evt.prevent_default();
                                 state.handle_paste(text);
                             }
                         },
-                    }
-                }
-
-                // Dropdown
-                if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                    div {
-                        id: state.listbox_id(),
-                        role: "listbox",
-                        aria_multiselectable: "true",
-                        class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-                        for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                            {
-                                let is_active = *state.highlighted_index.read() == Some(i);
-                                let bg = if is_active { "bg-teal-600/80 text-white" } else { "" };
-                                rsx! {
-                                    div {
-                                        key: "{suggestion.id}",
-                                        id: state.suggestion_id(i),
-                                        role: "option",
-                                        aria_selected: if is_active { "true" } else { "false" },
-                                        class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                        onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.add_tag(suggestion.clone());
-                                        },
-                                        "{suggestion.name}"
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -1355,7 +1292,7 @@ fn KeyValuePopoverCard(
     tag_id: String,
     tag_name: String,
     mut values: Signal<HashMap<String, String>>,
-    mut state: TagInputState<KvTag>,
+    state: TagInputState<KvTag>,
 ) -> Element {
     let current_value = values.read().get(&tag_id).cloned().unwrap_or_default();
 

@@ -12,15 +12,14 @@ pub struct OptionProps<T: TagLike + 'static> {
     pub children: Element,
 }
 
-/// Single suggestion item. Handles highlight on hover and selection on mousedown.
+/// Single suggestion item (deprecated — dropdown/suggestion functionality removed).
 ///
-/// Renders `<div role="option">` with `aria-selected` and
-/// `data-slot="option"`, `data-state` ("highlighted"/"idle"), `data-value`.
+/// Still renders the item and handles mousedown selection, but highlight
+/// tracking is no longer managed internally. Consumers should manage
+/// their own suggestion list externally.
 pub fn Option<T: TagLike>(props: OptionProps<T>) -> Element {
     let mut ctx = use_context::<TagInputState<T>>();
-    let index = props.index;
-    let is_highlighted = *ctx.highlighted_index.read() == Some(index);
-    let suggestion_id = ctx.suggestion_id(index);
+    let suggestion_id = ctx.suggestion_id(props.index);
     let tag_value = props.tag.id().to_string();
     let tag = props.tag.clone();
 
@@ -28,11 +27,8 @@ pub fn Option<T: TagLike>(props: OptionProps<T>) -> Element {
         div {
             role: "option",
             id: "{suggestion_id}",
-            aria_selected: if is_highlighted { "true" } else { "false" },
             "data-slot": "option",
-            "data-state": if is_highlighted { "highlighted" } else { "idle" },
             "data-value": "{tag_value}",
-            onmouseenter: move |_| { ctx.highlighted_index.set(Some(index)); },
             onmousedown: move |evt: Event<MouseData>| {
                 evt.prevent_default();
                 ctx.add_tag(tag.clone());

@@ -1,0 +1,10 @@
+[package]
+name = "dioxus-nox-collection"
+description = "Shared collection primitives for scoring, navigation, and filtering"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nucleo-matcher = { workspace = true }

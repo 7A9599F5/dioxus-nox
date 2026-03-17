@@ -193,9 +193,9 @@ fn App() -> Element {
                                 id: "new-file",
                                 label: "New File",
                                 keywords: vec!["create".to_string(), "add".to_string()],
-                                shortcut: Hotkey::try_parse("ctrl+n"),
+                                shortcut: Hotkey::try_parse("alt+n"),
                                 span { "New File" }
-                                CommandShortcut { "Ctrl+N" }
+                                CommandShortcut { "Alt+N" }
                             }
                             CommandItem {
                                 id: "copy-link",

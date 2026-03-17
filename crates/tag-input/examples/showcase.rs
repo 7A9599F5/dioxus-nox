@@ -2,8 +2,9 @@ use std::cmp::Ordering;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
+use dioxus_nox_select::{select, AutoComplete, SelectContext};
 use dioxus_nox_tag_input::{
-    Tag, TagInputState, TagLike, components as tag_input, find_match_ranges,
+    Tag, TagInputState, TagLike, combo, components as tag_input, extract_clipboard_text,
 };
 
 fn main() {
@@ -156,15 +157,6 @@ fn next_id() -> String {
     format!("created-{id}")
 }
 
-/// Simulated async search.
-fn search_languages(query: &str) -> Vec<Tag> {
-    let q = query.to_lowercase();
-    language_tags()
-        .into_iter()
-        .filter(|t| t.name().to_lowercase().contains(&q))
-        .collect()
-}
-
 // fn-pointer helpers (closures can't convert through Dioxus SuperInto).
 fn sort_skills_by_name(a: &Skill, b: &Skill) -> Ordering {
     a.name().cmp(b.name())
@@ -241,7 +233,6 @@ fn App() -> Element {
                         BasicSection { on_event: log_event }
                         CreatableSection { on_event: log_event }
                         GroupedSection { on_event: log_event }
-                        AsyncSection { on_event: log_event }
                         AdvancedSection { on_event: log_event }
                         ControlledSection { on_event: log_event }
                     }
@@ -272,8 +263,8 @@ fn App() -> Element {
                     // Keyboard hints
                     div {
                         class: "mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400",
-                        KeyHint { keys: "\u{2191}\u{2193}", label: "navigate" }
                         KeyHint { keys: "\u{2190}\u{2192}", label: "pills" }
+                        KeyHint { keys: "\u{2191}\u{2193}", label: "dropdown" }
                         KeyHint { keys: "Enter", label: "select" }
                         KeyHint { keys: "Tab", label: "autocomplete" }
                         KeyHint { keys: "Bksp", label: "remove" }
@@ -322,44 +313,47 @@ const PILL_CLS: &str = "inline-flex items-center gap-1 rounded-lg bg-indigo-100 
 const REMOVE_CLS: &str = "ml-0.5 rounded hover:bg-indigo-200 dark:hover:bg-indigo-500/30 px-1 transition-colors motion-reduce:transition-none text-indigo-400 dark:text-indigo-300";
 const INPUT_CLS: &str = "flex-1 min-w-[100px] bg-transparent outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 text-sm";
 const DROPDOWN_CLS: &str = "absolute z-50 mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg max-h-60 overflow-y-auto";
-const OPTION_CLS: &str = "px-3 py-2 text-sm cursor-pointer transition-colors motion-reduce:transition-none hover:bg-slate-100 dark:hover:bg-slate-800";
+const ITEM_CLS: &str = "px-3 py-2 text-sm text-slate-700 dark:text-slate-200 cursor-pointer data-[highlighted]:bg-indigo-100 dark:data-[highlighted]:bg-indigo-600/30 data-[state=checked]:text-indigo-600 dark:data-[state=checked]:text-indigo-300";
 
 // ---------------------------------------------------------------------------
-// 1. Basic Section
+// 1. Basic Section — uses combo module (Track 1)
 // ---------------------------------------------------------------------------
 
 #[component]
 fn BasicSection(on_event: Callback<String>) -> Element {
+    let fruits = fruit_tags();
+
     rsx! {
         Card {
             title: "Basic",
-            description: "Locked tags, max 4 tags, add/remove callbacks.",
+            description: "Locked tags, max 4 tags, add/remove callbacks. Dropdown via combo module.",
 
-            tag_input::Root::<FruitTag> {
-                available_tags: fruit_tags(),
+            combo::Root::<FruitTag> {
+                available_tags: fruits.clone(),
                 initial_selected: vec![FruitTag::locked("cherry", "Cherry")],
                 max_tags: Some(4),
                 on_add: move |tag: FruitTag| on_event.call(format!("Basic: added {}", tag.name())),
                 on_remove: move |tag: FruitTag| on_event.call(format!("Basic: removed {}", tag.name())),
-                BasicUI {}
+
+                BasicUI { fruits: fruits }
             }
         }
     }
 }
 
 #[component]
-fn BasicUI() -> Element {
+fn BasicUI(fruits: Vec<FruitTag>) -> Element {
     let ctx = use_context::<TagInputState<FruitTag>>();
     rsx! {
         div { class: "relative",
-            tag_input::Control::<FruitTag> { class: CONTROL_CLS,
+            combo::Control::<FruitTag> { class: CONTROL_CLS,
                 for (i, tag) in ctx.visible_tags.read().iter().cloned().enumerate() {
                     {
                         let is_locked = tag.is_locked();
                         let key = tag.id().to_string();
                         let name = tag.name().to_string();
                         rsx! {
-                            tag_input::Tag {
+                            combo::Tag {
                                 key: "{key}",
                                 tag: tag.clone(),
                                 index: i,
@@ -368,7 +362,7 @@ fn BasicUI() -> Element {
                                 if is_locked {
                                     span { class: "ml-0.5 text-indigo-400/50 text-xs", "\u{1F512}" }
                                 } else {
-                                    tag_input::TagRemove { tag: tag.clone(), class: REMOVE_CLS }
+                                    combo::TagRemove { tag: tag.clone(), class: REMOVE_CLS }
                                 }
                             }
                         }
@@ -379,41 +373,44 @@ fn BasicUI() -> Element {
                     span { class: "text-xs text-amber-600 dark:text-amber-400 ml-1", "(limit)" }
                 }
 
-                tag_input::Input::<FruitTag> { class: INPUT_CLS, placeholder: "Add a fruit\u{2026}".to_string() }
+                combo::Input::<FruitTag> { class: INPUT_CLS, placeholder: "Add a fruit\u{2026}".to_string() }
             }
 
-            tag_input::Dropdown::<FruitTag> { class: DROPDOWN_CLS,
-                for (i, s) in ctx.filtered_suggestions.read().iter().cloned().enumerate() {
-                    {
-                        let name = s.name().to_string();
-                        rsx! {
-                            tag_input::Option { key: "{s.id()}", tag: s, index: i, class: OPTION_CLS, "{name}" }
-                        }
+            combo::Dropdown { class: DROPDOWN_CLS,
+                select::Empty { class: "px-3 py-2 text-sm text-slate-400 dark:text-slate-500", "No fruits found." }
+                for tag in &fruits {
+                    select::Item {
+                        value: "{tag.id()}",
+                        label: tag.name().to_string(),
+                        class: ITEM_CLS,
+                        "{tag.name()}"
                     }
                 }
             }
         }
-        tag_input::LiveRegion::<FruitTag> {}
+        combo::LiveRegion::<FruitTag> {}
     }
 }
 
 // ---------------------------------------------------------------------------
-// 2. Creatable Section
+// 2. Creatable Section — Track 2 (manual select::Root inside tag_input::Root)
 // ---------------------------------------------------------------------------
 
 #[component]
 fn CreatableSection(on_event: Callback<String>) -> Element {
+    let available = vec![
+        Tag::new("work", "Work"),
+        Tag::new("personal", "Personal"),
+        Tag::new("urgent", "Urgent"),
+    ];
+
     rsx! {
         Card {
             title: "Creatable",
             description: "Type + Enter to create. Comma delimiter. Paste splitting.",
 
             tag_input::Root::<Tag> {
-                available_tags: vec![
-                    Tag::new("work", "Work"),
-                    Tag::new("personal", "Personal"),
-                    Tag::new("urgent", "Urgent"),
-                ],
+                available_tags: available.clone(),
                 on_create: Callback::new(move |text: String| -> Option<Tag> {
                     on_event.call(format!("Creatable: created \"{}\"", text));
                     Some(Tag::new(next_id(), text))
@@ -421,240 +418,46 @@ fn CreatableSection(on_event: Callback<String>) -> Element {
                 paste_delimiters: Some(vec![',', '\n', '\t']),
                 delimiters: Some(vec![',']),
                 on_add: move |tag: Tag| on_event.call(format!("Creatable: added {}", tag.name())),
-                CreatableUI {}
+
+                select::Root {
+                    multiple: true,
+                    autocomplete: AutoComplete::List,
+
+                    CreatableUI { available: available }
+                }
             }
         }
     }
 }
 
 #[component]
-fn CreatableUI() -> Element {
-    let ctx = use_context::<TagInputState<Tag>>();
-    let query = ctx.search_query.read().clone();
-    let show_hint = !query.is_empty() && ctx.highlighted_index.read().is_none();
-
-    rsx! {
-        div { class: "relative",
-            tag_input::Control::<Tag> { class: CONTROL_CLS,
-                for (i, tag) in ctx.visible_tags.read().iter().cloned().enumerate() {
-                    {
-                        let key = tag.id().to_string();
-                        let name = tag.name().to_string();
-                        rsx! {
-                            tag_input::Tag {
-                                key: "{key}",
-                                tag: tag.clone(),
-                                index: i,
-                                class: PILL_CLS,
-                                "{name}"
-                                tag_input::TagRemove { tag: tag.clone(), class: REMOVE_CLS }
-                            }
-                        }
-                    }
-                }
-                tag_input::Input::<Tag> { class: INPUT_CLS, placeholder: "Add a tag\u{2026}".to_string() }
-            }
-
-            tag_input::Dropdown::<Tag> { class: DROPDOWN_CLS,
-                for (i, s) in ctx.filtered_suggestions.read().iter().cloned().enumerate() {
-                    {
-                        let name = s.name().to_string();
-                        rsx! {
-                            tag_input::Option { key: "{s.id()}", tag: s, index: i, class: OPTION_CLS, "{name}" }
-                        }
-                    }
-                }
-            }
-
-            // "Press Enter to create" hint when dropdown is open with unmatched query
-            if *ctx.is_dropdown_open.read() && show_hint {
-                div {
-                    class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg px-3 py-2 text-sm text-slate-500 dark:text-slate-400",
-                    "Press "
-                    span { class: "font-mono bg-slate-200 dark:bg-slate-800 rounded px-1 py-0.5", "Enter" }
-                    " to create "
-                    span { class: "font-semibold text-indigo-600 dark:text-indigo-300", "\"{query}\"" }
-                }
-            }
-        }
-        tag_input::LiveRegion::<Tag> {}
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 3. Grouped Section
-// ---------------------------------------------------------------------------
-
-#[component]
-fn GroupedSection(on_event: Callback<String>) -> Element {
-    rsx! {
-        Card {
-            title: "Grouped",
-            description: "Suggestions grouped by category with match highlighting.",
-
-            tag_input::Root::<Skill> {
-                available_tags: skill_data(),
-                initial_selected: vec![Skill::new("rust", "Rust", "Languages")],
-                sort_items: Some(sort_skills_by_name as fn(&Skill, &Skill) -> Ordering),
-                sort_groups: Some(sort_str_asc as fn(&str, &str) -> Ordering),
-                max_items_per_group: Some(4),
-                on_add: move |tag: Skill| on_event.call(format!("Grouped: added {}", tag.name())),
-                on_remove: move |tag: Skill| on_event.call(format!("Grouped: removed {}", tag.name())),
-                GroupedUI {}
-            }
-        }
-    }
-}
-
-#[component]
-fn GroupedUI() -> Element {
-    let ctx = use_context::<TagInputState<Skill>>();
-    rsx! {
-        div { class: "relative",
-            tag_input::Control::<Skill> { class: CONTROL_CLS,
-                for (i, tag) in ctx.visible_tags.read().iter().cloned().enumerate() {
-                    {
-                        let key = tag.id().to_string();
-                        let name = tag.name().to_string();
-                        rsx! {
-                            tag_input::Tag {
-                                key: "{key}",
-                                tag: tag.clone(),
-                                index: i,
-                                class: PILL_CLS,
-                                "{name}"
-                                tag_input::TagRemove { tag: tag.clone(), class: REMOVE_CLS }
-                            }
-                        }
-                    }
-                }
-                tag_input::Input::<Skill> { class: INPUT_CLS, placeholder: "Search skills\u{2026}".to_string() }
-            }
-
-            // Grouped dropdown
-            tag_input::Dropdown::<Skill> { class: DROPDOWN_CLS,
-                {
-                    let groups = ctx.grouped_suggestions.read();
-                    let query = ctx.search_query.read().clone();
-                    let mut flat_idx = 0usize;
-                    rsx! {
-                        for group in groups.iter() {
-                            tag_input::DropdownGroup::<Skill> {
-                                key: "{group.label}",
-                                label: group.label.clone(),
-                                class: "py-1",
-
-                                // Group header
-                                if !group.label.is_empty() {
-                                    div {
-                                        class: "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500",
-                                        "{group.label}"
-                                    }
-                                }
-
-                                for item in group.items.iter() {
-                                    {
-                                        let i = flat_idx;
-                                        flat_idx += 1;
-                                        let ranges = find_match_ranges(item.name(), &query);
-                                        rsx! {
-                                            tag_input::Option {
-                                                key: "{item.id()}",
-                                                tag: item.clone(),
-                                                index: i,
-                                                class: OPTION_CLS,
-                                                HighlightedText { text: item.name().to_string(), ranges: ranges }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if group.total_count > group.items.len() {
-                                    div {
-                                        class: "px-3 py-1 text-xs text-slate-400 dark:text-slate-500 italic",
-                                        "and {group.total_count - group.items.len()} more\u{2026}"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        tag_input::LiveRegion::<Skill> {}
-    }
-}
-
-#[component]
-fn HighlightedText(text: String, ranges: Vec<(usize, usize)>) -> Element {
-    if ranges.is_empty() {
-        return rsx! { "{text}" };
-    }
-
-    let mut parts: Vec<(String, bool)> = Vec::new();
-    let mut cursor = 0;
-    for (start, end) in &ranges {
-        if cursor < *start {
-            parts.push((text[cursor..*start].to_string(), false));
-        }
-        parts.push((text[*start..*end].to_string(), true));
-        cursor = *end;
-    }
-    if cursor < text.len() {
-        parts.push((text[cursor..].to_string(), false));
-    }
-
-    rsx! {
-        for (i, (segment, matched)) in parts.iter().enumerate() {
-            if *matched {
-                mark {
-                    key: "{i}",
-                    class: "bg-indigo-200/60 dark:bg-indigo-400/30 text-indigo-700 dark:text-indigo-100 rounded-sm px-0.5",
-                    "{segment}"
-                }
-            } else {
-                span { key: "{i}", "{segment}" }
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 4. Async Search Section
-// ---------------------------------------------------------------------------
-
-#[component]
-fn AsyncSection(on_event: Callback<String>) -> Element {
-    rsx! {
-        Card {
-            title: "Async Search",
-            description: "on_search callback with loading state.",
-
-            tag_input::Root::<Tag> {
-                available_tags: Vec::<Tag>::new(),
-                on_search: move |query: String| on_event.call(format!("Async: searched \"{}\"", query)),
-                on_add: move |tag: Tag| on_event.call(format!("Async: added {}", tag.name())),
-                AsyncUI {}
-            }
-        }
-    }
-}
-
-#[component]
-fn AsyncUI() -> Element {
+fn CreatableUI(available: Vec<Tag>) -> Element {
     let mut ctx = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let query = ctx.search_query.read().clone();
+    let available_for_effect = available.clone();
 
-    // Wire async search: on_search sets results synchronously for demo.
+    // Sync select -> tag-input
     use_effect(move || {
-        ctx.on_search.set(Some(Callback::new(move |query: String| {
-            if query.is_empty() {
-                ctx.async_suggestions.set(None);
-                ctx.is_loading.set(false);
-                return;
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        for val in &selected_values {
+            if !tag_ids.contains(val)
+                && let Some(tag) = available_for_effect.iter().find(|t| t.id() == val.as_str())
+            {
+                ctx.add_tag(tag.clone());
             }
-            let results = search_languages(&query);
-            ctx.async_suggestions.set(Some(results));
-        })));
+        }
+    });
+
+    // Sync tag-input -> select (reverse)
+    use_effect(move || {
+        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
     });
 
     rsx! {
@@ -676,29 +479,29 @@ fn AsyncUI() -> Element {
                         }
                     }
                 }
-
-                tag_input::Input::<Tag> { class: INPUT_CLS, placeholder: "Search languages\u{2026}".to_string() }
-
-                if *ctx.is_loading.read() {
-                    span { class: "text-xs text-indigo-500 dark:text-indigo-400 animate-pulse", "Loading\u{2026}" }
-                }
+                CreatableComboInput {}
             }
 
-            tag_input::Dropdown::<Tag> { class: DROPDOWN_CLS,
-                for (i, s) in ctx.filtered_suggestions.read().iter().cloned().enumerate() {
-                    {
-                        let name = s.name().to_string();
-                        rsx! {
-                            tag_input::Option { key: "{s.id()}", tag: s, index: i, class: OPTION_CLS, "{name}" }
-                        }
+            select::Content { class: DROPDOWN_CLS,
+                select::Empty { class: "px-3 py-2 text-sm text-slate-400 dark:text-slate-500", "No matches." }
+                for tag in &available {
+                    select::Item {
+                        value: "{tag.id()}",
+                        label: tag.name().to_string(),
+                        class: ITEM_CLS,
+                        "{tag.name()}"
                     }
                 }
             }
 
-            if *ctx.is_dropdown_open.read() && *ctx.has_no_matches.read() && !*ctx.is_loading.read() {
+            // "Press Enter to create" hint when query is non-empty and dropdown is closed or no match
+            if !query.is_empty() {
                 div {
-                    class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg px-3 py-4 text-sm text-slate-400 dark:text-slate-500 text-center",
-                    "No languages found."
+                    class: "mt-1 text-xs text-slate-500 dark:text-slate-400",
+                    "Press "
+                    span { class: "font-mono bg-slate-200 dark:bg-slate-800 rounded px-1 py-0.5", "Enter" }
+                    " to create "
+                    span { class: "font-semibold text-indigo-600 dark:text-indigo-300", "\"{query}\"" }
                 }
             }
         }
@@ -706,37 +509,381 @@ fn AsyncUI() -> Element {
     }
 }
 
+#[component]
+fn CreatableComboInput() -> Element {
+    let mut ctx = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+
+    use_hook(|| {
+        select_ctx.mark_has_input();
+    });
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: INPUT_CLS,
+            placeholder: "Add a tag\u{2026}",
+            value: "{ctx.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt: Event<FormData>| {
+                let val = evt.value();
+                ctx.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt: Event<KeyboardData>| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            ctx.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            // Delegate to tag-input for on_create / delimiter handling
+                            ctx.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        ctx.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        ctx.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                ctx.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    ctx.handle_paste(text);
+                }
+            },
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
-// 5. Advanced Section
+// 3. Grouped Section — Track 2 with select::Group
 // ---------------------------------------------------------------------------
 
 #[component]
-fn AdvancedSection(on_event: Callback<String>) -> Element {
+fn GroupedSection(on_event: Callback<String>) -> Element {
     rsx! {
         Card {
-            title: "Advanced",
-            description: "Overflow badge, deny list (PHP), max 5 suggestions, autocomplete.",
+            title: "Grouped",
+            description: "Tag management with grouped dropdown categories.",
 
-            tag_input::Root::<Tag> {
-                available_tags: language_tags(),
-                max_tag_length: Some(12),
-                max_visible_tags: Some(3),
-                max_suggestions: Some(5),
-                deny_list: Some(vec!["php".to_string()]),
-                sort_selected: Some(sort_tags_by_name as fn(&Tag, &Tag) -> Ordering),
-                on_add: move |tag: Tag| on_event.call(format!("Advanced: added {}", tag.name())),
-                on_remove: move |tag: Tag| on_event.call(format!("Advanced: removed {}", tag.name())),
-                AdvancedUI {}
+            tag_input::Root::<Skill> {
+                available_tags: skill_data(),
+                initial_selected: vec![Skill::new("rust", "Rust", "Languages")],
+                sort_items: Some(sort_skills_by_name as fn(&Skill, &Skill) -> Ordering),
+                sort_groups: Some(sort_str_asc as fn(&str, &str) -> Ordering),
+                max_items_per_group: Some(4),
+                on_add: move |tag: Skill| on_event.call(format!("Grouped: added {}", tag.name())),
+                on_remove: move |tag: Skill| on_event.call(format!("Grouped: removed {}", tag.name())),
+
+                select::Root {
+                    multiple: true,
+                    autocomplete: AutoComplete::List,
+
+                    GroupedUI {}
+                }
             }
         }
     }
 }
 
 #[component]
-fn AdvancedUI() -> Element {
-    let ctx = use_context::<TagInputState<Tag>>();
-    let shown = ctx.filtered_suggestions.read().len();
-    let total = *ctx.total_filtered_count.read();
+fn GroupedUI() -> Element {
+    let mut ctx = use_context::<TagInputState<Skill>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let skills = skill_data();
+
+    // Sync select -> tag-input
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        for val in &selected_values {
+            if !tag_ids.contains(val)
+                && let Some(tag) = skills.iter().find(|t| t.id() == val.as_str())
+            {
+                ctx.add_tag(tag.clone());
+            }
+        }
+    });
+
+    // Reverse sync
+    use_effect(move || {
+        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
+
+    rsx! {
+        div { class: "relative",
+            tag_input::Control::<Skill> { class: CONTROL_CLS,
+                for (i, tag) in ctx.visible_tags.read().iter().cloned().enumerate() {
+                    {
+                        let key = tag.id().to_string();
+                        let name = tag.name().to_string();
+                        rsx! {
+                            tag_input::Tag {
+                                key: "{key}",
+                                tag: tag.clone(),
+                                index: i,
+                                class: PILL_CLS,
+                                "{name}"
+                                tag_input::TagRemove { tag: tag.clone(), class: REMOVE_CLS }
+                            }
+                        }
+                    }
+                }
+                GroupedComboInput {}
+            }
+
+            select::Content { class: DROPDOWN_CLS,
+                select::Empty { class: "px-3 py-2 text-sm text-slate-400 dark:text-slate-500", "No skills found." }
+
+                select::Group { id: "databases".to_string(),
+                    select::Label { class: "px-3 py-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider", "Databases" }
+                    select::Item { value: "postgres", label: "PostgreSQL".to_string(), class: ITEM_CLS, "PostgreSQL" }
+                    select::Item { value: "redis", label: "Redis".to_string(), class: ITEM_CLS, "Redis" }
+                    select::Item { value: "sqlite", label: "SQLite".to_string(), class: ITEM_CLS, "SQLite" }
+                }
+                select::Group { id: "frameworks".to_string(),
+                    select::Label { class: "px-3 py-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider", "Frameworks" }
+                    select::Item { value: "react", label: "React".to_string(), class: ITEM_CLS, "React" }
+                    select::Item { value: "dioxus", label: "Dioxus".to_string(), class: ITEM_CLS, "Dioxus" }
+                    select::Item { value: "nextjs", label: "Next.js".to_string(), class: ITEM_CLS, "Next.js" }
+                    select::Item { value: "django", label: "Django".to_string(), class: ITEM_CLS, "Django" }
+                }
+                select::Group { id: "infrastructure".to_string(),
+                    select::Label { class: "px-3 py-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider", "Infrastructure" }
+                    select::Item { value: "docker", label: "Docker".to_string(), class: ITEM_CLS, "Docker" }
+                    select::Item { value: "k8s", label: "Kubernetes".to_string(), class: ITEM_CLS, "Kubernetes" }
+                    select::Item { value: "aws", label: "AWS".to_string(), class: ITEM_CLS, "AWS" }
+                }
+                select::Group { id: "languages".to_string(),
+                    select::Label { class: "px-3 py-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider", "Languages" }
+                    select::Item { value: "rust", label: "Rust".to_string(), class: ITEM_CLS, "Rust" }
+                    select::Item { value: "ts", label: "TypeScript".to_string(), class: ITEM_CLS, "TypeScript" }
+                    select::Item { value: "python", label: "Python".to_string(), class: ITEM_CLS, "Python" }
+                    select::Item { value: "go", label: "Go".to_string(), class: ITEM_CLS, "Go" }
+                }
+            }
+        }
+        tag_input::LiveRegion::<Skill> {}
+    }
+}
+
+#[component]
+fn GroupedComboInput() -> Element {
+    let mut ctx = use_context::<TagInputState<Skill>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+
+    use_hook(|| {
+        select_ctx.mark_has_input();
+    });
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: INPUT_CLS,
+            placeholder: "Search skills\u{2026}",
+            value: "{ctx.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt: Event<FormData>| {
+                let val = evt.value();
+                ctx.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt: Event<KeyboardData>| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            ctx.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            ctx.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        ctx.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        ctx.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                ctx.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    ctx.handle_paste(text);
+                }
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Advanced Section — Track 2 with dropdown
+// ---------------------------------------------------------------------------
+
+#[component]
+fn AdvancedSection(on_event: Callback<String>) -> Element {
+    let langs = language_tags();
+
+    rsx! {
+        Card {
+            title: "Advanced",
+            description: "Overflow badge, deny list (PHP), sorted. Dropdown for selection.",
+
+            tag_input::Root::<Tag> {
+                available_tags: langs.clone(),
+                max_tag_length: Some(12),
+                max_visible_tags: Some(3),
+                deny_list: Some(vec!["php".to_string()]),
+                sort_selected: Some(sort_tags_by_name as fn(&Tag, &Tag) -> Ordering),
+                on_add: move |tag: Tag| on_event.call(format!("Advanced: added {}", tag.name())),
+                on_remove: move |tag: Tag| on_event.call(format!("Advanced: removed {}", tag.name())),
+
+                select::Root {
+                    multiple: true,
+                    autocomplete: AutoComplete::List,
+
+                    AdvancedUI { langs: langs }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn AdvancedUI(langs: Vec<Tag>) -> Element {
+    let mut ctx = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let langs_for_effect = langs.clone();
+
+    // Sync select -> tag-input
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        for val in &selected_values {
+            if !tag_ids.contains(val)
+                && let Some(tag) = langs_for_effect.iter().find(|t| t.id() == val.as_str())
+            {
+                ctx.add_tag(tag.clone());
+            }
+        }
+    });
+
+    // Reverse sync
+    use_effect(move || {
+        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
 
     rsx! {
         div { class: "relative",
@@ -762,7 +909,7 @@ fn AdvancedUI() -> Element {
                     class: "rounded-lg bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2.5 py-0.5 text-sm text-slate-600 dark:text-slate-300",
                 }
 
-                tag_input::Input::<Tag> { class: INPUT_CLS, placeholder: "Search languages\u{2026}".to_string() }
+                AdvancedComboInput {}
             }
 
             if let Some(ref err) = *ctx.validation_error.read() {
@@ -772,20 +919,14 @@ fn AdvancedUI() -> Element {
                 }
             }
 
-            tag_input::Dropdown::<Tag> { class: DROPDOWN_CLS,
-                for (i, s) in ctx.filtered_suggestions.read().iter().cloned().enumerate() {
-                    {
-                        let name = s.name().to_string();
-                        rsx! {
-                            tag_input::Option { key: "{s.id()}", tag: s, index: i, class: OPTION_CLS, "{name}" }
-                        }
-                    }
-                }
-
-                if shown < total {
-                    div {
-                        class: "px-3 py-2 text-xs text-slate-400 dark:text-slate-500 border-t border-slate-200 dark:border-slate-700",
-                        "Showing {shown} of {total} \u{2014} type to refine"
+            select::Content { class: DROPDOWN_CLS,
+                select::Empty { class: "px-3 py-2 text-sm text-slate-400 dark:text-slate-500", "No languages found." }
+                for tag in &langs {
+                    select::Item {
+                        value: "{tag.id}",
+                        label: tag.name.to_string(),
+                        class: ITEM_CLS,
+                        "{tag.name}"
                     }
                 }
             }
@@ -796,17 +937,112 @@ fn AdvancedUI() -> Element {
             class: "mt-2 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 space-y-0.5",
             div { "Selected: {ctx.selected_tags.read().len()} \u{2022} Visible: {ctx.visible_tags.read().len()} + {ctx.overflow_count.read()} overflow" }
             div { "Form value: {ctx.form_value}" }
-            if let Some(ref ac) = *ctx.auto_complete_suggestion.read() {
-                div { "Autocomplete hint: {ac.name()} (press Tab)" }
-            }
         }
 
         tag_input::LiveRegion::<Tag> {}
     }
 }
 
+#[component]
+fn AdvancedComboInput() -> Element {
+    let mut ctx = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+
+    use_hook(|| {
+        select_ctx.mark_has_input();
+    });
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: INPUT_CLS,
+            placeholder: "Search languages\u{2026}",
+            value: "{ctx.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt: Event<FormData>| {
+                let val = evt.value();
+                ctx.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt: Event<KeyboardData>| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            ctx.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            ctx.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        ctx.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        ctx.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                ctx.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    ctx.handle_paste(text);
+                }
+            },
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
-// 6. Controlled Section
+// 5. Controlled Section — Track 2 with dropdown
 // ---------------------------------------------------------------------------
 
 #[component]
@@ -864,7 +1100,13 @@ fn ControlledSection(on_event: Callback<String>) -> Element {
                         value: Some(shared_tags),
                         query: Some(shared_query),
                         on_add: move |tag: Tag| on_event.call(format!("Controlled A: added {}", tag.name())),
-                        ControlledUI {}
+
+                        select::Root {
+                            multiple: true,
+                            autocomplete: AutoComplete::List,
+
+                            ControlledUI { colors: color_tags() }
+                        }
                     }
                 }
 
@@ -876,7 +1118,13 @@ fn ControlledSection(on_event: Callback<String>) -> Element {
                         value: Some(shared_tags),
                         query: Some(shared_query),
                         on_add: move |tag: Tag| on_event.call(format!("Controlled B: added {}", tag.name())),
-                        ControlledUI {}
+
+                        select::Root {
+                            multiple: true,
+                            autocomplete: AutoComplete::List,
+
+                            ControlledUI { colors: color_tags() }
+                        }
                     }
                 }
             }
@@ -898,8 +1146,34 @@ fn ControlledSection(on_event: Callback<String>) -> Element {
 }
 
 #[component]
-fn ControlledUI() -> Element {
-    let ctx = use_context::<TagInputState<Tag>>();
+fn ControlledUI(colors: Vec<Tag>) -> Element {
+    let mut ctx = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let colors_for_effect = colors.clone();
+
+    // Sync select -> tag-input
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        for val in &selected_values {
+            if !tag_ids.contains(val)
+                && let Some(tag) = colors_for_effect.iter().find(|t| t.id() == val.as_str())
+            {
+                ctx.add_tag(tag.clone());
+            }
+        }
+    });
+
+    // Reverse sync
+    use_effect(move || {
+        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
+
     rsx! {
         div { class: "relative",
             tag_input::Control::<Tag> { class: CONTROL_CLS,
@@ -919,20 +1193,119 @@ fn ControlledUI() -> Element {
                         }
                     }
                 }
-                tag_input::Input::<Tag> { class: INPUT_CLS, placeholder: "Pick colors\u{2026}".to_string() }
+                ControlledComboInput {}
             }
 
-            tag_input::Dropdown::<Tag> { class: DROPDOWN_CLS,
-                for (i, s) in ctx.filtered_suggestions.read().iter().cloned().enumerate() {
-                    {
-                        let name = s.name().to_string();
-                        rsx! {
-                            tag_input::Option { key: "{s.id()}", tag: s, index: i, class: OPTION_CLS, "{name}" }
-                        }
+            select::Content { class: DROPDOWN_CLS,
+                select::Empty { class: "px-3 py-2 text-sm text-slate-400 dark:text-slate-500", "No colors found." }
+                for tag in &colors {
+                    select::Item {
+                        value: "{tag.id}",
+                        label: tag.name.to_string(),
+                        class: ITEM_CLS,
+                        "{tag.name}"
                     }
                 }
             }
         }
         tag_input::LiveRegion::<Tag> {}
+    }
+}
+
+#[component]
+fn ControlledComboInput() -> Element {
+    let mut ctx = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+
+    use_hook(|| {
+        select_ctx.mark_has_input();
+    });
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: INPUT_CLS,
+            placeholder: "Pick colors\u{2026}",
+            value: "{ctx.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt: Event<FormData>| {
+                let val = evt.value();
+                ctx.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt: Event<KeyboardData>| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            ctx.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            ctx.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        ctx.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        ctx.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                ctx.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    ctx.handle_paste(text);
+                }
+            },
+        }
     }
 }

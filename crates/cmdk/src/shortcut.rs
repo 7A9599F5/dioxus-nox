@@ -102,6 +102,45 @@ impl Hotkey {
         Self::parse(s).ok()
     }
 
+    /// Check whether a raw `web_sys::KeyboardEvent`'s fields match this hotkey.
+    ///
+    /// Takes the `key` string and individual modifier booleans from the raw event,
+    /// avoiding the need to construct `keyboard_types` types in the raw listener.
+    /// Character keys are compared case-insensitively.
+    pub fn matches_raw(&self, key: &str, ctrl: bool, shift: bool, alt: bool, meta: bool) -> bool {
+        let mut event_mods = Modifiers::empty();
+        if ctrl {
+            event_mods |= Modifiers::CONTROL;
+        }
+        if shift {
+            event_mods |= Modifiers::SHIFT;
+        }
+        if alt {
+            event_mods |= Modifiers::ALT;
+        }
+        if meta {
+            event_mods |= Modifiers::META;
+        }
+
+        let masked = event_mods & MODIFIER_MASK;
+        let expected = self.modifiers & MODIFIER_MASK;
+        if masked != expected {
+            return false;
+        }
+
+        match &self.key {
+            Key::Character(a) => a.eq_ignore_ascii_case(key),
+            other => {
+                // Try to parse the raw key string to compare with non-character keys
+                if let Ok(parsed) = parse_key(key) {
+                    *other == parsed
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     /// Check whether a keyboard event matches this hotkey.
     ///
     /// Character keys are compared case-insensitively. Modifiers are compared

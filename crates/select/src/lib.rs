@@ -172,7 +172,7 @@ pub use types::{AutoComplete, CustomFilter, GroupEntry, ItemEntry, ScoredItem};
 /// ```
 pub mod select {
     pub use crate::components::{
-        ClearButton, Content, Empty, Group, Input, Item, ItemIndicator, ItemText, Label, Root,
-        Separator, Trigger, Value,
+        ClearButton, Content, Empty, Group, Input, Item, ItemIndicator, ItemProps, ItemText, Label,
+        Root, Separator, Trigger, Value,
     };
 }

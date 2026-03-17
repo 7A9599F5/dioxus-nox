@@ -76,6 +76,14 @@ impl SelectContext {
         }
     }
 
+    /// Current multi-select values without subscribing (peek).
+    pub fn current_values_peek(&self) -> Vec<String> {
+        match self.controlled_values {
+            Some(sig) => sig.peek().clone(),
+            None => self.values.peek().clone(),
+        }
+    }
+
     /// Select a value in single-select mode: sets value, closes popup, fires callback.
     pub fn select_single(&mut self, val: &str) {
         if self.disabled {
@@ -322,6 +330,38 @@ impl SelectContext {
             Some(val) => self.item_id(val),
             None => String::new(),
         }
+    }
+
+    // ── Public accessors for cross-crate use ────────────────
+
+    /// Current autocomplete mode.
+    pub fn autocomplete(&self) -> AutoComplete {
+        self.autocomplete
+    }
+
+    /// Whether dropdown opens on focus.
+    pub fn open_on_focus(&self) -> bool {
+        self.open_on_focus
+    }
+
+    /// Whether this is a multi-select.
+    pub fn is_multiple(&self) -> bool {
+        self.multiple
+    }
+
+    /// Whether an item is currently highlighted.
+    pub fn has_highlighted(&self) -> bool {
+        self.highlighted.read().is_some()
+    }
+
+    /// Get the currently highlighted value (if any).
+    pub fn highlighted_value(&self) -> Option<String> {
+        self.highlighted.read().clone()
+    }
+
+    /// Set the search query text.
+    pub fn set_search_query(&mut self, query: String) {
+        self.search_query.set(query);
     }
 
     // ── DOM helpers (WASM only) ──────────────────────────────

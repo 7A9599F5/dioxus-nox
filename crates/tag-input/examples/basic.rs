@@ -1,6 +1,6 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{TagLike, extract_clipboard_text, use_tag_input};
+use dioxus_nox_tag_input::{TagInputState, TagLike, combo};
 
 fn main() {
     dioxus::launch(App);
@@ -56,35 +56,8 @@ fn fruit_tags() -> Vec<FruitTag> {
 
 #[component]
 fn App() -> Element {
-    // Start with a locked "Cherry" tag that cannot be removed
-    let initial = vec![FruitTag::locked("cherry", "Cherry")];
-    let mut state = use_tag_input(fruit_tags(), initial);
-
-    // Track the last callback event in a signal for display
     let mut last_event = use_signal(|| String::from("No events yet"));
-
-    // Wire up on_add / on_remove callbacks for demonstration
-    use_effect(move || {
-        state.on_add.set(Some(Callback::new(move |tag: FruitTag| {
-            last_event.set(format!("Added: {}", tag.name));
-        })));
-        state
-            .on_remove
-            .set(Some(Callback::new(move |tag: FruitTag| {
-                last_event.set(format!("Removed: {}", tag.name));
-            })));
-    });
-
-    // Limit to 4 tags
-    use_hook(|| {
-        state.max_tags.set(Some(4));
-    });
-
-    // Announce filtered suggestion count to screen readers when it changes
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
+    let available = fruit_tags();
 
     rsx! {
         Stylesheet { href: asset!("/assets/tailwind.css") }
@@ -104,103 +77,13 @@ fn App() -> Element {
                     "Cherry is locked and cannot be removed. Max 4 tags."
                 }
 
-                // Tag input area
-                div {
-                    class: "relative",
-
-                    div {
-                        class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all motion-reduce:transition-none",
-
-                        for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
-                            {
-                                let is_pill_active = (*state.active_pill.read()) == Some(i);
-                                let pill_ring = if is_pill_active { "ring-2 ring-indigo-400" } else { "" };
-                                let locked_style = if tag.is_locked() { "opacity-80" } else { "" };
-                                rsx! {
-                                    span {
-                                        key: "{tag.id}",
-                                        id: state.pill_id(i),
-                                        class: "inline-flex items-center gap-1 rounded-lg bg-indigo-600/30 border border-indigo-500/40 px-2.5 py-0.5 text-sm text-indigo-200 transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 {pill_ring} {locked_style}",
-                                        "{tag.name}"
-                                        if tag.is_locked() {
-                                            span {
-                                                class: "ml-0.5 text-indigo-400/50 text-xs",
-                                                "\u{1F512}"
-                                            }
-                                        } else {
-                                            button {
-                                                r#type: "button",
-                                                class: "ml-0.5 rounded hover:bg-indigo-500/30 px-1 transition-colors motion-reduce:transition-none",
-                                                onclick: move |_| state.remove_tag(&tag.id),
-                                                "\u{00D7}"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        input {
-                            r#type: "text",
-                            role: "combobox",
-                            aria_expanded: state.aria_expanded(),
-                            aria_controls: state.listbox_id(),
-                            aria_activedescendant: state.active_descendant(),
-                            aria_autocomplete: "list",
-                            class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
-                            placeholder: "Type to search\u{2026}",
-                            value: "{state.search_query}",
-                            oninput: move |evt| state.set_query(evt.value()),
-                            onkeydown: move |evt| state.handle_keydown(evt),
-                            onclick: move |_| state.handle_click(),
-                            onfocus: move |_| state.is_dropdown_open.set(true),
-                            onblur: move |_| state.close_dropdown(),
-                            onpaste: move |evt: Event<ClipboardData>| {
-                                if let Some(text) = extract_clipboard_text(&evt) {
-                                    evt.prevent_default();
-                                    state.handle_paste(text);
-                                }
-                            },
-                        }
-                        if *state.is_at_limit.read() {
-                            span {
-                                class: "text-xs text-amber-400 ml-1",
-                                "(limit reached)"
-                            }
-                        }
-                    }
-
-                    // Dropdown
-                    if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                        div {
-                            id: state.listbox_id(),
-                            role: "listbox",
-                            aria_multiselectable: "true",
-                            class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-
-                            for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                                {
-                                    let is_active = *state.highlighted_index.read() == Some(i);
-                                    let bg = if is_active { "bg-indigo-600/80 text-white" } else { "" };
-                                    rsx! {
-                                        div {
-                                            key: "{suggestion.id}",
-                                            id: state.suggestion_id(i),
-                                            role: "option",
-                                            aria_selected: if is_active { "true" } else { "false" },
-                                            class: "px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                            onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                            onmousedown: move |evt: Event<MouseData>| {
-                                                evt.prevent_default();
-                                                state.add_tag(suggestion.clone());
-                                            },
-                                            "{suggestion.name}"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                combo::Root::<FruitTag> {
+                    available_tags: available.clone(),
+                    initial_selected: vec![FruitTag::locked("cherry", "Cherry")],
+                    max_tags: Some(4),
+                    on_add: move |tag: FruitTag| last_event.set(format!("Added: {}", tag.name())),
+                    on_remove: move |tag: FruitTag| last_event.set(format!("Removed: {}", tag.name())),
+                    BasicUI { available: available }
                 }
 
                 // Callback event log
@@ -215,14 +98,11 @@ fn App() -> Element {
                     role: "status",
                     aria_live: "polite",
                     class: "absolute w-px h-px p-0 -m-px overflow-hidden [clip:rect(0,0,0,0)] whitespace-nowrap border-0",
-                    "{state.status_message}"
                 }
 
                 // Keyboard shortcuts hint
                 p {
                     class: "mt-3 text-xs text-slate-500",
-                    span { class: "font-mono bg-slate-700/50 rounded px-1 py-0.5 mr-1", "\u{2191}\u{2193}" }
-                    "navigate  "
                     span { class: "font-mono bg-slate-700/50 rounded px-1 py-0.5 mr-1", "\u{2190}\u{2192}" }
                     "pills  "
                     span { class: "font-mono bg-slate-700/50 rounded px-1 py-0.5 mr-1", "Enter" }
@@ -234,5 +114,71 @@ fn App() -> Element {
                 }
             }
         }
+    }
+}
+
+#[component]
+fn BasicUI(available: Vec<FruitTag>) -> Element {
+    let ctx = use_context::<TagInputState<FruitTag>>();
+
+    rsx! {
+        div { class: "relative",
+            combo::Control::<FruitTag> {
+                class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all motion-reduce:transition-none",
+
+                for (i, tag) in ctx.visible_tags.read().iter().cloned().enumerate() {
+                    {
+                        let is_locked = tag.is_locked();
+                        let key = tag.id().to_string();
+                        let name = tag.name().to_string();
+                        rsx! {
+                            combo::Tag {
+                                key: "{key}",
+                                tag: tag.clone(),
+                                index: i,
+                                class: "inline-flex items-center gap-1 rounded-lg bg-indigo-600/30 border border-indigo-500/40 px-2.5 py-0.5 text-sm text-indigo-200 transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900",
+                                "{name}"
+                                if is_locked {
+                                    span { class: "ml-0.5 text-indigo-400/50 text-xs", "\u{1F512}" }
+                                } else {
+                                    combo::TagRemove {
+                                        tag: tag.clone(),
+                                        class: "ml-0.5 rounded hover:bg-indigo-500/30 px-1 transition-colors motion-reduce:transition-none",
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                combo::Input::<FruitTag> {
+                    class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
+                }
+
+                if *ctx.is_at_limit.read() {
+                    span { class: "text-xs text-amber-400 ml-1", "(limit reached)" }
+                }
+            }
+
+            // Dropdown with available tags
+            combo::Dropdown {
+                class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
+
+                combo::Empty {
+                    class: "px-3 py-2 text-sm text-slate-500",
+                    "No matching fruits."
+                }
+                for tag in &available {
+                    combo::Item {
+                        value: "{tag.id()}",
+                        label: tag.name().to_string(),
+                        class: "px-3 py-2 text-sm text-slate-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[state=checked]:text-indigo-300",
+                        "{tag.name()}"
+                    }
+                }
+            }
+        }
+
+        combo::LiveRegion::<FruitTag> {}
     }
 }

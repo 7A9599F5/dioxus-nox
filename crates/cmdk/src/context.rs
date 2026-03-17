@@ -539,9 +539,23 @@ impl CommandContext {
                     .is_some_and(|hk| hk.matches(key, modifiers))
         });
         if let Some(item) = matched {
+            let item_id = item.id.clone();
             let resolved = item.value.clone().unwrap_or_else(|| item.id.clone());
             let item_handler = item.on_select.clone();
             drop(items);
+
+            // Update active item
+            let mut active = self.active_item;
+            active.set(Some(item_id));
+
+            // Fire on_value_change directly — the deferred effect won't run
+            // in time because on_select typically closes the palette synchronously.
+            let value_handler = self.on_value_change.peek();
+            if let Some(ref h) = *value_handler {
+                h.call(resolved.clone());
+            }
+            drop(value_handler);
+
             if let Some(cb) = item_handler {
                 cb.0.call(resolved);
             } else {

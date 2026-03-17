@@ -612,6 +612,20 @@ pub fn Item(
             group_id: group_id.clone(),
         });
     });
+
+    // Sync disabled prop changes to registered item (use_hook only runs on mount)
+    {
+        let val_sync = value.clone();
+        use_effect(move || {
+            let disabled = disabled; // subscribe to prop
+            let mut ctx: SelectContext = consume_context();
+            let mut items = ctx.items.write();
+            if let Some(item) = items.iter_mut().find(|e| e.value == val_sync) {
+                item.disabled = disabled;
+            }
+        });
+    }
+
     let val_drop = value.clone();
     use_drop(move || {
         let mut ctx: SelectContext = consume_context();

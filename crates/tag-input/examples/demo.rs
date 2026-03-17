@@ -1,6 +1,9 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{Breakpoint, Tag, use_breakpoint, use_tag_input};
+use dioxus_nox_select::{select, AutoComplete, SelectContext};
+use dioxus_nox_tag_input::{
+    Breakpoint, Tag, TagInputState, TagLike, extract_clipboard_text, use_breakpoint, use_tag_input,
+};
 
 fn main() {
     dioxus::launch(App);
@@ -24,6 +27,8 @@ fn sample_tags() -> Vec<Tag> {
 #[component]
 fn App() -> Element {
     let state = use_tag_input(sample_tags(), vec![]);
+    // Provide TagInputState via context so the bridge can find it
+    use_context_provider(|| state);
     let breakpoint = use_breakpoint();
 
     let is_mobile = matches!(*breakpoint.read(), Breakpoint::Mobile);
@@ -53,85 +58,224 @@ fn App() -> Element {
 }
 
 // ---------------------------------------------------------------------------
+// Bridge: syncs select values <-> tag-input tags
+// ---------------------------------------------------------------------------
+
+#[component]
+fn SelectTagBridge(available: Vec<Tag>, children: Element) -> Element {
+    let mut state = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+
+    // Forward sync: select values -> tag-input (add new selections)
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
+
+        for val in &selected_values {
+            if !tag_ids.contains(val)
+                && let Some(tag) = available.iter().find(|t| t.id() == val.as_str())
+            {
+                state.add_tag(tag.clone());
+            }
+        }
+    });
+
+    // Reverse sync: tag-input removals -> select values
+    use_effect(move || {
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
+
+        for val in &select_ctx.current_values_peek() {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
+
+    rsx! { {children} }
+}
+
+// ---------------------------------------------------------------------------
 // Desktop / Tablet layout
 // ---------------------------------------------------------------------------
 
 #[component]
-fn DesktopLayout(mut state: dioxus_nox_tag_input::TagInputState<Tag>) -> Element {
+fn DesktopLayout(mut state: TagInputState<Tag>) -> Element {
+    let tags = sample_tags();
+
     rsx! {
-        div {
-            class: "relative",
+        select::Root {
+            multiple: true,
+            autocomplete: AutoComplete::List,
 
-            // Selected tags + input row
-            div {
-                class: "flex flex-wrap items-center gap-2 rounded-full border-2 border-dashed border-slate-600 bg-slate-800 px-4 py-2 focus-within:border-slate-400 transition-colors",
+            SelectTagBridge {
+                available: tags.clone(),
 
-                // Selected tag pills
-                for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
-                    DesktopPill {
-                        key: "{tag.id}",
-                        tag: tag.clone(),
-                        active: (*state.active_pill.read()) == Some(i),
-                        pill_id: state.pill_id(i),
-                        on_remove: move |id: String| state.remove_tag(&id),
-                    }
-                }
-
-                // Add icon
-                span {
-                    class: "text-slate-400 text-lg select-none",
-                    "+"
-                }
-
-                // Search input
-                input {
-                    r#type: "text",
-                    role: "combobox",
-                    aria_expanded: state.aria_expanded(),
-                    aria_controls: state.listbox_id(),
-                    aria_activedescendant: state.active_descendant(),
-                    aria_autocomplete: "list",
-                    class: "flex-1 min-w-[120px] bg-transparent outline-none text-slate-100 placeholder-slate-500",
-                    placeholder: "Add a tag\u{2026}",
-                    value: "{state.search_query}",
-                    oninput: move |evt| state.set_query(evt.value()),
-                    onkeydown: move |evt| state.handle_keydown(evt),
-                    onclick: move |_| state.handle_click(),
-                    onfocus: move |_| state.is_dropdown_open.set(true),
-                    onblur: move |_| {
-                        state.close_dropdown();
-                    },
-                }
-            }
-
-            // Autocomplete dropdown
-            if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
                 div {
-                    id: state.listbox_id(),
-                    role: "listbox",
-                    class: "absolute z-50 mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
+                    class: "relative",
 
-                    for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                        {
-                            let is_active = *state.highlighted_index.read() == Some(i);
-                            let bg = if is_active { "bg-indigo-600/80 text-white" } else { "" };
-                            rsx! {
-                                div {
-                                    key: "{suggestion.id}",
-                                    id: state.suggestion_id(i),
-                                    role: "option",
-                                    aria_selected: if is_active { "true" } else { "false" },
-                                    class: "px-4 py-2 cursor-pointer transition-colors hover:bg-slate-700 {bg}",
-                                    onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                    onmousedown: move |evt: Event<MouseData>| {
-                                        evt.prevent_default();
-                                        state.add_tag(suggestion.clone());
-                                    },
-                                    "{suggestion.name}"
-                                }
+                    // Selected tags + input row
+                    div {
+                        class: "flex flex-wrap items-center gap-2 rounded-full border-2 border-dashed border-slate-600 bg-slate-800 px-4 py-2 focus-within:border-slate-400 transition-colors",
+
+                        // Selected tag pills
+                        for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
+                            DesktopPill {
+                                key: "{tag.id}",
+                                tag: tag.clone(),
+                                active: (*state.active_pill.read()) == Some(i),
+                                pill_id: state.pill_id(i),
+                                on_remove: move |id: String| state.remove_tag(&id),
                             }
                         }
+
+                        // Add icon
+                        span {
+                            class: "text-slate-400 text-lg select-none",
+                            "+"
+                        }
+
+                        // Combo search input
+                        ComboInput { state: state }
                     }
+
+                    // Dropdown
+                    DropdownContent { tags: tags.clone() }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Combo input: bridges select dropdown nav + tag-input pill keys
+// ---------------------------------------------------------------------------
+
+#[component]
+fn ComboInput(mut state: TagInputState<Tag>) -> Element {
+    let mut select_ctx = use_context::<SelectContext>();
+    let listbox_id = select_ctx.listbox_id();
+
+    use_hook(|| {
+        select_ctx.mark_has_input();
+    });
+
+    rsx! {
+        input {
+            r#type: "text",
+            role: "combobox",
+            class: "flex-1 min-w-[120px] bg-transparent outline-none text-slate-100 placeholder-slate-500",
+            placeholder: "Add a tag\u{2026}",
+            value: "{state.search_query}",
+            autocomplete: "off",
+            aria_expanded: select_ctx.is_open(),
+            aria_controls: "{listbox_id}",
+            aria_activedescendant: select_ctx.active_descendant(),
+            oninput: move |evt: Event<FormData>| {
+                let val = evt.value();
+                state.set_query(val.clone());
+                select_ctx.set_search_query(val);
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+                select_ctx.highlight_first();
+            },
+            onkeydown: move |evt: Event<KeyboardData>| {
+                match evt.key() {
+                    Key::ArrowDown => {
+                        evt.prevent_default();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                            select_ctx.highlight_first();
+                        } else {
+                            select_ctx.highlight_next();
+                        }
+                    }
+                    Key::ArrowUp => {
+                        if select_ctx.is_open() {
+                            evt.prevent_default();
+                            select_ctx.highlight_prev();
+                        }
+                    }
+                    Key::Enter => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() && select_ctx.has_highlighted() {
+                            select_ctx.confirm_highlighted();
+                            state.set_query(String::new());
+                            select_ctx.set_search_query(String::new());
+                        } else {
+                            state.handle_input_keydown(evt);
+                        }
+                    }
+                    Key::Escape => {
+                        evt.prevent_default();
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                        state.active_pill.set(None);
+                    }
+                    Key::Tab => {
+                        if select_ctx.is_open() {
+                            select_ctx.set_open(false);
+                        }
+                    }
+                    _ => {
+                        state.handle_input_keydown(evt);
+                    }
+                }
+            },
+            onfocus: move |_| {
+                if select_ctx.open_on_focus() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onblur: move |_| {
+                select_ctx.set_open(false);
+            },
+            onclick: move |_| {
+                state.handle_click();
+                if !select_ctx.is_open() {
+                    select_ctx.set_open(true);
+                }
+            },
+            onpaste: move |evt: Event<ClipboardData>| {
+                if let Some(text) = extract_clipboard_text(&evt) {
+                    evt.prevent_default();
+                    state.handle_paste(text);
+                }
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dropdown content
+// ---------------------------------------------------------------------------
+
+#[component]
+fn DropdownContent(tags: Vec<Tag>) -> Element {
+    rsx! {
+        select::Content {
+            class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-60 overflow-y-auto",
+            select::Empty {
+                class: "px-3 py-2 text-sm text-slate-500",
+                "No results found."
+            }
+            for tag in &tags {
+                select::Item {
+                    value: "{tag.id}",
+                    label: tag.name.to_string(),
+                    class: "px-3 py-2 text-sm text-slate-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[state=checked]:text-indigo-300",
+                    "{tag.name}"
                 }
             }
         }
@@ -166,9 +310,7 @@ fn DesktopPill(
 // ---------------------------------------------------------------------------
 
 #[component]
-fn MobileLayout(mut state: dioxus_nox_tag_input::TagInputState<Tag>) -> Element {
-    let show_sheet = *state.is_dropdown_open.read();
-
+fn MobileLayout(mut state: TagInputState<Tag>) -> Element {
     rsx! {
         div {
             // Horizontal scroll tag strip
@@ -194,65 +336,12 @@ fn MobileLayout(mut state: dioxus_nox_tag_input::TagInputState<Tag>) -> Element 
                 }
                 input {
                     r#type: "text",
-                    role: "combobox",
-                    aria_expanded: state.aria_expanded(),
-                    aria_controls: state.listbox_id(),
-                    aria_activedescendant: state.active_descendant(),
-                    aria_autocomplete: "list",
                     class: "flex-1 bg-transparent outline-none text-slate-100 placeholder-slate-500 text-base",
                     placeholder: "Add a tag\u{2026}",
                     value: "{state.search_query}",
                     oninput: move |evt| state.set_query(evt.value()),
                     onkeydown: move |evt| state.handle_keydown(evt),
                     onclick: move |_| state.handle_click(),
-                    onfocus: move |_| state.is_dropdown_open.set(true),
-                }
-            }
-
-            // Scrim overlay + bottom sheet
-            if show_sheet && !state.filtered_suggestions.read().is_empty() {
-                // Scrim
-                div {
-                    class: "fixed inset-0 z-40 bg-black/40",
-                    onclick: move |_| state.close_dropdown(),
-                }
-
-                // Bottom sheet
-                div {
-                    id: state.listbox_id(),
-                    role: "listbox",
-                    class: "fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-slate-800 border-t border-slate-700 max-h-[50dvh] overflow-y-auto",
-
-                    // Drag handle
-                    div {
-                        class: "flex justify-center pt-3 pb-2",
-                        div {
-                            class: "w-10 h-1 rounded-full bg-slate-600",
-                        }
-                    }
-
-                    // Suggestions list
-                    for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                        {
-                            let is_active = *state.highlighted_index.read() == Some(i);
-                            let bg = if is_active { "bg-indigo-600/80 text-white" } else { "" };
-                            rsx! {
-                                div {
-                                    key: "{suggestion.id}",
-                                    id: state.suggestion_id(i),
-                                    role: "option",
-                                    aria_selected: if is_active { "true" } else { "false" },
-                                    class: "min-h-[44px] flex items-center px-4 py-3 cursor-pointer transition-colors active:bg-slate-700 {bg}",
-                                    onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                    onmousedown: move |evt: Event<MouseData>| {
-                                        evt.prevent_default();
-                                        state.add_tag(suggestion.clone());
-                                    },
-                                    "{suggestion.name}"
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

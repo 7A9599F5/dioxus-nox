@@ -1,6 +1,7 @@
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_tag_input::{Tag, use_tag_input};
+use dioxus_nox_select::{SelectContext, select};
+use dioxus_nox_tag_input::{Tag, TagInputState, TagLike, extract_clipboard_text, use_tag_input};
 
 fn main() {
     dioxus::launch(App);
@@ -92,6 +93,7 @@ fn App() -> Element {
                     TagField {
                         label: "Skills",
                         state: skills,
+                        available: skill_tags(),
                         accent: "emerald",
                         placeholder: "Add a skill\u{2026}",
                     }
@@ -99,6 +101,7 @@ fn App() -> Element {
                     TagField {
                         label: "Interests",
                         state: interests,
+                        available: interest_tags(),
                         accent: "violet",
                         placeholder: "Add an interest\u{2026}",
                     }
@@ -106,6 +109,7 @@ fn App() -> Element {
                     TagField {
                         label: "Primary Role (single select)",
                         state: primary_role,
+                        available: role_tags(),
                         accent: "emerald",
                         placeholder: "Choose your primary role\u{2026}",
                     }
@@ -227,22 +231,67 @@ fn accent_theme(name: &str) -> &'static AccentTheme {
 }
 
 // ---------------------------------------------------------------------------
-// Reusable tag field component with configurable accent color
+// Bridge: sync select ↔ tag-input
+// ---------------------------------------------------------------------------
+
+#[component]
+fn SelectTagBridge(available: Vec<Tag>, children: Element) -> Element {
+    let mut state = use_context::<TagInputState<Tag>>();
+    let mut select_ctx = use_context::<SelectContext>();
+
+    // Forward sync: select → tag-input (when user picks from dropdown)
+    use_effect(move || {
+        let selected_values = select_ctx.current_values();
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
+        for val in &selected_values {
+            if !tag_ids.contains(val) {
+                if let Some(tag) = available.iter().find(|t| t.id() == val.as_str()) {
+                    state.add_tag(tag.clone());
+                }
+            }
+        }
+    });
+
+    // Reverse sync: tag-input → select (when user removes a pill)
+    use_effect(move || {
+        let tag_ids: Vec<String> = state
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
+        let select_values = select_ctx.current_values_peek();
+        for val in &select_values {
+            if !tag_ids.contains(val) {
+                select_ctx.toggle_value(val);
+            }
+        }
+    });
+
+    rsx! { {children} }
+}
+
+// ---------------------------------------------------------------------------
+// Reusable tag field component with configurable accent color + dropdown
 // ---------------------------------------------------------------------------
 
 #[component]
 fn TagField(
     label: String,
-    mut state: dioxus_nox_tag_input::TagInputState<Tag>,
+    mut state: TagInputState<Tag>,
+    available: Vec<Tag>,
     accent: String,
     placeholder: String,
 ) -> Element {
     let theme = accent_theme(&accent);
 
-    use_effect(move || {
-        let count = state.filtered_suggestions.read().len();
-        state.announce_suggestions(count);
-    });
+    // Provide TagInputState as context so the bridge can find it
+    use_context_provider(|| state);
 
     rsx! {
         div {
@@ -253,104 +302,183 @@ fn TagField(
                 "{label}"
             }
 
+            select::Root {
+                multiple: true,
+                open_on_focus: true,
+                SelectTagBridge {
+                    available: available.clone(),
+                    TagFieldInner {
+                        state: state,
+                        available: available.clone(),
+                        theme_pill: theme.pill,
+                        theme_pill_hover: theme.pill_hover,
+                        theme_focus_ring: theme.focus_ring,
+                        placeholder: placeholder,
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn TagFieldInner(
+    mut state: TagInputState<Tag>,
+    available: Vec<Tag>,
+    theme_pill: &'static str,
+    theme_pill_hover: &'static str,
+    theme_focus_ring: &'static str,
+    placeholder: String,
+) -> Element {
+    let mut select_ctx = use_context::<SelectContext>();
+
+    rsx! {
+        div {
+            class: "relative",
+
             div {
-                class: "relative",
+                class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 transition-all motion-reduce:transition-none {theme_focus_ring}",
 
-                div {
-                    class: "flex flex-wrap items-center gap-2 rounded-xl border border-slate-600 bg-slate-900 px-3 py-2 transition-all motion-reduce:transition-none {theme.focus_ring}",
-
-                    for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
-                        {
-                            let is_pill_active = (*state.active_pill.read()) == Some(i);
-                            let pill_ring = if is_pill_active { "ring-2 ring-indigo-400" } else { "" };
-                            rsx! {
-                                span {
-                                    key: "{tag.id}",
-                                    id: state.pill_id(i),
-                                    class: "inline-flex items-center gap-1 rounded-lg border px-2.5 py-0.5 text-sm transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 {theme.pill} {pill_ring}",
-                                    "{tag.name}"
-                                    button {
-                                        r#type: "button",
-                                        class: "ml-0.5 rounded px-1 transition-colors motion-reduce:transition-none {theme.pill_hover}",
-                                        onclick: move |_| state.remove_tag(&tag.id),
-                                        "\u{00D7}"
-                                    }
+                for (i, tag) in state.selected_tags.read().iter().cloned().enumerate() {
+                    {
+                        let is_pill_active = (*state.active_pill.read()) == Some(i);
+                        let pill_ring = if is_pill_active { "ring-2 ring-indigo-400" } else { "" };
+                        let tag_id = tag.id.clone();
+                        rsx! {
+                            span {
+                                key: "{tag.id}",
+                                id: state.pill_id(i),
+                                class: "inline-flex items-center gap-1 rounded-lg border px-2.5 py-0.5 text-sm transition-shadow motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 {theme_pill} {pill_ring}",
+                                "{tag.name}"
+                                button {
+                                    r#type: "button",
+                                    class: "ml-0.5 rounded px-1 transition-colors motion-reduce:transition-none {theme_pill_hover}",
+                                    onclick: move |_| state.remove_tag(&tag_id),
+                                    "\u{00D7}"
                                 }
                             }
                         }
                     }
+                }
 
-                    input {
-                        r#type: "text",
-                        role: "combobox",
-                        aria_expanded: state.aria_expanded(),
-                        aria_controls: state.listbox_id(),
-                        aria_activedescendant: state.active_descendant(),
-                        aria_autocomplete: "list",
-                        disabled: *state.is_disabled.read(),
-                        class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
-                        placeholder: "{placeholder}",
-                        value: "{state.search_query}",
-                        oninput: move |evt| state.set_query(evt.value()),
-                        onkeydown: move |evt| state.handle_keydown(evt),
-                        onclick: move |_| state.handle_click(),
-                        onfocus: move |_| state.is_dropdown_open.set(true),
-                        onblur: move |_| state.close_dropdown(),
-                        onpaste: move |evt: Event<ClipboardData>| {
-                            if let Some(text) = dioxus_nox_tag_input::extract_clipboard_text(&evt) {
+                // Combo-style input with select keyboard wiring
+                input {
+                    r#type: "text",
+                    role: "combobox",
+                    disabled: *state.is_disabled.read(),
+                    class: "flex-1 min-w-[100px] bg-transparent outline-none text-slate-100 placeholder-slate-500 text-sm",
+                    placeholder: "{placeholder}",
+                    value: "{state.search_query}",
+                    aria_expanded: select_ctx.is_open(),
+                    aria_controls: select_ctx.listbox_id(),
+                    aria_activedescendant: select_ctx.active_descendant(),
+                    aria_autocomplete: "list",
+                    oninput: move |evt| {
+                        let val = evt.value();
+                        state.set_query(val.clone());
+                        select_ctx.set_search_query(val);
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                        }
+                        select_ctx.highlight_first();
+                    },
+                    onkeydown: move |evt| {
+                        match evt.key() {
+                            Key::ArrowDown => {
                                 evt.prevent_default();
-                                state.handle_paste(text);
-                            }
-                        },
-                    }
-                }
-
-                // Validation error
-                if let Some(err) = state.validation_error.read().as_ref() {
-                    p {
-                        class: "mt-1 text-xs text-red-400",
-                        "{err}"
-                    }
-                }
-
-                // Dropdown
-                if *state.is_dropdown_open.read() && !state.filtered_suggestions.read().is_empty() {
-                    div {
-                        id: state.listbox_id(),
-                        role: "listbox",
-                        aria_multiselectable: "true",
-                        class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-80 overflow-y-auto",
-
-                        for (i, suggestion) in state.filtered_suggestions.read().iter().cloned().enumerate() {
-                            {
-                                let is_active = *state.highlighted_index.read() == Some(i);
-                                let bg = if is_active { "bg-indigo-600/80 text-white" } else { "" };
-                                rsx! {
-                                    div {
-                                        key: "{suggestion.id}",
-                                        id: state.suggestion_id(i),
-                                        role: "option",
-                                        aria_selected: if is_active { "true" } else { "false" },
-                                        class: "px-3 py-2 text-sm cursor-pointer transition-colors motion-reduce:transition-none hover:bg-slate-700 {bg}",
-                                        onmouseenter: move |_| state.highlighted_index.set(Some(i)),
-                                        onmousedown: move |evt: Event<MouseData>| {
-                                            evt.prevent_default();
-                                            state.add_tag(suggestion.clone());
-                                        },
-                                        "{suggestion.name}"
-                                    }
+                                if !select_ctx.is_open() {
+                                    select_ctx.set_open(true);
+                                    select_ctx.highlight_first();
+                                } else {
+                                    select_ctx.highlight_next();
                                 }
                             }
+                            Key::ArrowUp => {
+                                if select_ctx.is_open() {
+                                    evt.prevent_default();
+                                    select_ctx.highlight_prev();
+                                }
+                            }
+                            Key::Enter => {
+                                evt.prevent_default();
+                                if select_ctx.is_open() && select_ctx.has_highlighted() {
+                                    select_ctx.confirm_highlighted();
+                                    state.set_query(String::new());
+                                    select_ctx.set_search_query(String::new());
+                                } else {
+                                    state.handle_input_keydown(evt);
+                                }
+                            }
+                            Key::Escape => {
+                                evt.prevent_default();
+                                if select_ctx.is_open() {
+                                    select_ctx.set_open(false);
+                                }
+                                state.active_pill.set(None);
+                            }
+                            Key::Tab => {
+                                if select_ctx.is_open() {
+                                    select_ctx.set_open(false);
+                                }
+                            }
+                            _ => {
+                                state.handle_input_keydown(evt);
+                            }
                         }
+                    },
+                    onfocus: move |_| {
+                        if select_ctx.open_on_focus() {
+                            select_ctx.set_open(true);
+                        }
+                    },
+                    onblur: move |_| {
+                        select_ctx.set_open(false);
+                    },
+                    onclick: move |_| {
+                        state.handle_click();
+                        if !select_ctx.is_open() {
+                            select_ctx.set_open(true);
+                        }
+                    },
+                    onpaste: move |evt: Event<ClipboardData>| {
+                        if let Some(text) = extract_clipboard_text(&evt) {
+                            evt.prevent_default();
+                            state.handle_paste(text);
+                        }
+                    },
+                }
+            }
+
+            // Dropdown via select::Content
+            select::Content {
+                class: "absolute z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-lg max-h-60 overflow-y-auto",
+                select::Empty {
+                    class: "px-3 py-2 text-sm text-slate-500",
+                    "No results found."
+                }
+                for tag in &available {
+                    select::Item {
+                        value: "{tag.id}",
+                        label: tag.name.clone(),
+                        class: "px-3 py-2 text-sm text-slate-200 cursor-pointer data-[highlighted]:bg-indigo-600/30 data-[state=checked]:text-indigo-300",
+                        "{tag.name}"
                     }
                 }
+            }
 
-                div {
-                    role: "status",
-                    aria_live: "polite",
-                    class: "absolute w-px h-px p-0 -m-px overflow-hidden [clip:rect(0,0,0,0)] whitespace-nowrap border-0",
-                    "{state.status_message.read()}"
+            // Validation error
+            if let Some(err) = state.validation_error.read().as_ref() {
+                p {
+                    class: "mt-1 text-xs text-red-400",
+                    "{err}"
                 }
+            }
+
+            div {
+                role: "status",
+                aria_live: "polite",
+                class: "absolute w-px h-px p-0 -m-px overflow-hidden [clip:rect(0,0,0,0)] whitespace-nowrap border-0",
+                "{state.status_message.read()}"
             }
         }
     }

@@ -1,12 +1,14 @@
 # dioxus-nox Workspace
 
-Headless component library for Dioxus 0.7 (Rust/WASM). 11 crates in `crates/`.
+Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 
 ## Crate Inventory
 
 | Crate | Path | Version | Purpose |
 |---|---|---|---|
+| `dioxus-nox-collection` | `crates/collection` | 0.13.0 | Shared collection primitives (scoring, navigation, ListItem trait) |
 | `dioxus-nox-cmdk` | `crates/cmdk` | 0.13.0 | Headless command palette primitive |
+| `dioxus-nox-select` | `crates/select` | 0.13.0 | Headless Select/Combobox/Multiselect primitives |
 | `dioxus-nox-virtualize` | `crates/virtualize` | 0.1.0 | Virtual list viewport math (helper for cmdk) |
 | `dioxus-nox-dnd` | `crates/dnd` | 0.2.0 | Composable drag-and-drop |
 | `dioxus-nox-extensions` | `crates/extensions` | 0.1.0 | Runtime plugin system (Extension trait) |
@@ -14,11 +16,12 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 11 crates in `crates/`.
 | `dioxus-nox-preview` | `crates/preview` | 0.1.0 | Debounced preview hook + LRU cache |
 | `dioxus-nox-shell` | `crates/shell` | 0.2.0 | Application shell layout primitive |
 | `dioxus-nox-suggest` | `crates/suggest` | 0.1.0 | Headless inline-trigger suggestion primitive (slash, @mentions, #hashtags) |
-| `dioxus-nox-tag-input` | `crates/tag-input` | 0.1.0 | Headless tag/multi-select input |
+| `dioxus-nox-tag-input` | `crates/tag-input` | 0.1.0 | Headless tag/pill management (composes with select for dropdown) |
 | `dioxus-nox-markdown` | `crates/markdown` | 0.1.0 | Headless markdown editor/previewer/display |
 | `dioxus-nox-tabs` | `crates/tabs` | 0.13.0 | Headless tab management primitives |
 | `noxpad` | `crates/noxpad` | 0.1.0 | 7-crate integration demo app |
 
+@crates/collection/CLAUDE.md
 @crates/cmdk/CLAUDE.md
 @crates/virtualize/CLAUDE.md
 @crates/extensions/CLAUDE.md
@@ -34,7 +37,11 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 11 crates in `crates/`.
 
 ### Cross-Crate Relationships
 
+- `collection` is a pure Rust foundation — no Dioxus dependency
+- `select` depends on `collection` (scoring, navigation via `ListItem` for `ItemEntry`)
+- `cmdk` depends on `collection` (scoring, navigation via `ListItem` for `ItemRegistration`)
 - `cmdk` optionally depends on `virtualize` (feature `"virtualize"`)
+- `tag-input` optionally depends on `select` (feature `"combobox"` — `combo` module)
 - `shell` dev-depends on `cmdk` (examples only; not a runtime dep)
 - `tag-input` dev-depends on `dnd` (sortable pills example only)
 - All others are standalone

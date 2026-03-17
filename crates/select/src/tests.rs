@@ -23,8 +23,8 @@ fn autocomplete_default_is_none() {
 
 #[test]
 fn custom_filter_never_equal() {
-    let a = CustomFilter::new(|_, _| Some(1));
-    let b = CustomFilter::new(|_, _| Some(1));
+    let a = CustomFilter::from_label_only(|_, _| Some(1));
+    let b = CustomFilter::from_label_only(|_, _| Some(1));
     assert_ne!(a, b);
 }
 

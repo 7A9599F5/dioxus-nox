@@ -37,8 +37,6 @@ pub struct TagInputGroupConfig<T: TagLike> {
     pub value: Option<Signal<Vec<T>>>,
     /// Parent-owned signal for search query (controlled mode).
     pub query: Option<Signal<String>>,
-    /// Parent-owned signal for dropdown open state (controlled mode).
-    pub open: Option<Signal<bool>>,
 }
 
 /// Configuration for the simple tag input hook.
@@ -49,8 +47,6 @@ pub struct TagInputConfig<T: TagLike> {
     pub value: Option<Signal<Vec<T>>>,
     /// Parent-owned signal for search query (controlled mode).
     pub query: Option<Signal<String>>,
-    /// Parent-owned signal for dropdown open state (controlled mode).
-    pub open: Option<Signal<bool>>,
 }
 
 impl<T: TagLike> TagInputConfig<T> {
@@ -60,7 +56,6 @@ impl<T: TagLike> TagInputConfig<T> {
             initial_selected,
             value: None,
             query: None,
-            open: None,
         }
     }
 }
@@ -99,23 +94,10 @@ pub struct TagInputState<T: TagLike> {
     pub selected_tags: Signal<Vec<T>>,
     /// All tags available for selection.
     pub available_tags: Signal<Vec<T>>,
-    /// Whether the suggestion dropdown is open.
-    pub is_dropdown_open: Signal<bool>,
-    /// Index of the currently highlighted suggestion, or `None` when no item is selected.
-    pub highlighted_index: Signal<Option<usize>>,
-    /// Suggestions filtered by the current search query, excluding already-selected tags.
-    pub filtered_suggestions: Memo<Vec<T>>,
     /// Index of the keyboard-selected pill, or `None` when the cursor is in the text input.
     pub active_pill: Signal<Option<usize>>,
     /// Index of the pill whose popover is open, or `None` when no popover is shown.
     pub popover_pill: Signal<Option<usize>>,
-    /// Suggestions organized into labelled groups.
-    ///
-    /// Populated automatically by both `use_tag_input` (single catch-all group)
-    /// and `use_tag_input_grouped` (full config). The flat `filtered_suggestions`
-    /// memo is always kept in sync — its order matches the concatenation of all
-    /// group items.
-    pub grouped_suggestions: Memo<Vec<SuggestionGroup<T>>>,
     /// Optional callback for creating new tags on Enter when no suggestion is highlighted.
     ///
     /// When `Some`, pressing Enter with a non-empty query and no highlighted suggestion
@@ -138,6 +120,21 @@ pub struct TagInputState<T: TagLike> {
     ///
     /// Default: `None`
     pub on_add: Signal<Option<Callback<T>>>,
+    /// Optional callback fired when the input text (search query) changes.
+    ///
+    /// Consumers can use this for external filtering, async fetching, or
+    /// debounced search. Replaces the old `on_search` callback.
+    ///
+    /// Default: `None`
+    pub on_query_change: Signal<Option<EventHandler<String>>>,
+    /// Optional callback fired when the user presses Enter/delimiter with text
+    /// and no `on_create` handler is set.
+    ///
+    /// This allows consumers to handle the "commit" action externally (e.g.,
+    /// to open a dropdown, trigger a search, or perform a custom action).
+    ///
+    /// Default: `None`
+    pub on_commit: Signal<Option<EventHandler<String>>>,
     /// Whether the tag input is disabled (no interaction allowed).
     ///
     /// When `true`, `handle_keydown`, `set_query`, `add_tag`, `remove_tag`, and
@@ -276,39 +273,6 @@ pub struct TagInputState<T: TagLike> {
     ///
     /// Default: `false`
     pub is_readonly: Signal<bool>,
-    /// Maximum number of suggestions to show in the dropdown.
-    ///
-    /// When set, `filtered_suggestions` is truncated after filtering.
-    /// `has_no_matches` still reflects the pre-truncation state.
-    ///
-    /// Default: `None` (unlimited)
-    pub max_suggestions: Signal<Option<usize>>,
-    /// Whether the current query produces no matching suggestions.
-    ///
-    /// `true` when `search_query` is non-empty but `filtered_suggestions` is empty
-    /// (before `max_suggestions` truncation, if any).
-    pub has_no_matches: Memo<bool>,
-    // ── Phase 5: Async Data Loading ────────────────────────────────────
-    /// Whether suggestions are currently being loaded asynchronously.
-    ///
-    /// Consumer sets this while fetching. Used for loading spinners and
-    /// screen reader announcements.
-    ///
-    /// Default: `false`
-    pub is_loading: Signal<bool>,
-    /// Async-fetched suggestions that replace `available_tags` for filtering.
-    ///
-    /// When `Some`, `filtered_suggestions` filters from this list instead of
-    /// `available_tags`. When `None`, the default `available_tags` are used.
-    ///
-    /// Default: `None`
-    pub async_suggestions: Signal<Option<Vec<T>>>,
-    /// Optional callback fired when the search query changes.
-    ///
-    /// Consumer handles the fetch + debounce and sets `async_suggestions` with results.
-    ///
-    /// Default: `None`
-    pub on_search: Signal<Option<Callback<String>>>,
     // ── Phase 6: UX Polish ─────────────────────────────────────────────
     /// Maximum character length for tag names.
     ///
@@ -348,17 +312,7 @@ pub struct TagInputState<T: TagLike> {
     ///
     /// Default: `None` (insertion order preserved)
     pub sort_selected: Signal<Option<fn(&T, &T) -> Ordering>>,
-    // ── Phase 7: Auto-Complete & Form Helpers ──────────────────────────
-    /// The top matching suggestion for auto-complete ghost text.
-    ///
-    /// First item in `filtered_suggestions` when query is non-empty, else `None`.
-    pub auto_complete_suggestion: Memo<Option<T>>,
-    /// The completion suffix for ghost text display.
-    ///
-    /// When `auto_complete_suggestion` is `Some` and the suggestion name starts
-    /// with the query (case-insensitive), this contains the remaining characters.
-    /// Otherwise empty string.
-    pub auto_complete_text: Memo<String>,
+    // ── Phase 7: Form Helpers ────────────────────────────────────────────
     /// JSON-serialized selected tag IDs for hidden form inputs.
     ///
     /// Format: `["id1","id2","id3"]`. Empty array `[]` when no tags selected.
@@ -370,16 +324,6 @@ pub struct TagInputState<T: TagLike> {
     ///
     /// Default: `false`
     pub select_mode: Signal<bool>,
-    // ── Phase 8: Enterprise Scale ──────────────────────────────────────
-    /// Total count of filtered suggestions before `max_suggestions` truncation.
-    ///
-    /// Useful for showing "Showing X of Y" UI and for virtual scroller height calculation.
-    pub total_filtered_count: Memo<usize>,
-    /// Total count of suggestions available (alias for consumer convenience).
-    ///
-    /// Same as `filtered_suggestions.len()` after truncation. Useful for virtual
-    /// scroller item count.
-    pub suggestion_count: Memo<usize>,
     /// Unique instance ID for scoping DOM element IDs when multiple tag inputs coexist.
     instance_id: u32,
 }
@@ -397,15 +341,13 @@ impl<T: TagLike> PartialEq for TagInputState<T> {
         self.search_query == other.search_query
             && self.selected_tags == other.selected_tags
             && self.available_tags == other.available_tags
-            && self.is_dropdown_open == other.is_dropdown_open
-            && self.highlighted_index == other.highlighted_index
-            && self.filtered_suggestions == other.filtered_suggestions
             && self.active_pill == other.active_pill
             && self.popover_pill == other.popover_pill
-            && self.grouped_suggestions == other.grouped_suggestions
             && self.on_create == other.on_create
             && self.on_remove == other.on_remove
             && self.on_add == other.on_add
+            && self.on_query_change == other.on_query_change
+            && self.on_commit == other.on_commit
             && self.is_disabled == other.is_disabled
             && self.status_message == other.status_message
             && self.on_paste == other.on_paste
@@ -426,12 +368,6 @@ impl<T: TagLike> PartialEq for TagInputState<T> {
             && self.min_tags == other.min_tags
             && self.is_below_minimum == other.is_below_minimum
             && self.is_readonly == other.is_readonly
-            && self.max_suggestions == other.max_suggestions
-            && self.has_no_matches == other.has_no_matches
-            // Phase 5
-            && self.is_loading == other.is_loading
-            && self.async_suggestions == other.async_suggestions
-            && self.on_search == other.on_search
             // Phase 6
             && self.max_tag_length == other.max_tag_length
             && self.filter == other.filter
@@ -440,36 +376,30 @@ impl<T: TagLike> PartialEq for TagInputState<T> {
             && self.visible_tags == other.visible_tags
             && self.sort_selected == other.sort_selected
             // Phase 7
-            && self.auto_complete_suggestion == other.auto_complete_suggestion
-            && self.auto_complete_text == other.auto_complete_text
             && self.form_value == other.form_value
             && self.select_mode == other.select_mode
-            // Phase 8
-            && self.total_filtered_count == other.total_filtered_count
-            && self.suggestion_count == other.suggestion_count
             && self.instance_id == other.instance_id
     }
 }
 
 impl<T: TagLike> TagInputState<T> {
-    /// Update the search query and open the dropdown.
+    /// Update the search query.
     ///
     /// Clears any `validation_error` from a previous rejected `add_tag`.
-    /// Fires `on_search` callback (if set) for async data loading.
+    /// Fires `on_query_change` callback (if set) so consumers can react to input changes.
     pub fn set_query(&mut self, query: String) {
         if *self.is_disabled.read() || *self.is_readonly.read() {
             return;
         }
         self.search_query.set(query.clone());
-        self.is_dropdown_open.set(true);
-        self.highlighted_index.set(None);
         self.active_pill.set(None);
         self.popover_pill.set(None);
         self.validation_error.set(None);
 
-        // Fire async search callback
-        if let Some(cb) = *self.on_search.read() {
-            cb.call(query);
+        // Fire query change callback
+        let cb = *self.on_query_change.read();
+        if let Some(handler) = cb {
+            handler.call(query);
         }
     }
 
@@ -534,7 +464,6 @@ impl<T: TagLike> TagInputState<T> {
             self.status_message
                 .set(format!("Maximum of {max} tags reached."));
             self.search_query.set(String::new());
-            self.is_dropdown_open.set(false);
             return;
         }
 
@@ -547,8 +476,6 @@ impl<T: TagLike> TagInputState<T> {
                 cb.call(tag);
             }
             self.search_query.set(String::new());
-            self.highlighted_index.set(None);
-            self.is_dropdown_open.set(false);
             self.active_pill.set(None);
             self.popover_pill.set(None);
             return;
@@ -581,8 +508,6 @@ impl<T: TagLike> TagInputState<T> {
             }
         }
         self.search_query.set(String::new());
-        self.highlighted_index.set(None);
-        self.is_dropdown_open.set(false);
         self.active_pill.set(None);
         self.popover_pill.set(None);
     }
@@ -653,40 +578,27 @@ impl<T: TagLike> TagInputState<T> {
         }
     }
 
-    /// Close the dropdown and clear the highlighted selection.
-    pub fn close_dropdown(&mut self) {
-        self.is_dropdown_open.set(false);
-        self.highlighted_index.set(None);
-        self.popover_pill.set(None);
-    }
-
-    /// Handle click/tap on the input area — clears pill selection and reopens dropdown.
+    /// Handle click/tap on the input area — clears pill selection.
     ///
-    /// Attach this to `onclick` on the text `<input>` to fix the mobile bug where
-    /// tapping the already-focused input doesn't reopen the dropdown (because
-    /// `onfocus` never re-fires).
+    /// Attach this to `onclick` on the text `<input>` to clear pill mode
+    /// when the user taps back into the text input.
     pub fn handle_click(&mut self) {
         if *self.is_disabled.read() || *self.is_readonly.read() {
             return;
         }
         self.active_pill.set(None);
-        self.is_dropdown_open.set(true);
-        self.highlighted_index.set(None);
         self.popover_pill.set(None);
     }
 
     /// Toggle the popover for the pill at `index`.
     ///
     /// If the popover is already showing for this pill, it closes.
-    /// Opening a popover closes the suggestion dropdown (mutual exclusion).
     pub fn toggle_popover(&mut self, index: usize) {
         let current = *self.popover_pill.read();
         if current == Some(index) {
             self.popover_pill.set(None);
         } else {
             self.popover_pill.set(Some(index));
-            self.is_dropdown_open.set(false);
-            self.highlighted_index.set(None);
         }
     }
 
@@ -711,28 +623,6 @@ impl<T: TagLike> TagInputState<T> {
     /// the value of `aria-controls` / `aria-owns` on the combobox `<input>`.
     pub fn listbox_id(&self) -> String {
         format!("dti-{}-listbox", self.instance_id)
-    }
-
-    /// Returns the DOM ID of the currently highlighted suggestion, or an empty string.
-    ///
-    /// Bind this to `aria-activedescendant` on the combobox `<input>`. An empty
-    /// string signals to assistive technology that no option is currently active.
-    pub fn active_descendant(&self) -> String {
-        match *self.highlighted_index.read() {
-            Some(idx) => self.suggestion_id(idx),
-            None => String::new(),
-        }
-    }
-
-    /// Returns `"true"` or `"false"` suitable for `aria-expanded` on the combobox input.
-    ///
-    /// Reflects whether the suggestion dropdown is currently open.
-    pub fn aria_expanded(&self) -> &'static str {
-        if *self.is_dropdown_open.read() {
-            "true"
-        } else {
-            "false"
-        }
     }
 
     /// Returns a stable DOM `id` for the selected pill at `index`.
@@ -815,16 +705,12 @@ impl<T: TagLike> TagInputState<T> {
         // Priority 3: no-op, let normal paste happen
     }
 
-    /// Update the status message with the current suggestion count.
+    /// Update the status message with a custom announcement.
     ///
-    /// Call this after `filtered_suggestions` changes to announce the available
-    /// suggestion count to screen readers. Typically wired via a `use_effect`.
-    pub fn announce_suggestions(&mut self, count: usize) {
-        if count == 0 {
-            self.status_message.set("No suggestions found.".to_string());
-        } else {
-            self.status_message.set(format_status_suggestions(count));
-        }
+    /// Consumers can call this to announce arbitrary messages to screen readers
+    /// via the `status_message` signal (rendered in an `aria-live` region).
+    pub fn announce(&mut self, message: String) {
+        self.status_message.set(message);
     }
 
     // ── Phase 2: Editing methods ────────────────────────────────────────
@@ -852,7 +738,6 @@ impl<T: TagLike> TagInputState<T> {
         }
         self.editing_pill.set(Some(index));
         self.popover_pill.set(None);
-        self.is_dropdown_open.set(false);
         self.active_pill.set(Some(index));
     }
 
@@ -960,7 +845,7 @@ impl<T: TagLike> TagInputState<T> {
         if *self.is_disabled.read() || *self.is_readonly.read() {
             return;
         }
-        let available = self.filtered_suggestions.read().clone();
+        let available = self.available_tags.read().clone();
         let mut added = 0;
         for tag in available {
             if let Some(max) = *self.max_tags.read()
@@ -985,7 +870,6 @@ impl<T: TagLike> TagInputState<T> {
                 if count == 1 { "" } else { "s" }
             ));
         }
-        self.is_dropdown_open.set(false);
     }
 
     /// Handle keyboard events for navigating suggestions and pills.
@@ -1076,12 +960,11 @@ impl<T: TagLike> TagInputState<T> {
                 }
             }
             Key::Escape => {
-                // Layered escape: popover → pill → dropdown
+                // Layered escape: popover → pill mode
                 if self.popover_pill.read().is_some() {
                     self.popover_pill.set(None);
                 } else {
                     self.active_pill.set(None);
-                    self.close_dropdown();
                 }
             }
             _ => {
@@ -1095,7 +978,7 @@ impl<T: TagLike> TagInputState<T> {
         }
     }
 
-    /// Handle keyboard events for the combobox text input.
+    /// Handle keyboard events for the text input.
     ///
     /// Called by `handle_keydown` when no pill is active, or directly by
     /// compound components that manage their own input keydown.
@@ -1116,7 +999,8 @@ impl<T: TagLike> TagInputState<T> {
                     }
                 }
                 Key::Escape => {
-                    self.close_dropdown();
+                    // Just close pill mode
+                    self.active_pill.set(None);
                 }
                 _ => {}
             }
@@ -1125,36 +1009,6 @@ impl<T: TagLike> TagInputState<T> {
 
         // ── Input mode (normal) ─────────────────────────────────────────
         match key {
-            Key::ArrowDown => {
-                event.prevent_default();
-                if !*self.is_dropdown_open.read() {
-                    self.is_dropdown_open.set(true);
-                }
-                let len = self.filtered_suggestions.read().len();
-                if len > 0 {
-                    let next = match *self.highlighted_index.read() {
-                        None => 0,
-                        Some(i) => (i + 1) % len,
-                    };
-                    self.highlighted_index.set(Some(next));
-                    scroll_into_view_by_id(&self.suggestion_id(next));
-                }
-            }
-            Key::ArrowUp => {
-                event.prevent_default();
-                if !*self.is_dropdown_open.read() {
-                    self.is_dropdown_open.set(true);
-                }
-                let len = self.filtered_suggestions.read().len();
-                if len > 0 {
-                    let next = match *self.highlighted_index.read() {
-                        None | Some(0) => len - 1,
-                        Some(i) => i - 1,
-                    };
-                    self.highlighted_index.set(Some(next));
-                    scroll_into_view_by_id(&self.suggestion_id(next));
-                }
-            }
             Key::ArrowLeft => {
                 // Enter pill mode from the right when query is empty
                 if self.search_query.read().is_empty() {
@@ -1167,42 +1021,22 @@ impl<T: TagLike> TagInputState<T> {
             }
             Key::Enter => {
                 event.prevent_default();
-                let highlight = *self.highlighted_index.read();
-                if let Some(idx) = highlight {
-                    if *self.is_dropdown_open.read() {
-                        let suggestions = self.filtered_suggestions.read();
-                        if let Some(tag) = suggestions.get(idx).cloned() {
-                            drop(suggestions);
-                            self.add_tag(tag);
-                        }
-                    }
-                } else {
-                    let query = self.search_query.read().clone();
-                    let callback = *self.on_create.read();
-                    if !query.is_empty() {
-                        // enforce_allow_list blocks on_create
-                        if *self.enforce_allow_list.read() {
-                            // Do nothing — only suggestions can be selected
-                            self.is_dropdown_open.set(true);
-                        } else if let Some(cb) = callback {
-                            if let Some(tag) = cb.call(query) {
-                                self.create_tag(tag);
-                            }
-                        } else {
-                            self.is_dropdown_open.set(true);
+                let query = self.search_query.read().clone();
+                let callback = *self.on_create.read();
+                if !query.is_empty() {
+                    // enforce_allow_list blocks on_create
+                    if *self.enforce_allow_list.read() {
+                        // Do nothing — only suggestions can be selected
+                    } else if let Some(cb) = callback {
+                        if let Some(tag) = cb.call(query) {
+                            self.create_tag(tag);
                         }
                     } else {
-                        self.is_dropdown_open.set(true);
-                    }
-                }
-            }
-            Key::Tab => {
-                // Auto-complete: Tab accepts top suggestion when available
-                let ac = self.auto_complete_suggestion.read().clone();
-                if ac.is_some() && !self.search_query.read().is_empty() {
-                    event.prevent_default();
-                    if let Some(tag) = ac {
-                        self.add_tag(tag);
+                        // No on_create handler — fire on_commit if set
+                        let commit_cb = *self.on_commit.read();
+                        if let Some(handler) = commit_cb {
+                            handler.call(query);
+                        }
                     }
                 }
             }
@@ -1217,7 +1051,8 @@ impl<T: TagLike> TagInputState<T> {
                 }
             }
             Key::Escape => {
-                self.close_dropdown();
+                // Just close pill mode
+                self.active_pill.set(None);
             }
             Key::Character(ref c) => {
                 // Custom delimiter: commit query when a delimiter char is typed
@@ -1227,23 +1062,21 @@ impl<T: TagLike> TagInputState<T> {
                     && delimiters.contains(&ch)
                 {
                     event.prevent_default();
-                    let highlight = *self.highlighted_index.read();
-                    if let Some(idx) = highlight {
-                        let suggestions = self.filtered_suggestions.read();
-                        if let Some(tag) = suggestions.get(idx).cloned() {
-                            drop(suggestions);
-                            self.add_tag(tag);
-                        }
-                    } else {
-                        // enforce_allow_list blocks on_create via delimiter too
-                        if !*self.enforce_allow_list.read() {
-                            let query = self.search_query.read().clone();
-                            let callback = *self.on_create.read();
-                            if !query.is_empty()
-                                && let Some(cb) = callback
-                                && let Some(tag) = cb.call(query)
-                            {
-                                self.create_tag(tag);
+                    // enforce_allow_list blocks on_create via delimiter too
+                    if !*self.enforce_allow_list.read() {
+                        let query = self.search_query.read().clone();
+                        let callback = *self.on_create.read();
+                        if !query.is_empty() {
+                            if let Some(cb) = callback {
+                                if let Some(tag) = cb.call(query) {
+                                    self.create_tag(tag);
+                                }
+                            } else {
+                                // No on_create handler — fire on_commit if set
+                                let commit_cb = *self.on_commit.read();
+                                if let Some(handler) = commit_cb {
+                                    handler.call(query);
+                                }
                             }
                         }
                     }
@@ -1270,7 +1103,7 @@ pub fn use_tag_input<T: TagLike>(
 
 /// Create a headless tag input state with optional controlled signals.
 ///
-/// This is the configurable version of `use_tag_input`. When `value`, `query`, or `open`
+/// This is the configurable version of `use_tag_input`. When `value` or `query`
 /// signals are provided in the config, the hook uses those directly instead of creating
 /// internal ones. All mutations (`add_tag`, `remove_tag`, etc.) write to the provided
 /// signal automatically — no callbacks needed.
@@ -1283,83 +1116,23 @@ pub fn use_tag_input_with<T: TagLike>(config: TagInputConfig<T>) -> TagInputStat
     let internal_query = use_signal(String::new);
     let internal_selected = use_signal(|| config.initial_selected);
     let internal_available = use_signal(|| config.available_tags);
-    let internal_open = use_signal(|| false);
 
     let search_query = config.query.unwrap_or(internal_query);
     let selected_tags = config.value.unwrap_or(internal_selected);
     let available_tags = internal_available;
-    let is_dropdown_open = config.open.unwrap_or(internal_open);
-    let highlighted_index = use_signal(|| None);
 
     // Phase 4
     let deny_list: Signal<Option<Vec<String>>> = use_signal(|| None);
-    let max_suggestions: Signal<Option<usize>> = use_signal(|| None);
-    // Phase 5
-    let async_suggestions: Signal<Option<Vec<T>>> = use_signal(|| None);
     // Phase 6
     let filter: Signal<Option<fn(&T, &str) -> bool>> = use_signal(|| None);
-
-    let filtered_suggestions = use_memo(move || {
-        let query = search_query.read().to_lowercase();
-        let selected = selected_tags.read();
-
-        // Use async_suggestions if available, otherwise available_tags
-        let async_sugg = async_suggestions.read();
-        let avail;
-        let source: &[T] = if let Some(ref items) = *async_sugg {
-            items
-        } else {
-            avail = available_tags.read();
-            &avail
-        };
-
-        let bl = deny_list.read();
-
-        let mut results: Vec<T> = source
-            .iter()
-            .filter(|tag| {
-                // Exclude already-selected tags
-                !selected.iter().any(|s| s.id() == tag.id())
-            })
-            .filter(|tag| {
-                // Deny list filter
-                if let Some(ref bl_list) = *bl {
-                    let name_lower = tag.name().to_lowercase();
-                    if bl_list.iter().any(|b| b.to_lowercase() == name_lower) {
-                        return false;
-                    }
-                }
-                true
-            })
-            .filter(|tag| {
-                if query.is_empty() {
-                    return true;
-                }
-                // Custom filter or default substring match
-                match *filter.read() {
-                    Some(f) => f(tag, &query),
-                    None => tag.name().to_lowercase().contains(&query),
-                }
-            })
-            .cloned()
-            .collect();
-
-        // Apply max_suggestions truncation
-        if let Some(max) = *max_suggestions.read() {
-            results.truncate(max);
-        }
-
-        results
-    });
-
-    let grouped_suggestions =
-        use_memo(move || build_groups(&filtered_suggestions.read(), None, None, None));
 
     let active_pill = use_signal(|| None);
     let popover_pill = use_signal(|| None);
     let on_create = use_signal(|| None);
     let on_remove = use_signal(|| None);
     let on_add = use_signal(|| None);
+    let on_query_change: Signal<Option<EventHandler<String>>> = use_signal(|| None);
+    let on_commit: Signal<Option<EventHandler<String>>> = use_signal(|| None);
     let is_disabled = use_signal(|| false);
     let status_message = use_signal(String::new);
     let on_paste = use_signal(|| None);
@@ -1387,13 +1160,6 @@ pub fn use_tag_input_with<T: TagLike>(config: TagInputConfig<T>) -> TagInputStat
         None => false,
     });
     let is_readonly = use_signal(|| false);
-    let has_no_matches = use_memo(move || {
-        let query = search_query.read();
-        !query.is_empty() && filtered_suggestions.read().is_empty()
-    });
-    // Phase 5
-    let is_loading = use_signal(|| false);
-    let on_search = use_signal(|| None);
     // Phase 6
     let max_tag_length = use_signal(|| None);
     let max_visible_tags: Signal<Option<usize>> = use_signal(|| None);
@@ -1413,89 +1179,24 @@ pub fn use_tag_input_with<T: TagLike>(config: TagInputConfig<T>) -> TagInputStat
     });
     let sort_selected: Signal<Option<fn(&T, &T) -> Ordering>> = use_signal(|| None);
     // Phase 7
-    let auto_complete_suggestion = use_memo(move || {
-        let query = search_query.read();
-        if query.is_empty() {
-            return None;
-        }
-        filtered_suggestions.read().first().cloned()
-    });
-    let auto_complete_text = use_memo(move || {
-        let query = search_query.read();
-        if query.is_empty() {
-            return String::new();
-        }
-        match auto_complete_suggestion.read().as_ref() {
-            Some(tag) => {
-                let name = tag.name();
-                if name.to_lowercase().starts_with(&query.to_lowercase()) {
-                    name[query.len()..].to_string()
-                } else {
-                    String::new()
-                }
-            }
-            None => String::new(),
-        }
-    });
     let form_value = use_memo(move || {
         let tags = selected_tags.read();
         let ids: Vec<String> = tags.iter().map(|t| format!("\"{}\"", t.id())).collect();
         format!("[{}]", ids.join(","))
     });
     let select_mode = use_signal(|| false);
-    // Phase 8
-    let total_filtered_count = use_memo(move || {
-        // This counts the filtered results before max_suggestions truncation.
-        // Since the memo already truncates, we re-compute the pre-truncation count.
-        let query = search_query.read().to_lowercase();
-        let selected = selected_tags.read();
-        let async_sugg = async_suggestions.read();
-        let avail;
-        let source: &[T] = if let Some(ref items) = *async_sugg {
-            items
-        } else {
-            avail = available_tags.read();
-            &avail
-        };
-        let bl = deny_list.read();
-        source
-            .iter()
-            .filter(|tag| !selected.iter().any(|s| s.id() == tag.id()))
-            .filter(|tag| {
-                if let Some(ref bl_list) = *bl {
-                    let name_lower = tag.name().to_lowercase();
-                    if bl_list.iter().any(|b| b.to_lowercase() == name_lower) {
-                        return false;
-                    }
-                }
-                true
-            })
-            .filter(|tag| {
-                if query.is_empty() {
-                    return true;
-                }
-                match *filter.read() {
-                    Some(f) => f(tag, &query),
-                    None => tag.name().to_lowercase().contains(&query),
-                }
-            })
-            .count()
-    });
-    let suggestion_count = use_memo(move || filtered_suggestions.read().len());
 
     TagInputState {
         search_query,
         selected_tags,
         available_tags,
-        is_dropdown_open,
-        highlighted_index,
-        filtered_suggestions,
-        grouped_suggestions,
         active_pill,
         popover_pill,
         on_create,
         on_remove,
         on_add,
+        on_query_change,
+        on_commit,
         is_disabled,
         status_message,
         on_paste,
@@ -1516,12 +1217,6 @@ pub fn use_tag_input_with<T: TagLike>(config: TagInputConfig<T>) -> TagInputStat
         min_tags,
         is_below_minimum,
         is_readonly,
-        max_suggestions,
-        has_no_matches,
-        // Phase 5
-        is_loading,
-        async_suggestions,
-        on_search,
         // Phase 6
         max_tag_length,
         filter,
@@ -1530,22 +1225,17 @@ pub fn use_tag_input_with<T: TagLike>(config: TagInputConfig<T>) -> TagInputStat
         visible_tags,
         sort_selected,
         // Phase 7
-        auto_complete_suggestion,
-        auto_complete_text,
         form_value,
         select_mode,
-        // Phase 8
-        total_filtered_count,
-        suggestion_count,
         instance_id,
     }
 }
 
-/// Create a headless tag input state with grouped suggestions, custom filtering, and sorting.
+/// Create a headless tag input state with grouped configuration.
 ///
-/// This is the full-featured version of `use_tag_input`. It uses the `TagLike::group()`
-/// method to organize suggestions into labelled sections and supports custom filter/sort
-/// functions and per-group item limits.
+/// This is the full-featured version of `use_tag_input`. It accepts custom filter/sort
+/// functions via `TagInputGroupConfig`. Note: grouped suggestions are no longer built
+/// internally — consumers can use the `build_groups` helper to organize tags externally.
 #[allow(clippy::type_complexity)]
 pub fn use_tag_input_grouped<T: TagLike>(config: TagInputGroupConfig<T>) -> TagInputState<T> {
     let instance_id = use_hook(|| INSTANCE_COUNTER.fetch_add(1, AtomicOrdering::Relaxed));
@@ -1555,93 +1245,21 @@ pub fn use_tag_input_grouped<T: TagLike>(config: TagInputGroupConfig<T>) -> TagI
     let internal_query = use_signal(String::new);
     let internal_selected = use_signal(|| config.initial_selected);
     let internal_available = use_signal(|| config.available_tags);
-    let internal_open = use_signal(|| false);
 
     let search_query = config.query.unwrap_or(internal_query);
     let selected_tags = config.value.unwrap_or(internal_selected);
     let available_tags = internal_available;
-    let is_dropdown_open = config.open.unwrap_or(internal_open);
-    let highlighted_index = use_signal(|| None);
-
-    let filter_fn = config.filter;
-    let sort_items_fn = config.sort_items;
-    let sort_groups_fn = config.sort_groups;
-    let max_items = config.max_items_per_group;
 
     // Phase 4
     let deny_list: Signal<Option<Vec<String>>> = use_signal(|| None);
-    let max_suggestions: Signal<Option<usize>> = use_signal(|| None);
-    // Phase 5
-    let async_suggestions: Signal<Option<Vec<T>>> = use_signal(|| None);
-
-    let filtered_suggestions = use_memo(move || {
-        let query = search_query.read().to_lowercase();
-        let selected = selected_tags.read();
-
-        // Use async_suggestions if available, otherwise available_tags
-        let async_sugg = async_suggestions.read();
-        let avail;
-        let source: &[T] = if let Some(ref items) = *async_sugg {
-            items
-        } else {
-            avail = available_tags.read();
-            &avail
-        };
-
-        let bl = deny_list.read();
-
-        let filtered: Vec<T> = source
-            .iter()
-            .filter(|tag| !selected.iter().any(|s| s.id() == tag.id()))
-            .filter(|tag| {
-                // Deny list filter
-                if let Some(ref bl_list) = *bl {
-                    let name_lower = tag.name().to_lowercase();
-                    if bl_list.iter().any(|b| b.to_lowercase() == name_lower) {
-                        return false;
-                    }
-                }
-                true
-            })
-            .filter(|tag| {
-                if query.is_empty() {
-                    return true;
-                }
-                match filter_fn {
-                    Some(f) => f(tag, &query),
-                    None => tag.name().to_lowercase().contains(&query),
-                }
-            })
-            .cloned()
-            .collect();
-
-        // Build groups, apply sort/limit, then flatten back to the canonical flat order
-        let groups = build_groups(&filtered, sort_items_fn, sort_groups_fn, max_items);
-        let mut results: Vec<T> = groups.into_iter().flat_map(|g| g.items).collect();
-
-        // Apply max_suggestions truncation
-        if let Some(max) = *max_suggestions.read() {
-            results.truncate(max);
-        }
-
-        results
-    });
-
-    let grouped_suggestions = use_memo(move || {
-        // Re-group from the already-filtered+sorted flat list (preserves order from above)
-        build_groups(
-            &filtered_suggestions.read(),
-            sort_items_fn,
-            sort_groups_fn,
-            max_items,
-        )
-    });
 
     let active_pill = use_signal(|| None);
     let popover_pill = use_signal(|| None);
     let on_create = use_signal(|| None);
     let on_remove = use_signal(|| None);
     let on_add = use_signal(|| None);
+    let on_query_change: Signal<Option<EventHandler<String>>> = use_signal(|| None);
+    let on_commit: Signal<Option<EventHandler<String>>> = use_signal(|| None);
     let is_disabled = use_signal(|| false);
     let status_message = use_signal(String::new);
     let on_paste = use_signal(|| None);
@@ -1669,13 +1287,6 @@ pub fn use_tag_input_grouped<T: TagLike>(config: TagInputGroupConfig<T>) -> TagI
         None => false,
     });
     let is_readonly = use_signal(|| false);
-    let has_no_matches = use_memo(move || {
-        let query = search_query.read();
-        !query.is_empty() && filtered_suggestions.read().is_empty()
-    });
-    // Phase 5
-    let is_loading = use_signal(|| false);
-    let on_search = use_signal(|| None);
     // Phase 6
     let max_tag_length = use_signal(|| None);
     let filter: Signal<Option<fn(&T, &str) -> bool>> = use_signal(|| None);
@@ -1696,87 +1307,24 @@ pub fn use_tag_input_grouped<T: TagLike>(config: TagInputGroupConfig<T>) -> TagI
     });
     let sort_selected: Signal<Option<fn(&T, &T) -> Ordering>> = use_signal(|| None);
     // Phase 7
-    let auto_complete_suggestion = use_memo(move || {
-        let query = search_query.read();
-        if query.is_empty() {
-            return None;
-        }
-        filtered_suggestions.read().first().cloned()
-    });
-    let auto_complete_text = use_memo(move || {
-        let query = search_query.read();
-        if query.is_empty() {
-            return String::new();
-        }
-        match auto_complete_suggestion.read().as_ref() {
-            Some(tag) => {
-                let name = tag.name();
-                if name.to_lowercase().starts_with(&query.to_lowercase()) {
-                    name[query.len()..].to_string()
-                } else {
-                    String::new()
-                }
-            }
-            None => String::new(),
-        }
-    });
     let form_value = use_memo(move || {
         let tags = selected_tags.read();
         let ids: Vec<String> = tags.iter().map(|t| format!("\"{}\"", t.id())).collect();
         format!("[{}]", ids.join(","))
     });
     let select_mode = use_signal(|| false);
-    // Phase 8
-    let total_filtered_count = use_memo(move || {
-        let query = search_query.read().to_lowercase();
-        let selected = selected_tags.read();
-        let async_sugg = async_suggestions.read();
-        let avail;
-        let source: &[T] = if let Some(ref items) = *async_sugg {
-            items
-        } else {
-            avail = available_tags.read();
-            &avail
-        };
-        let bl = deny_list.read();
-        source
-            .iter()
-            .filter(|tag| !selected.iter().any(|s| s.id() == tag.id()))
-            .filter(|tag| {
-                if let Some(ref bl_list) = *bl {
-                    let name_lower = tag.name().to_lowercase();
-                    if bl_list.iter().any(|b| b.to_lowercase() == name_lower) {
-                        return false;
-                    }
-                }
-                true
-            })
-            .filter(|tag| {
-                if query.is_empty() {
-                    return true;
-                }
-                match filter_fn {
-                    Some(f) => f(tag, &query),
-                    None => tag.name().to_lowercase().contains(&query),
-                }
-            })
-            .count()
-    });
-    let suggestion_count = use_memo(move || filtered_suggestions.read().len());
 
     TagInputState {
         search_query,
         selected_tags,
         available_tags,
-        is_dropdown_open,
-        highlighted_index,
-        filtered_suggestions,
-        grouped_suggestions,
         active_pill,
         popover_pill,
         on_create,
         on_remove,
         on_add,
+        on_query_change,
+        on_commit,
         is_disabled,
         status_message,
         on_paste,
@@ -1797,12 +1345,6 @@ pub fn use_tag_input_grouped<T: TagLike>(config: TagInputGroupConfig<T>) -> TagI
         min_tags,
         is_below_minimum,
         is_readonly,
-        max_suggestions,
-        has_no_matches,
-        // Phase 5
-        is_loading,
-        async_suggestions,
-        on_search,
         // Phase 6
         max_tag_length,
         filter,
@@ -1811,13 +1353,8 @@ pub fn use_tag_input_grouped<T: TagLike>(config: TagInputGroupConfig<T>) -> TagI
         visible_tags,
         sort_selected,
         // Phase 7
-        auto_complete_suggestion,
-        auto_complete_text,
         form_value,
         select_mode,
-        // Phase 8
-        total_filtered_count,
-        suggestion_count,
         instance_id,
     }
 }
@@ -1848,6 +1385,7 @@ pub(crate) fn format_status_pasted(added: usize, total: usize) -> String {
     )
 }
 
+#[cfg(test)]
 pub(crate) fn format_status_suggestions(count: usize) -> String {
     format!(
         "{count} suggestion{} available.",
@@ -1883,11 +1421,11 @@ pub(crate) fn format_error_max_length(max_len: usize) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Pure helper functions (test-only — production memos inline equivalent logic)
+// Pure helper functions
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-pub(crate) fn is_denied(name: &str, deny_list: &[String]) -> bool {
+/// Returns `true` if the given name appears in the deny list (case-insensitive).
+pub fn is_denied(name: &str, deny_list: &[String]) -> bool {
     let name_lower = name.to_lowercase();
     deny_list.iter().any(|b| b.to_lowercase() == name_lower)
 }
@@ -1952,23 +1490,6 @@ pub(crate) fn format_status_truncated(shown: usize, total: usize) -> String {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Scroll the element with the given `id` into view using `ScrollLogicalPosition::Nearest`.
-///
-/// No-op on non-WASM targets.
-#[cfg(target_arch = "wasm32")]
-fn scroll_into_view_by_id(element_id: &str) {
-    let window = web_sys::window().unwrap();
-    let document = window.document().unwrap();
-    if let Some(el) = document.get_element_by_id(element_id) {
-        let opts = web_sys::ScrollIntoViewOptions::new();
-        opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
-        el.scroll_into_view_with_scroll_into_view_options(&opts);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn scroll_into_view_by_id(_element_id: &str) {}
-
 /// Extract the clipboard text from a paste `Event<ClipboardData>` on WASM targets.
 ///
 /// Uses `web-sys` to cast the underlying event to a `ClipboardEvent` and read
@@ -2004,6 +1525,7 @@ pub fn extract_clipboard_text(
 }
 
 /// Build `SuggestionGroup`s from a flat list of tags, preserving first-seen group order.
+#[cfg(test)]
 pub(crate) fn build_groups<T: TagLike>(
     items: &[T],
     sort_items: Option<fn(&T, &T) -> Ordering>,

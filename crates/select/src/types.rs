@@ -1,5 +1,6 @@
-use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
+
+use dioxus_nox_collection::ListItem;
 
 pub(crate) static INSTANCE_COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -49,6 +50,24 @@ pub struct ItemEntry {
     pub group_id: Option<String>,
 }
 
+impl ListItem for ItemEntry {
+    fn value(&self) -> &str {
+        &self.value
+    }
+    fn label(&self) -> &str {
+        &self.label
+    }
+    fn keywords(&self) -> &str {
+        &self.keywords
+    }
+    fn disabled(&self) -> bool {
+        self.disabled
+    }
+    fn group_id(&self) -> Option<&str> {
+        self.group_id.as_deref()
+    }
+}
+
 // ── GroupEntry ───────────────────────────────────────────────────────────────
 
 /// Registration entry for an option group.
@@ -60,46 +79,7 @@ pub struct GroupEntry {
     pub label: Option<String>,
 }
 
-// ── ScoredItem ──────────────────────────────────────────────────────────────
+// ── ScoredItem & CustomFilter ────────────────────────────────────────────────
 
-/// An item paired with its fuzzy match score and highlight indices.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ScoredItem {
-    /// The item's value.
-    pub value: String,
-    /// Fuzzy match score (`None` when query is empty = show all).
-    pub score: Option<u32>,
-    /// Byte-offset indices into the label where the match occurred.
-    pub match_indices: Option<Vec<u32>>,
-}
-
-// ── CustomFilter ────────────────────────────────────────────────────────────
-
-/// Wrapper for a custom filter function.
-///
-/// Receives `(query, item_label)` → `Option<u32>` where `None` means no match
-/// and `Some(score)` is the relevance score.
-/// Inner type alias for the custom filter function.
-type FilterFn = dyn Fn(&str, &str) -> Option<u32>;
-
-#[derive(Clone)]
-pub struct CustomFilter(pub Rc<FilterFn>);
-
-impl CustomFilter {
-    pub fn new(f: impl Fn(&str, &str) -> Option<u32> + 'static) -> Self {
-        Self(Rc::new(f))
-    }
-}
-
-impl PartialEq for CustomFilter {
-    fn eq(&self, _other: &Self) -> bool {
-        // Always not-equal to ensure reactive updates on filter swap.
-        false
-    }
-}
-
-impl std::fmt::Debug for CustomFilter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("CustomFilter(..)")
-    }
-}
+// Re-exported from dioxus-nox-collection.
+pub use dioxus_nox_collection::{CustomFilter, ScoredItem};
