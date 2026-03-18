@@ -31,14 +31,13 @@ use super::indicator::DropIndicator;
 fn pointer_event_matches_handle(event: &PointerEvent, selector: &str) -> bool {
     #[cfg(target_arch = "wasm32")]
     {
-        if let Some(web_event) = event.data().downcast::<web_sys::PointerEvent>() {
-            if let Some(target) = web_event.target() {
-                if let Ok(element) = target.dyn_into::<web_sys::Element>() {
-                    return element.closest(selector).ok().flatten().is_some();
-                }
-            }
+        if let Some(web_event) = event.data().downcast::<web_sys::PointerEvent>()
+            && let Some(target) = web_event.target()
+            && let Ok(element) = target.dyn_into::<web_sys::Element>()
+        {
+            return element.closest(selector).ok().flatten().is_some();
         }
-        return false;
+        false
     }
 
     #[cfg(not(target_arch = "wasm32"))]

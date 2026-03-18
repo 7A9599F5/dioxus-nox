@@ -151,7 +151,10 @@ fn custom_filter_used_when_provided() {
 
 #[test]
 fn custom_filter_3arg() {
-    let items = vec![ti_kw("a", "Open File", ""), ti_kw("b", "Settings", "config preferences")];
+    let items = vec![
+        ti_kw("a", "Open File", ""),
+        ti_kw("b", "Settings", "config preferences"),
+    ];
     let cf = CustomFilter::new(|query, _label, keywords| {
         if keywords.contains(query) {
             Some(100)
@@ -237,10 +240,7 @@ fn config_boost(boosts: &[(&str, i32)]) -> ScoringConfig {
     ScoringConfig {
         hidden_values: HashSet::new(),
         force_mount_values: HashSet::new(),
-        boosts: boosts
-            .iter()
-            .map(|(k, v)| (k.to_string(), *v))
-            .collect(),
+        boosts: boosts.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
         strategy: None,
     }
 }
@@ -308,11 +308,7 @@ impl ScoringStrategy for DoubleScore {
 struct FilterLowScores;
 impl ScoringStrategy for FilterLowScores {
     fn adjust_score(&self, _value: &str, raw: u32, _query: &str) -> Option<u32> {
-        if raw > 50 {
-            Some(raw)
-        } else {
-            None
-        }
+        if raw > 50 { Some(raw) } else { None }
     }
 }
 
@@ -624,13 +620,11 @@ fn custom_filter_never_equal() {
 
 #[test]
 fn custom_filter_from_label_only_works() {
-    let cf = CustomFilter::from_label_only(|query, label| {
-        if label.contains(query) {
-            Some(1)
-        } else {
-            None
-        }
-    });
+    let cf = CustomFilter::from_label_only(
+        |query, label| {
+            if label.contains(query) { Some(1) } else { None }
+        },
+    );
     assert_eq!((cf.0)("hel", "hello", "ignored keywords"), Some(1));
     assert_eq!((cf.0)("xyz", "hello", ""), None);
 }

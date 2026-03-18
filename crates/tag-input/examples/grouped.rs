@@ -1,7 +1,7 @@
 use dioxus::document::Stylesheet;
 use dioxus::events::ClipboardData;
 use dioxus::prelude::*;
-use dioxus_nox_select::{select, AutoComplete, SelectContext};
+use dioxus_nox_select::{AutoComplete, SelectContext, select};
 use dioxus_nox_tag_input::{TagInputGroupConfig, TagInputState, TagLike, use_tag_input_grouped};
 
 fn main() {

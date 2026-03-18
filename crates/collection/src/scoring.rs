@@ -26,11 +26,7 @@ pub fn score_items<T: ListItem>(
     // Filter out hidden items
     let active_items: Vec<&T> = items
         .iter()
-        .filter(|i| {
-            hidden
-                .map(|h| !h.contains(i.value()))
-                .unwrap_or(true)
-        })
+        .filter(|i| hidden.map(|h| !h.contains(i.value())).unwrap_or(true))
         .collect();
 
     if query.is_empty() {

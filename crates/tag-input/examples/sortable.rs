@@ -14,7 +14,9 @@ use dioxus_nox_dnd::{
     SortableContext, SortableItem,
 };
 use dioxus_nox_select::{SelectContext, select};
-use dioxus_nox_tag_input::{TagInputState, TagLike, components as tag_input, extract_clipboard_text};
+use dioxus_nox_tag_input::{
+    TagInputState, TagLike, components as tag_input, extract_clipboard_text,
+};
 
 fn main() {
     dioxus::launch(App);

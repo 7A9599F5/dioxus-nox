@@ -47,8 +47,7 @@ fn color_tags() -> Vec<ColorTag> {
 #[component]
 fn App() -> Element {
     // Parent-owned signals -- shared by both Root components
-    let mut shared_tags: Signal<Vec<ColorTag>> =
-        use_signal(|| vec![ColorTag::new("blue", "Blue")]);
+    let mut shared_tags: Signal<Vec<ColorTag>> = use_signal(|| vec![ColorTag::new("blue", "Blue")]);
     let shared_query: Signal<String> = use_signal(String::new);
 
     let tag_count = shared_tags.read().len();

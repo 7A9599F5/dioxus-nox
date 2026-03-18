@@ -209,10 +209,8 @@ pub fn CommandRoot(
 
         let items = ctx.items;
         let is_open = ctx.is_open;
-        type KbClosureHolder =
-            Rc<RefCell<Option<Closure<dyn FnMut(web_sys::KeyboardEvent)>>>>;
-        let shortcut_closure_holder: KbClosureHolder =
-            use_hook(|| Rc::new(RefCell::new(None)));
+        type KbClosureHolder = Rc<RefCell<Option<Closure<dyn FnMut(web_sys::KeyboardEvent)>>>>;
+        let shortcut_closure_holder: KbClosureHolder = use_hook(|| Rc::new(RefCell::new(None)));
 
         let ch = shortcut_closure_holder.clone();
         use_effect(move || {
@@ -256,8 +254,7 @@ pub fn CommandRoot(
                         return;
                     }
                 }
-            })
-                as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+            }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
             if let Some(w) = web_sys::window() {
                 use wasm_bindgen::JsCast;

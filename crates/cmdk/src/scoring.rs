@@ -63,9 +63,7 @@ pub fn score_items(
 
     // Bridge custom filter
     let cf_bridge = custom_filter.map(|cf| {
-        dioxus_nox_collection::CustomFilter::new(move |q: &str, l: &str, kw: &str| {
-            (cf.0)(q, l, kw)
-        })
+        dioxus_nox_collection::CustomFilter::new(move |q: &str, l: &str, kw: &str| (cf.0)(q, l, kw))
     });
 
     // Deref Rc for ListItem trait access

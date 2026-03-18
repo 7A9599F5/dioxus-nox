@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_select::{select, AutoComplete, SelectContext};
+use dioxus_nox_select::{AutoComplete, SelectContext, select};
 use dioxus_nox_tag_input::{
     Tag, TagInputState, TagLike, combo, components as tag_input, extract_clipboard_text,
 };
@@ -440,7 +440,12 @@ fn CreatableUI(available: Vec<Tag>) -> Element {
     // Sync select -> tag-input
     use_effect(move || {
         let selected_values = select_ctx.current_values();
-        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &selected_values {
             if !tag_ids.contains(val)
                 && let Some(tag) = available_for_effect.iter().find(|t| t.id() == val.as_str())
@@ -452,7 +457,12 @@ fn CreatableUI(available: Vec<Tag>) -> Element {
 
     // Sync tag-input -> select (reverse)
     use_effect(move || {
-        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &select_ctx.current_values_peek() {
             if !tag_ids.contains(val) {
                 select_ctx.toggle_value(val);
@@ -648,7 +658,12 @@ fn GroupedUI() -> Element {
     // Sync select -> tag-input
     use_effect(move || {
         let selected_values = select_ctx.current_values();
-        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &selected_values {
             if !tag_ids.contains(val)
                 && let Some(tag) = skills.iter().find(|t| t.id() == val.as_str())
@@ -660,7 +675,12 @@ fn GroupedUI() -> Element {
 
     // Reverse sync
     use_effect(move || {
-        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &select_ctx.current_values_peek() {
             if !tag_ids.contains(val) {
                 select_ctx.toggle_value(val);
@@ -865,7 +885,12 @@ fn AdvancedUI(langs: Vec<Tag>) -> Element {
     // Sync select -> tag-input
     use_effect(move || {
         let selected_values = select_ctx.current_values();
-        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &selected_values {
             if !tag_ids.contains(val)
                 && let Some(tag) = langs_for_effect.iter().find(|t| t.id() == val.as_str())
@@ -877,7 +902,12 @@ fn AdvancedUI(langs: Vec<Tag>) -> Element {
 
     // Reverse sync
     use_effect(move || {
-        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &select_ctx.current_values_peek() {
             if !tag_ids.contains(val) {
                 select_ctx.toggle_value(val);
@@ -1154,7 +1184,12 @@ fn ControlledUI(colors: Vec<Tag>) -> Element {
     // Sync select -> tag-input
     use_effect(move || {
         let selected_values = select_ctx.current_values();
-        let tag_ids: Vec<String> = ctx.selected_tags.peek().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .peek()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &selected_values {
             if !tag_ids.contains(val)
                 && let Some(tag) = colors_for_effect.iter().find(|t| t.id() == val.as_str())
@@ -1166,7 +1201,12 @@ fn ControlledUI(colors: Vec<Tag>) -> Element {
 
     // Reverse sync
     use_effect(move || {
-        let tag_ids: Vec<String> = ctx.selected_tags.read().iter().map(|t| t.id().to_string()).collect();
+        let tag_ids: Vec<String> = ctx
+            .selected_tags
+            .read()
+            .iter()
+            .map(|t| t.id().to_string())
+            .collect();
         for val in &select_ctx.current_values_peek() {
             if !tag_ids.contains(val) {
                 select_ctx.toggle_value(val);

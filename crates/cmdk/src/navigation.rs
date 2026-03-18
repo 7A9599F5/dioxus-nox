@@ -171,8 +171,7 @@ pub(crate) fn find_prev_group(
             .and_then(|i| i.group_id.as_deref())
     });
 
-    let active_group_idx =
-        active_group.and_then(|gid| groups.iter().position(|g| g.id == gid))?;
+    let active_group_idx = active_group.and_then(|gid| groups.iter().position(|g| g.id == gid))?;
 
     let n = groups.len();
 

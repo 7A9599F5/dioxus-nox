@@ -18,7 +18,7 @@
 use std::option::Option;
 
 use dioxus::prelude::*;
-use dioxus_nox_select::{select, AutoComplete, SelectContext};
+use dioxus_nox_select::{AutoComplete, SelectContext, select};
 
 use crate::components as tag_input;
 use crate::hook::{TagInputState, extract_clipboard_text, is_denied};
@@ -124,8 +124,7 @@ pub fn Root<T: TagLike>(props: RootProps<T>) -> Element {
 fn ComboWiring<T: TagLike>(
     available: Vec<T>,
     placeholder: String,
-    #[props(default = true)]
-    close_on_select: bool,
+    #[props(default = true)] close_on_select: bool,
     children: Element,
 ) -> Element {
     let mut tag_ctx = use_context::<TagInputState<T>>();
@@ -187,9 +186,7 @@ fn ComboWiring<T: TagLike>(
         }
 
         // Close dropdown after selection change if configured
-        if changed
-            && try_use_context::<ComboConfig>().is_none_or(|c| c.close_on_select)
-        {
+        if changed && try_use_context::<ComboConfig>().is_none_or(|c| c.close_on_select) {
             select_ctx.set_open(false);
         }
     });
@@ -399,29 +396,29 @@ pub fn Input<T: TagLike>(props: InputProps<T>) -> Element {
 
 // ── Re-exported compound parts ──────────────────────────────────────────────
 
-/// Tag pill list.
-pub use tag_input::TagList;
-/// Individual tag pill.
-pub use tag_input::Tag;
-/// Tag remove button.
-pub use tag_input::TagRemove;
 /// Control area.
 pub use tag_input::Control;
-/// Hidden form value.
-pub use tag_input::FormValue;
 /// Overflow count badge.
 pub use tag_input::Count;
+/// Hidden form value.
+pub use tag_input::FormValue;
 /// Screen reader announcements.
 pub use tag_input::LiveRegion;
+/// Individual tag pill.
+pub use tag_input::Tag;
+/// Tag pill list.
+pub use tag_input::TagList;
+/// Tag remove button.
+pub use tag_input::TagRemove;
 
 /// Dropdown content — wraps `select::Content`.
 pub use select::Content as Dropdown;
+/// Empty state — wraps `select::Empty`.
+pub use select::Empty;
 /// Dropdown group — wraps `select::Group`.
 pub use select::Group as DropdownGroup;
 /// Dropdown group label — wraps `select::Label`.
 pub use select::Label;
-/// Empty state — wraps `select::Empty`.
-pub use select::Empty;
 
 /// Dropdown option that automatically merges deny_list disabled state.
 ///
@@ -429,7 +426,8 @@ pub use select::Empty;
 /// in the combo root's deny_list.
 #[allow(non_snake_case)]
 pub fn Item(props: ItemProps) -> Element {
-    let effective_disabled = if let Some(combo_disabled) = try_use_context::<ComboDisabledValues>() {
+    let effective_disabled = if let Some(combo_disabled) = try_use_context::<ComboDisabledValues>()
+    {
         props.disabled || combo_disabled.0.read().contains(&props.value)
     } else {
         props.disabled

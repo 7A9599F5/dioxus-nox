@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use dioxus::document::Stylesheet;
 use dioxus::prelude::*;
-use dioxus_nox_select::{select, AutoComplete, SelectContext};
+use dioxus_nox_select::{AutoComplete, SelectContext, select};
 use dioxus_nox_tag_input::{TagInputState, TagLike, extract_clipboard_text, use_tag_input};
 
 fn main() {
