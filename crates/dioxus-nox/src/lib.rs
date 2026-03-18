@@ -84,6 +84,9 @@ pub use dioxus_nox_password_strength as password_strength;
 #[cfg(feature = "select")]
 pub use dioxus_nox_select as select;
 
+#[cfg(feature = "collection")]
+pub use dioxus_nox_collection as collection;
+
 /// Convenience re-exports of the most commonly used types.
 ///
 /// ```rust,ignore
@@ -172,4 +175,7 @@ pub mod prelude {
 
     #[cfg(feature = "select")]
     pub use dioxus_nox_select::{AutoComplete, CustomFilter, SelectContext, select};
+
+    #[cfg(feature = "collection")]
+    pub use dioxus_nox_collection::{ListItem, ScoringStrategy};
 }

@@ -1,6 +1,6 @@
 [package]
 name = "dioxus-nox"
-version = "0.13.1"
+version = "0.13.2"
 edition.workspace = true
 description = "Umbrella crate for the dioxus-nox headless component library"
 license.workspace = true
@@ -31,6 +31,7 @@ dioxus-nox-inline-confirm     = { workspace = true, optional = true }
 dioxus-nox-toggle-group       = { workspace = true, optional = true }
 dioxus-nox-password-strength  = { workspace = true, optional = true }
 dioxus-nox-select             = { workspace = true, optional = true }
+dioxus-nox-collection         = { workspace = true, optional = true }
 
 [features]
 default = ["shell", "cmdk", "dnd", "tag-input", "suggest", "preview", "tabs"]
@@ -57,6 +58,7 @@ inline-confirm    = ["dep:dioxus-nox-inline-confirm"]
 toggle-group      = ["dep:dioxus-nox-toggle-group"]
 password-strength = ["dep:dioxus-nox-password-strength"]
 select            = ["dep:dioxus-nox-select"]
+collection        = ["dep:dioxus-nox-collection"]
 
 # All-in-one
 full = [
@@ -64,6 +66,7 @@ full = [
     "tag-input", "virtualize", "preview", "extensions", "gestures", "tabs",
     "timer", "modal", "drawer", "toast", "master-detail",
     "cycle", "inline-confirm", "toggle-group", "password-strength", "select",
+    "collection",
 ]
 
 # Sub-crate feature pass-through
