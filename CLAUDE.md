@@ -176,7 +176,7 @@ If you must use `web_sys`/`js_sys`:
 ## Shared Conventions
 
 - **Edition:** 2024 (`edition.workspace = true` in all crates)
-- **Dioxus pin:** `dioxus = "=0.7.3"` via `workspace.dependencies`
+- **Dioxus pin:** `dioxus = "=0.7.4"` via `workspace.dependencies`
 - **Components:** `#[component]` macro for all components; `#[props(default)]` / `#[props(into)]` for props
 - **Visibility:** `pub(crate)` for internal helpers, `pub` only for user-facing API
 - **Commits:** conventional commits — `feat(scope):`, `fix(scope):`, `test(scope):`, `docs(scope):`

@@ -46,4 +46,4 @@ name = "inline_preview"
 path = "examples/inline_preview.rs"
 
 [dev-dependencies]
-dioxus-ssr = "0.7.3"
+dioxus-ssr = "0.7.4"
