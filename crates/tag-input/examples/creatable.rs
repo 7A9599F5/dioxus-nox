@@ -49,10 +49,10 @@ fn SelectTagBridge(available: Vec<Tag>, children: Element) -> Element {
             .map(|t| t.id.clone())
             .collect();
         for val in &selected_values {
-            if !tag_ids.contains(val) {
-                if let Some(tag) = avail_fwd.iter().find(|t| t.id == val.as_str()) {
-                    state.add_tag(tag.clone());
-                }
+            if !tag_ids.contains(val)
+                && let Some(tag) = avail_fwd.iter().find(|t| t.id == val.as_str())
+            {
+                state.add_tag(tag.clone());
             }
         }
     });

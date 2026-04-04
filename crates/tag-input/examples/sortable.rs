@@ -138,10 +138,10 @@ fn SelectTagBridge(available: Vec<FruitTag>, children: Element) -> Element {
             .map(|t| t.id().to_string())
             .collect();
         for val in &selected_values {
-            if !tag_ids.contains(val) {
-                if let Some(tag) = available.iter().find(|t| t.id() == val.as_str()) {
-                    state.add_tag(tag.clone());
-                }
+            if !tag_ids.contains(val)
+                && let Some(tag) = available.iter().find(|t| t.id() == val.as_str())
+            {
+                state.add_tag(tag.clone());
             }
         }
     });
