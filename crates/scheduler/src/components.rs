@@ -2,9 +2,7 @@ use chrono::{Datelike, NaiveDate, Timelike};
 use dioxus::prelude::*;
 
 use crate::navigation::week_dates;
-use crate::types::{
-    EventDropData, EventResizeData, SchedulerContext, SchedulerView, TimeSlotData,
-};
+use crate::types::{EventDropData, EventResizeData, SchedulerContext, SchedulerView, TimeSlotData};
 
 // ── Root ────────────────────────────────────────────────────────────────────
 
@@ -416,15 +414,9 @@ pub fn TimeSlot(
 
     let now = chrono::Local::now().naive_local();
     let is_current = ctx.is_today(date) && now.time().hour() == hour;
-    let is_past = date
-        .and_hms_opt(hour, minute, 0)
-        .is_some_and(|dt| dt < now);
+    let is_past = date.and_hms_opt(hour, minute, 0).is_some_and(|dt| dt < now);
 
-    let slot_data = TimeSlotData {
-        date,
-        hour,
-        minute,
-    };
+    let slot_data = TimeSlotData { date, hour, minute };
     let onclick = move |_: MouseEvent| {
         let ctx: SchedulerContext = consume_context();
         if let Some(handler) = &ctx.on_slot_click {
@@ -481,22 +473,20 @@ pub fn Event(
 
     let onkeydown = {
         let eid = event_id.clone();
-        move |event: KeyboardEvent| {
-            match event.key() {
-                Key::Escape => {
-                    let mut ctx: SchedulerContext = consume_context();
-                    ctx.deselect_event();
-                }
-                Key::Enter => {
-                    let mut ctx: SchedulerContext = consume_context();
-                    ctx.select_event(&eid);
-                }
-                Key::Character(ref c) if c == " " => {
-                    let mut ctx: SchedulerContext = consume_context();
-                    ctx.select_event(&eid);
-                }
-                _ => {}
+        move |event: KeyboardEvent| match event.key() {
+            Key::Escape => {
+                let mut ctx: SchedulerContext = consume_context();
+                ctx.deselect_event();
             }
+            Key::Enter => {
+                let mut ctx: SchedulerContext = consume_context();
+                ctx.select_event(&eid);
+            }
+            Key::Character(ref c) if c == " " => {
+                let mut ctx: SchedulerContext = consume_context();
+                ctx.select_event(&eid);
+            }
+            _ => {}
         }
     };
 

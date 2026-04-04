@@ -173,8 +173,13 @@ impl DataGridContext {
         column: String,
         current_value: String,
     ) {
-        self.edit_state
-            .set(EditState::begin(coord, editor, row_id, column, current_value));
+        self.edit_state.set(EditState::begin(
+            coord,
+            editor,
+            row_id,
+            column,
+            current_value,
+        ));
     }
 
     /// Update the current edit value.

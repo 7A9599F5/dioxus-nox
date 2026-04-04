@@ -78,7 +78,7 @@ mod tests;
 // Re-export types at crate root.
 pub use context::DataGridContext;
 pub use editing::EditState;
-pub use navigation::{navigate_grid, GridNavKey};
+pub use navigation::{GridNavKey, navigate_grid};
 pub use types::{
     CellCoord, CellEditEvent, CellEditor, ColumnDef, GridState, PinSide, RenderCell, RowData,
     RowEntry, Selection, SortDirection, SortState,
@@ -90,5 +90,7 @@ pub use types::{
 /// datagrid::Root { datagrid::Header { .. } datagrid::Body { .. } }
 /// ```
 pub mod datagrid {
-    pub use crate::components::{Body, Cell, Header, HeaderCell, HeaderRow, ResizeHandle, Root, Row};
+    pub use crate::components::{
+        Body, Cell, Header, HeaderCell, HeaderRow, ResizeHandle, Root, Row,
+    };
 }

@@ -39,13 +39,11 @@ pub fn compute_event_layout(
     // Sort by start time, then longest duration first for tie-breaking.
     let mut sorted: Vec<_> = events.iter().collect();
     sorted.sort_by(|a, b| {
-        a.start
-            .cmp(&b.start)
-            .then_with(|| {
-                let dur_a = (a.end - a.start).num_minutes();
-                let dur_b = (b.end - b.start).num_minutes();
-                dur_b.cmp(&dur_a) // longest first
-            })
+        a.start.cmp(&b.start).then_with(|| {
+            let dur_a = (a.end - a.start).num_minutes();
+            let dur_b = (b.end - b.start).num_minutes();
+            dur_b.cmp(&dur_a) // longest first
+        })
     });
 
     // Column end-times: track when each column becomes free.

@@ -63,8 +63,7 @@ pub struct TimeSlotData {
 impl TimeSlotData {
     /// Convert to a `NaiveDateTime`.
     pub fn to_datetime(&self) -> Option<NaiveDateTime> {
-        self.date
-            .and_hms_opt(self.hour, self.minute, 0)
+        self.date.and_hms_opt(self.hour, self.minute, 0)
     }
 }
 

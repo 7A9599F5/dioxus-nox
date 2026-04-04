@@ -91,14 +91,23 @@ mod tests {
     #[test]
     fn begin_edit() {
         let state = EditState::begin(
-            CellCoord { row_idx: 1, col_idx: 2 },
+            CellCoord {
+                row_idx: 1,
+                col_idx: 2,
+            },
             CellEditor::Text,
             "row-1".to_string(),
             "name".to_string(),
             "hello".to_string(),
         );
         assert!(state.is_editing());
-        assert_eq!(state.editing_coord(), Some(CellCoord { row_idx: 1, col_idx: 2 }));
+        assert_eq!(
+            state.editing_coord(),
+            Some(CellCoord {
+                row_idx: 1,
+                col_idx: 2
+            })
+        );
     }
 
     #[test]

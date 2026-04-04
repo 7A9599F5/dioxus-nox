@@ -4,10 +4,8 @@ use dioxus::prelude::*;
 
 use crate::context::DataGridContext;
 use crate::editing::EditState;
-use crate::navigation::{navigate_grid, GridNavKey};
-use crate::types::{
-    CellCoord, CellEditEvent, ColumnDef, RowEntry, Selection, SortState,
-};
+use crate::navigation::{GridNavKey, navigate_grid};
+use crate::types::{CellCoord, CellEditEvent, ColumnDef, RowEntry, Selection, SortState};
 
 // ── Root ────────────────────────────────────────────────────────────────────
 
@@ -51,10 +49,7 @@ pub fn Root(
     children: Element,
 ) -> Element {
     let col_count = columns.len();
-    let default_widths: Vec<u32> = columns
-        .iter()
-        .map(|c| c.width.unwrap_or(150))
-        .collect();
+    let default_widths: Vec<u32> = columns.iter().map(|c| c.width.unwrap_or(150)).collect();
     let default_order: Vec<usize> = (0..col_count).collect();
 
     let ctx = DataGridContext {
@@ -146,9 +141,7 @@ pub fn HeaderCell(
     let ctx: DataGridContext = use_context();
 
     let col = ctx.column_at(col_index);
-    let sort_dir = col
-        .as_ref()
-        .and_then(|c| ctx.sort_direction(&c.key));
+    let sort_dir = col.as_ref().and_then(|c| ctx.sort_direction(&c.key));
     let is_resizable = col.as_ref().is_some_and(|c| c.resizable);
     let pinned = col.as_ref().and_then(|c| c.pinned);
 
@@ -156,9 +149,7 @@ pub fn HeaderCell(
     let is_sortable = col.as_ref().is_some_and(|c| c.sortable);
 
     let onclick = move |_: MouseEvent| {
-        if is_sortable
-            && let Some(ref key) = col_key
-        {
+        if is_sortable && let Some(ref key) = col_key {
             let mut ctx: DataGridContext = consume_context();
             ctx.toggle_sort(key);
         }
@@ -341,9 +332,7 @@ pub fn Cell(
             Key::Home if event.modifiers().contains(Modifiers::CONTROL) => {
                 Some(GridNavKey::CtrlHome)
             }
-            Key::End if event.modifiers().contains(Modifiers::CONTROL) => {
-                Some(GridNavKey::CtrlEnd)
-            }
+            Key::End if event.modifiers().contains(Modifiers::CONTROL) => Some(GridNavKey::CtrlEnd),
             Key::Home => Some(GridNavKey::Home),
             Key::End => Some(GridNavKey::End),
             _ => None,
@@ -351,8 +340,7 @@ pub fn Cell(
 
         if let Some(key) = nav_key {
             event.prevent_default();
-            let new_coord =
-                navigate_grid(ctx.row_count(), ctx.col_count(), coord, key);
+            let new_coord = navigate_grid(ctx.row_count(), ctx.col_count(), coord, key);
             ctx.set_focused(Some(new_coord));
 
             // Focus the target cell element via JS eval
@@ -375,13 +363,7 @@ pub fn Cell(
             Key::Enter | Key::F2 => {
                 if let Some(ref editor) = ed {
                     event.prevent_default();
-                    ctx.begin_edit(
-                        coord,
-                        editor.clone(),
-                        rid.clone(),
-                        ck.clone(),
-                        val.clone(),
-                    );
+                    ctx.begin_edit(coord, editor.clone(), rid.clone(), ck.clone(), val.clone());
                 }
             }
             Key::Character(ref c) if c == " " => {

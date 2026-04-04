@@ -77,73 +77,277 @@ mod tests {
 
     #[test]
     fn navigate_down_clamps_at_bottom() {
-        let result = navigate_grid(3, 4, CellCoord { row_idx: 2, col_idx: 1 }, GridNavKey::Down);
-        assert_eq!(result, CellCoord { row_idx: 2, col_idx: 1 });
+        let result = navigate_grid(
+            3,
+            4,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 1,
+            },
+            GridNavKey::Down,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 1
+            }
+        );
     }
 
     #[test]
     fn navigate_up_clamps_at_top() {
-        let result = navigate_grid(3, 4, CellCoord { row_idx: 0, col_idx: 1 }, GridNavKey::Up);
-        assert_eq!(result, CellCoord { row_idx: 0, col_idx: 1 });
+        let result = navigate_grid(
+            3,
+            4,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 1,
+            },
+            GridNavKey::Up,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 1
+            }
+        );
     }
 
     #[test]
     fn navigate_right_clamps_at_edge() {
-        let result = navigate_grid(3, 4, CellCoord { row_idx: 1, col_idx: 3 }, GridNavKey::Right);
-        assert_eq!(result, CellCoord { row_idx: 1, col_idx: 3 });
+        let result = navigate_grid(
+            3,
+            4,
+            CellCoord {
+                row_idx: 1,
+                col_idx: 3,
+            },
+            GridNavKey::Right,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 1,
+                col_idx: 3
+            }
+        );
     }
 
     #[test]
     fn navigate_left_clamps_at_edge() {
-        let result = navigate_grid(3, 4, CellCoord { row_idx: 1, col_idx: 0 }, GridNavKey::Left);
-        assert_eq!(result, CellCoord { row_idx: 1, col_idx: 0 });
+        let result = navigate_grid(
+            3,
+            4,
+            CellCoord {
+                row_idx: 1,
+                col_idx: 0,
+            },
+            GridNavKey::Left,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 1,
+                col_idx: 0
+            }
+        );
     }
 
     #[test]
     fn navigate_normal_movement() {
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 2, col_idx: 2 }, GridNavKey::Down);
-        assert_eq!(result, CellCoord { row_idx: 3, col_idx: 2 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 2,
+            },
+            GridNavKey::Down,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 3,
+                col_idx: 2
+            }
+        );
 
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 2, col_idx: 2 }, GridNavKey::Up);
-        assert_eq!(result, CellCoord { row_idx: 1, col_idx: 2 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 2,
+            },
+            GridNavKey::Up,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 1,
+                col_idx: 2
+            }
+        );
 
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 2, col_idx: 2 }, GridNavKey::Right);
-        assert_eq!(result, CellCoord { row_idx: 2, col_idx: 3 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 2,
+            },
+            GridNavKey::Right,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 3
+            }
+        );
 
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 2, col_idx: 2 }, GridNavKey::Left);
-        assert_eq!(result, CellCoord { row_idx: 2, col_idx: 1 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 2,
+            },
+            GridNavKey::Left,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 1
+            }
+        );
     }
 
     #[test]
     fn navigate_home_end() {
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 2, col_idx: 3 }, GridNavKey::Home);
-        assert_eq!(result, CellCoord { row_idx: 2, col_idx: 0 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 3,
+            },
+            GridNavKey::Home,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 0
+            }
+        );
 
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 2, col_idx: 1 }, GridNavKey::End);
-        assert_eq!(result, CellCoord { row_idx: 2, col_idx: 4 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 1,
+            },
+            GridNavKey::End,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 2,
+                col_idx: 4
+            }
+        );
     }
 
     #[test]
     fn navigate_ctrl_home_end() {
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 3, col_idx: 3 }, GridNavKey::CtrlHome);
-        assert_eq!(result, CellCoord { row_idx: 0, col_idx: 0 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 3,
+                col_idx: 3,
+            },
+            GridNavKey::CtrlHome,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 0
+            }
+        );
 
-        let result = navigate_grid(5, 5, CellCoord { row_idx: 1, col_idx: 1 }, GridNavKey::CtrlEnd);
-        assert_eq!(result, CellCoord { row_idx: 4, col_idx: 4 });
+        let result = navigate_grid(
+            5,
+            5,
+            CellCoord {
+                row_idx: 1,
+                col_idx: 1,
+            },
+            GridNavKey::CtrlEnd,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 4,
+                col_idx: 4
+            }
+        );
     }
 
     #[test]
     fn navigate_empty_grid() {
-        let result = navigate_grid(0, 0, CellCoord { row_idx: 0, col_idx: 0 }, GridNavKey::Down);
+        let result = navigate_grid(
+            0,
+            0,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 0,
+            },
+            GridNavKey::Down,
+        );
         assert_eq!(result, CellCoord::default());
     }
 
     #[test]
     fn navigate_single_cell_grid() {
-        let result = navigate_grid(1, 1, CellCoord { row_idx: 0, col_idx: 0 }, GridNavKey::Down);
-        assert_eq!(result, CellCoord { row_idx: 0, col_idx: 0 });
+        let result = navigate_grid(
+            1,
+            1,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 0,
+            },
+            GridNavKey::Down,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 0
+            }
+        );
 
-        let result = navigate_grid(1, 1, CellCoord { row_idx: 0, col_idx: 0 }, GridNavKey::Right);
-        assert_eq!(result, CellCoord { row_idx: 0, col_idx: 0 });
+        let result = navigate_grid(
+            1,
+            1,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 0,
+            },
+            GridNavKey::Right,
+        );
+        assert_eq!(
+            result,
+            CellCoord {
+                row_idx: 0,
+                col_idx: 0
+            }
+        );
     }
 }

@@ -55,9 +55,9 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use layout::{compute_event_layout, LayoutEvent};
+pub use layout::{LayoutEvent, compute_event_layout};
 pub use navigation::{
-    navigate_slot, next_day, next_week, prev_day, prev_week, week_dates, week_start, SlotDirection,
+    SlotDirection, navigate_slot, next_day, next_week, prev_day, prev_week, week_dates, week_start,
 };
 pub use types::{
     EventDropData, EventEntry, EventPosition, EventResizeData, ScheduleEvent, SchedulerContext,
