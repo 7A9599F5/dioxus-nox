@@ -29,7 +29,7 @@ pub fn Item(
     children: Element,
 ) -> Element {
     let ctx = use_context::<VirtualListContext>();
-    let mut viewport_sig = ctx.viewport;
+    let mut heights_sig = ctx.heights;
     let scroll_top_sig = ctx.scroll_top;
     let mut measure_gen_sig = ctx.measure_gen;
     let mut scroll_correction_sig = ctx.scroll_correction;
@@ -43,24 +43,25 @@ pub fn Item(
             };
             let height = (rect.height() as u32).max(1);
 
-            let mut vp = viewport_sig.write();
-            let delta = vp.set_measured_height_with_delta(idx, height);
+            // Write measurement to the heights Signal.
+            let delta = heights_sig.write().set_measured_height_with_delta(idx, height);
             if delta == 0 {
                 return;
             }
 
+            // Read the item's offset from the layout snapshot (read-only).
+            let item_top = ctx.layout.read().offset_for_idx(idx);
+
             // If this item is above the current scroll position,
             // accumulate a scroll correction to keep content stable.
-            let item_top = vp.offset_for_idx(idx);
-            let mgen = vp.measure_gen();
-            drop(vp);
-
             let current_scroll = *scroll_top_sig.read();
             if item_top < current_scroll {
                 let current_correction = *scroll_correction_sig.read();
                 scroll_correction_sig.set(current_correction + delta);
             }
 
+            // Bump measure_gen to trigger the layout Memo recompute.
+            let mgen = *measure_gen_sig.read() + 1;
             measure_gen_sig.set(mgen);
         });
     };

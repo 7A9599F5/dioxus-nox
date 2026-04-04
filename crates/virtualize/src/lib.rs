@@ -34,7 +34,7 @@ mod hook;
 mod component;
 
 pub use viewport::VirtualViewport;
-pub use variable_viewport::VariableViewport;
+pub use variable_viewport::{LayoutSnapshot, VariableViewport};
 
 #[cfg(feature = "hooks")]
 pub use hook::*;

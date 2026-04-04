@@ -24,7 +24,6 @@ pub fn Viewport(
     children: Element,
 ) -> Element {
     let ctx = use_context::<VirtualListContext>();
-    let mut viewport_sig = ctx.viewport;
     let mut scroll_top_sig = ctx.scroll_top;
     let mut container_height_sig = ctx.container_height;
     let scroll_correction_sig = ctx.scroll_correction;
@@ -33,16 +32,15 @@ pub fn Viewport(
     let onscroll = move |event: Event<ScrollData>| {
         let pos = event.scroll_top().max(0.0) as u32;
         scroll_top_sig.set(pos);
-        viewport_sig.write().set_scroll_top(pos);
 
-        // Check infinite scroll.
+        // Check infinite scroll from the layout snapshot (read-only).
         if let Some(ref on_end) = ctx.on_end_reached {
-            let mut vp = viewport_sig.write();
-            if vp.is_near_end(ctx.end_threshold) && vp.item_count() > 0 {
+            let layout = ctx.layout.read();
+            if layout.is_near_end(ctx.end_threshold) && layout.item_count() > 0 {
                 let page_size = ctx.page_size.max(1);
-                let current_page = vp.item_count() / page_size;
+                let current_page = layout.item_count() / page_size;
                 let next_page = current_page + 1;
-                drop(vp);
+                drop(layout);
                 let last = *ctx.last_page_requested.read();
                 if next_page > last {
                     let mut lpr = ctx.last_page_requested;
@@ -53,9 +51,9 @@ pub fn Viewport(
         }
     };
 
-    // Apply scroll correction when measurements change item positions.
+    // Measure container height on mount + store ref for scroll correction.
     let mounted_ref: Signal<Option<std::rc::Rc<MountedData>>> = use_signal(|| None);
-    let capture_mount = move |event: MountedEvent| {
+    let onmounted = move |event: MountedEvent| {
         let data = event.data();
         let mut mr = mounted_ref;
         mr.set(Some(data.clone()));
@@ -63,11 +61,11 @@ pub fn Viewport(
             if let Ok(rect) = data.get_client_rect().await {
                 let height = rect.height() as u32;
                 container_height_sig.set(height);
-                viewport_sig.write().set_viewport_height(height);
             }
         });
     };
 
+    // Apply scroll correction when measurements change item positions.
     use_effect(move || {
         let correction = (scroll_correction_sig)();
         if correction == 0 {
@@ -80,7 +78,6 @@ pub fn Viewport(
         let mut sc = scroll_correction_sig;
         sc.set(0);
         scroll_top_sig.set(new_scroll);
-        viewport_sig.write().set_scroll_top(new_scroll);
 
         // Apply the scroll correction to the DOM.
         #[cfg(target_arch = "wasm32")]
@@ -88,7 +85,7 @@ pub fn Viewport(
             // web_sys used here: confirmed no Dioxus 0.7 native API for
             // programmatic scrollTop assignment as of 2026-04-04.
             // Non-WASM targets: scroll correction is best-effort via signal update.
-            if let Some(ref _mount) = *mounted_ref.read() {
+            if mounted_ref.read().is_some() {
                 let script = format!(
                     "document.querySelector('[data-virtual-list-viewport]').scrollTop = {};",
                     new_scroll
@@ -98,11 +95,11 @@ pub fn Viewport(
         }
     });
 
-    // Compute spacer heights.
-    let mut vp = viewport_sig.write();
-    let top_spacer = vp.top_spacer_height();
-    let bottom_spacer = vp.bottom_spacer_height();
-    drop(vp);
+    // Read spacer heights from the layout Memo (read-only, no write lock).
+    let layout = ctx.layout.read();
+    let top_spacer = layout.top_spacer_height();
+    let bottom_spacer = layout.bottom_spacer_height();
+    drop(layout);
 
     rsx! {
         div {
@@ -111,7 +108,7 @@ pub fn Viewport(
             style: "overflow-y: auto;",
             class: class.unwrap_or_default(),
             onscroll: onscroll,
-            onmounted: capture_mount,
+            onmounted: onmounted,
             ..attributes,
 
             // Top spacer — fills space for items above the rendered range.

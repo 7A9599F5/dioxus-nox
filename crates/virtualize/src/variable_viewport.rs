@@ -6,16 +6,116 @@
 //! Uses a prefix-sum array for O(log n) scroll-position-to-index lookups
 //! via binary search. Heights can be individually measured or use a
 //! default estimate until measurement occurs.
+//!
+//! ## Two-tier API
+//!
+//! - **[`VariableViewport`]** — mutable measurement accumulator. Accepts height
+//!   updates and builds [`LayoutSnapshot`]s on demand.
+//! - **[`LayoutSnapshot`]** — immutable, read-only view with all query methods
+//!   taking `&self`. Safe to share across multiple readers with no lock
+//!   contention.
 
-/// Tracks the visible window of a virtual list where items may have
-/// different heights.
+// ── LayoutSnapshot ──────────────────────────────────────────────────────────
+
+/// Read-only snapshot of computed layout data.
 ///
-/// Each item has either a measured height (reported by the rendering layer)
-/// or falls back to `default_estimate`. A prefix-sum array enables
-/// efficient lookups from scroll offsets to item indices.
+/// Built by [`VariableViewport::snapshot`], all query methods take `&self`.
+/// Multiple readers can access a snapshot concurrently without contention.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayoutSnapshot {
+    /// Prefix sums: `prefix[i]` = sum of heights for items `0..i`.
+    prefix: Vec<u32>,
+    item_count: usize,
+    viewport_height: u32,
+    scroll_top: u32,
+    overscan: usize,
+}
+
+impl LayoutSnapshot {
+    /// Compute the `[start, end)` range of item indices to render,
+    /// including `overscan` extra items on each side.
+    ///
+    /// Returns `(0, 0)` for empty lists.
+    pub fn visible_range(&self) -> (usize, usize) {
+        if self.item_count == 0 {
+            return (0, 0);
+        }
+
+        let first_visible = self.index_at_offset(self.scroll_top);
+
+        let viewport_end = self.scroll_top.saturating_add(self.viewport_height);
+        let mut last_visible = first_visible;
+        while last_visible < self.item_count && self.prefix[last_visible] < viewport_end {
+            last_visible += 1;
+        }
+
+        let start = first_visible.saturating_sub(self.overscan);
+        let end = (last_visible + self.overscan).min(self.item_count);
+
+        (start, end)
+    }
+
+    /// Total height of all items combined (pixels).
+    pub fn total_height(&self) -> u32 {
+        self.prefix[self.item_count]
+    }
+
+    /// Top offset of item at `idx` from the container top (pixels).
+    pub fn offset_for_idx(&self, idx: usize) -> u32 {
+        if idx >= self.prefix.len() {
+            return self.prefix[self.item_count];
+        }
+        self.prefix[idx]
+    }
+
+    /// Height of the top spacer element.
+    pub fn top_spacer_height(&self) -> u32 {
+        let (start, _) = self.visible_range();
+        self.offset_for_idx(start)
+    }
+
+    /// Height of the bottom spacer element.
+    pub fn bottom_spacer_height(&self) -> u32 {
+        let (_, end) = self.visible_range();
+        let rendered_end_offset = self.offset_for_idx(end);
+        self.total_height().saturating_sub(rendered_end_offset)
+    }
+
+    /// Returns `true` when the visible range end is within `threshold`
+    /// items of the total count.
+    pub fn is_near_end(&self, threshold: usize) -> bool {
+        if self.item_count == 0 {
+            return false;
+        }
+        let (_, end) = self.visible_range();
+        end + threshold >= self.item_count
+    }
+
+    /// Binary search: find the index of the first item whose top edge is
+    /// at or below `offset`. O(log n).
+    fn index_at_offset(&self, offset: u32) -> usize {
+        if self.item_count == 0 {
+            return 0;
+        }
+        let pos = self.prefix.partition_point(|&p| p <= offset);
+        pos.saturating_sub(1).min(self.item_count.saturating_sub(1))
+    }
+
+    /// Item count in this snapshot.
+    pub fn item_count(&self) -> usize {
+        self.item_count
+    }
+}
+
+// ── VariableViewport ────────────────────────────────────────────────────────
+
+/// Mutable measurement accumulator for variable-height virtual lists.
 ///
-/// Query methods take `&mut self` because they lazily rebuild prefix sums
-/// when the height data is dirty. This makes the rebuild cost explicit.
+/// Accepts height updates from the rendering layer and builds
+/// [`LayoutSnapshot`]s on demand. Query methods still exist on this type
+/// (taking `&mut self` for lazy rebuild) for standalone / non-Dioxus usage,
+/// but the component layer should prefer [`Self::snapshot`] + [`LayoutSnapshot`]
+/// to avoid write-lock contention.
 #[derive(Clone, Debug)]
 pub struct VariableViewport {
     item_count: usize,
@@ -240,6 +340,31 @@ impl VariableViewport {
     pub fn set_overscan(&mut self, overscan: usize) {
         self.overscan = overscan;
     }
+
+    /// Build a read-only [`LayoutSnapshot`] for the current state.
+    ///
+    /// The snapshot includes freshly computed prefix sums and is parameterized
+    /// by `scroll_top` and `viewport_height` so it can be called from a Memo
+    /// that subscribes to those signals separately.
+    ///
+    /// Cost: O(n) for the prefix-sum build. Intended to be memoized at the
+    /// component level so it runs once per measurement batch, not per scroll.
+    pub fn snapshot(&self, scroll_top: u32, viewport_height: u32) -> LayoutSnapshot {
+        let mut prefix = Vec::with_capacity(self.item_count + 1);
+        prefix.push(0);
+        let mut sum = 0u32;
+        for i in 0..self.item_count {
+            sum = sum.saturating_add(self.height_of(i));
+            prefix.push(sum);
+        }
+        LayoutSnapshot {
+            prefix,
+            item_count: self.item_count,
+            viewport_height,
+            scroll_top,
+            overscan: self.overscan,
+        }
+    }
 }
 
 impl Default for VariableViewport {
@@ -439,5 +564,82 @@ mod tests {
         assert!(end > start);
         assert!(end <= 100_000);
         // Should be fast — just prefix rebuild + binary search
+    }
+
+    // ── LayoutSnapshot tests ────────────────────────────────────────────
+
+    #[test]
+    fn snapshot_empty() {
+        let vp = VariableViewport::new(0, 40, 400);
+        let snap = vp.snapshot(0, 400);
+        assert_eq!(snap.visible_range(), (0, 0));
+        assert_eq!(snap.total_height(), 0);
+        assert!(!snap.is_near_end(5));
+    }
+
+    #[test]
+    fn snapshot_matches_viewport() {
+        // LayoutSnapshot should produce identical results to VariableViewport
+        let mut vp = VariableViewport::new(100, 40, 400);
+        vp.set_measured_height(5, 80);
+        vp.set_measured_height(10, 20);
+        vp.set_scroll_top(1000);
+
+        let snap = vp.snapshot(1000, 400);
+
+        assert_eq!(snap.visible_range(), vp.visible_range());
+        assert_eq!(snap.total_height(), vp.total_height());
+        assert_eq!(snap.offset_for_idx(5), vp.offset_for_idx(5));
+        assert_eq!(snap.top_spacer_height(), vp.top_spacer_height());
+        assert_eq!(snap.bottom_spacer_height(), vp.bottom_spacer_height());
+        assert_eq!(snap.is_near_end(5), vp.is_near_end(5));
+    }
+
+    #[test]
+    fn snapshot_with_different_scroll() {
+        let mut vp = VariableViewport::new(100, 40, 400);
+        vp.set_measured_height(0, 100);
+
+        // Snapshot at scroll=0
+        let snap1 = vp.snapshot(0, 400);
+        // Snapshot at scroll=2000 (same measurements, different position)
+        let snap2 = vp.snapshot(2000, 400);
+
+        assert_ne!(snap1.visible_range(), snap2.visible_range());
+        // But total height is the same
+        assert_eq!(snap1.total_height(), snap2.total_height());
+    }
+
+    #[test]
+    fn snapshot_is_immutable_after_mutation() {
+        let mut vp = VariableViewport::new(10, 40, 400);
+        let snap_before = vp.snapshot(0, 400);
+
+        // Mutate the viewport after taking a snapshot
+        vp.set_measured_height(0, 200);
+
+        let snap_after = vp.snapshot(0, 400);
+
+        // snap_before should still reflect old state
+        assert_eq!(snap_before.total_height(), 400); // 10 * 40
+        assert_eq!(snap_after.total_height(), 560); // 200 + 9*40
+        assert_ne!(snap_before, snap_after);
+    }
+
+    #[test]
+    fn snapshot_spacer_invariant() {
+        let mut vp = VariableViewport::new(100, 40, 400);
+        vp.set_measured_height(3, 100);
+        vp.set_measured_height(50, 10);
+
+        let snap = vp.snapshot(1500, 400);
+        let (start, end) = snap.visible_range();
+        let rendered_height: u32 = (start..end).map(|i| vp.height_of(i)).sum();
+
+        // top_spacer + rendered + bottom_spacer = total
+        assert_eq!(
+            snap.top_spacer_height() + rendered_height + snap.bottom_spacer_height(),
+            snap.total_height()
+        );
     }
 }

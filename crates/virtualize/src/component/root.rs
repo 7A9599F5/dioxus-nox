@@ -45,16 +45,27 @@ pub fn Root(
     class: Option<String>,
     children: Element,
 ) -> Element {
-    let viewport_sig = use_signal(|| {
+    let mut heights = use_signal(|| {
         let mut vp = VariableViewport::new(item_count, estimate_item_height, 0);
         vp.set_overscan(overscan);
         vp
     });
 
-    let viewport_height_for_page = {
-        let vp = viewport_sig.read();
-        vp.viewport_height()
-    };
+    let scroll_top = use_signal(|| 0u32);
+    let container_height = use_signal(|| 0u32);
+    let measure_gen = use_signal(|| 0u64);
+
+    // Memo computes layout snapshot — pure derivation, no side effects.
+    // Runs once per dependency change (scroll, measurement, resize).
+    // No .write(), no signal mutation — just reads signals + returns derived value.
+    let layout = use_memo(move || {
+        let _ = (measure_gen)(); // subscribe to measurement changes
+        let st = (scroll_top)();
+        let ch = (container_height)();
+        heights.read().snapshot(st, ch)
+    });
+
+    let viewport_height_for_page = (container_height)();
     let page_size = if viewport_height_for_page > 0 && estimate_item_height > 0 {
         (viewport_height_for_page / estimate_item_height) as usize
     } else {
@@ -62,10 +73,11 @@ pub fn Root(
     };
 
     let ctx = VirtualListContext {
-        viewport: viewport_sig,
-        scroll_top: use_signal(|| 0u32),
-        container_height: use_signal(|| 0u32),
-        measure_gen: use_signal(|| 0u64),
+        heights,
+        layout,
+        scroll_top,
+        container_height,
+        measure_gen,
         scroll_correction: use_signal(|| 0i32),
         item_count: use_signal(|| item_count),
         on_end_reached,
@@ -76,11 +88,10 @@ pub fn Root(
 
     use_context_provider(|| ctx);
 
-    // Sync item_count changes into the viewport signal.
+    // Sync item_count changes into the heights signal.
     use_effect(move || {
         let count = item_count;
-        let mut vp = viewport_sig;
-        vp.write().set_item_count(count);
+        heights.write().set_item_count(count);
         let mut ic = ctx.item_count;
         ic.set(count);
     });

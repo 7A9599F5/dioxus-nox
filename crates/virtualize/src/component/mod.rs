@@ -35,12 +35,10 @@ use dioxus::prelude::*;
 /// indices from the nearest [`VirtualListContext`].
 ///
 /// Must be called inside a `virtual_list::Root` / `virtual_list::Viewport`
-/// subtree. Subscribes to scroll position and measurement changes so the
-/// component re-renders when the visible range changes.
+/// subtree. The result is derived from a `Memo<LayoutSnapshot>`, so multiple
+/// callers share the same cached computation with zero lock contention.
 pub fn use_visible_range() -> (usize, usize) {
-    let mut ctx = use_context::<VirtualListContext>();
-    // Subscribe to scroll and measurement changes.
-    let _ = (ctx.scroll_top)();
-    let _ = (ctx.measure_gen)();
-    ctx.viewport.write().visible_range()
+    let ctx = use_context::<VirtualListContext>();
+    // layout is a Memo — .read() is a shared reference, no write lock.
+    ctx.layout.read().visible_range()
 }
