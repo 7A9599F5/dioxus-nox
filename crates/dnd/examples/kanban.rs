@@ -90,7 +90,7 @@ fn app() -> Element {
                 on_move: move |e: MoveEvent| {
                     let mut cols = columns.write();
                     // Find and remove from source container by item_id
-                    let item = if let Some(source_col) = cols.get_mut(&e.from_container.0) {
+                    let item = if let Some(source_col) = cols.get_mut(e.from_container.as_str()) {
                         let idx = source_col.iter().position(|t| DragId::new(&t.id) == e.item_id);
                         idx.map(|i| source_col.remove(i))
                     } else {
@@ -99,7 +99,7 @@ fn app() -> Element {
 
                     // Add to target container
                     if let Some(item) = item
-                        && let Some(target_col) = cols.get_mut(&e.to_container.0)
+                        && let Some(target_col) = cols.get_mut(e.to_container.as_str())
                     {
                         let insert_idx = e.to_index.min(target_col.len());
                         target_col.insert(insert_idx, item);
@@ -107,7 +107,7 @@ fn app() -> Element {
                 },
                 on_reorder: move |e: ReorderEvent| {
                     let mut cols = columns.write();
-                    if let Some(col) = cols.get_mut(&e.container_id.0) {
+                    if let Some(col) = cols.get_mut(e.container_id.as_str()) {
                         // Find the item by ID (from_index may not be reliable)
                         if let Some(from) = col.iter().position(|t| DragId::new(&t.id) == e.item_id) {
                             let item = col.remove(from);

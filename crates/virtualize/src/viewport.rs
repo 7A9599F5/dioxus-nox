@@ -5,6 +5,10 @@
 
 /// Tracks the visible window of a virtual list with fixed-height items.
 ///
+/// **Important:** This viewport assumes all items share the same fixed height
+/// (`item_height`). Variable-height items (e.g., chat messages, markdown blocks)
+/// will produce incorrect spacer calculations and visible range estimates.
+///
 /// All pixel values are in logical pixels (u32). Items outside the visible
 /// range plus overscan are not rendered, reducing DOM node count dramatically
 /// for large lists.

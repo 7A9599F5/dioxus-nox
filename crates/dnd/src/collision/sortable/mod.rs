@@ -82,7 +82,7 @@ impl SortableCollisionDetector {
     }
 
     #[cfg(test)]
-    fn with_merge(_orientation: Orientation) -> Self {
+    fn with_merge() -> Self {
         Self {
             enable_merge: true,
             gap_displacement: true,
@@ -91,7 +91,7 @@ impl SortableCollisionDetector {
     }
 
     #[cfg(test)]
-    fn indicator_mode(_orientation: Orientation, enable_merge: bool) -> Self {
+    fn indicator_mode(enable_merge: bool) -> Self {
         Self {
             enable_merge,
             gap_displacement: false,

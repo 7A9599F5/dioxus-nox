@@ -8,6 +8,26 @@ use crate::filter;
 use crate::navigation::{self, Direction};
 use crate::types::*;
 
+/// Escape a string for safe interpolation inside a JS single-quoted string literal.
+///
+/// Handles backslashes, single quotes, backticks, newlines, and carriage returns
+/// so that untrusted values cannot break out of the string context.
+#[cfg(target_arch = "wasm32")]
+fn escape_js_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\'' => out.push_str("\\'"),
+            '`' => out.push_str("\\`"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 /// Shared context for the select compound component tree.
 ///
 /// Provided by [`super::select::Root`] and consumed by all child components.
@@ -370,11 +390,10 @@ impl SelectContext {
     fn scroll_item_into_view(&self, value: &str) {
         #[cfg(target_arch = "wasm32")]
         {
-            let id = self.item_id(value);
+            let id = escape_js_string(&self.item_id(value));
             spawn(async move {
                 let js = format!(
-                    "document.getElementById('{}')?.scrollIntoView({{block:'nearest'}})",
-                    id.replace('\'', "\\'")
+                    "document.getElementById('{id}')?.scrollIntoView({{block:'nearest'}})"
                 );
                 _ = document::eval(&js).await;
             });
@@ -394,11 +413,9 @@ impl SelectContext {
             } else {
                 self.trigger_id()
             };
+            let id = escape_js_string(&id);
             spawn(async move {
-                let js = format!(
-                    "document.getElementById('{}')?.focus()",
-                    id.replace('\'', "\\'")
-                );
+                let js = format!("document.getElementById('{id}')?.focus()");
                 _ = document::eval(&js).await;
             });
         }

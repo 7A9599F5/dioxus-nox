@@ -104,7 +104,9 @@ pub fn use_swipe_gesture(config: SwipeConfig, on_commit: EventHandler<()>) -> Sw
     let closing_task: Rc<RefCell<Option<dioxus_core::Task>>> =
         use_hook(|| Rc::new(RefCell::new(None)));
 
-    let config_rc: Rc<SwipeConfig> = use_hook(|| Rc::new(config.clone()));
+    // Wrap in Rc so closures can share without requiring Copy.
+    // Fresh each render so config updates from the parent are always picked up.
+    let config_rc: Rc<SwipeConfig> = Rc::new(config);
 
     let onpointerdown = {
         let active_pointer = active_pointer.clone();
@@ -150,12 +152,13 @@ pub fn use_swipe_gesture(config: SwipeConfig, on_commit: EventHandler<()>) -> Sw
                 return;
             }
 
+            let cfg = &config_rc;
             let dx = e.client_coordinates().x - start_x.get();
             let dy = e.client_coordinates().y - start_y.get();
             let current_phase = *phase.peek();
 
             // Cross-axis cancellation
-            if dy.abs() > config_rc.max_cross_axis_px {
+            if dy.abs() > cfg.max_cross_axis_px {
                 cancelled.set(true);
                 if current_phase == SwipePhase::Dragging {
                     do_reset(&mut phase, &mut offset_px, &active_pointer, &cancelled);
@@ -168,12 +171,12 @@ pub fn use_swipe_gesture(config: SwipeConfig, on_commit: EventHandler<()>) -> Sw
                     // Enter dragging once past the deadzone (only leftward).
                     if dx.abs() > DEADZONE_PX && dx < 0.0 {
                         phase.set(SwipePhase::Dragging);
-                        let clamped = dx.max(-config_rc.action_width_px).min(0.0);
+                        let clamped = dx.max(-cfg.action_width_px).min(0.0);
                         offset_px.set(clamped);
                     }
                 }
                 SwipePhase::Dragging => {
-                    let clamped = dx.max(-config_rc.action_width_px).min(0.0);
+                    let clamped = dx.max(-cfg.action_width_px).min(0.0);
                     offset_px.set(clamped);
                 }
                 _ => {}
@@ -204,22 +207,23 @@ pub fn use_swipe_gesture(config: SwipeConfig, on_commit: EventHandler<()>) -> Sw
                 return;
             }
 
+            let cfg = &config_rc;
             let dx = e.client_coordinates().x - start_x.get();
             let elapsed = now_ms() - start_time.get();
             let vel = math::velocity(dx, elapsed);
 
             let decision = math::next_swipe_phase(
                 dx,
-                config_rc.action_width_px,
+                cfg.action_width_px,
                 vel,
-                config_rc.commit_ratio,
-                config_rc.velocity_threshold,
+                cfg.commit_ratio,
+                cfg.velocity_threshold,
             );
 
             match decision {
                 SwipeDecision::Commit => {
                     phase.set(SwipePhase::Open);
-                    offset_px.set(-config_rc.action_width_px);
+                    offset_px.set(-cfg.action_width_px);
                     on_commit.call(());
                 }
                 SwipeDecision::SpringBack => {

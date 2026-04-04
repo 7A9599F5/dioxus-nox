@@ -311,10 +311,10 @@ pub fn find_flat_insert_position<T: GroupedItem<GroupId = String>>(
 
     // target_id might be a group ID (nested container's item zone in parent)
     // Find the group's first item (header) position
-    let group_id = &target_id.0;
+    let group_id = target_id.as_str();
     items
         .iter()
-        .position(|i| i.group_id() == Some(group_id))
+        .position(|i| i.group_id().is_some_and(|g| g.as_str() == group_id))
         .unwrap_or(items.len())
 }
 
