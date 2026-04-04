@@ -407,7 +407,7 @@ fn render_workout_item(item: &WorkoutItem, items_signal: Signal<Vec<WorkoutItem>
     let drag_id = item.drag_id();
     let key = format!(
         "{}__{}",
-        drag_id.0,
+        drag_id.as_str(),
         style_info.data_group_role.unwrap_or("standalone")
     );
 

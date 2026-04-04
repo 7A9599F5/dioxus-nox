@@ -5,6 +5,7 @@
 //! auto-scroll, and ARIA announcements.
 
 use dioxus::prelude::*;
+use dioxus_core::Task;
 
 #[cfg(target_arch = "wasm32")]
 use super::keyboard::keyboard_focus_item;
@@ -54,13 +55,14 @@ pub struct DragContextProviderProps {
     pub attributes: Vec<Attribute>,
 }
 
-/// Always returns `false`: props contain [`Element`] (children), [`EventHandler`]
-/// (on_announce), and [`Attribute`]s — none of which support meaningful equality
-/// comparison. Returning `false` tells Dioxus to always re-render this component,
-/// which is the intended behavior for reactive signal-driven updates.
+/// Compare data-bearing fields only. `Element`, `EventHandler`, and `Attribute`
+/// are diffed separately by Dioxus — returning `true` here lets the framework
+/// skip re-rendering the subtree when only callbacks/children changed reference
+/// identity but the configuration is the same.
 impl PartialEq for DragContextProviderProps {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.collision_detection == other.collision_detection
+            && self.gap_displacement == other.gap_displacement
     }
 }
 
@@ -97,19 +99,26 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
     // Auto-scroll effect: starts a RAF loop while dragging to scroll the
     // viewport when the pointer is near the top/bottom edge. The loop
     // continues even when the pointer is stationary (unlike pointermove).
+    //
+    // The task handle is stored so it can be cancelled on unmount.
     {
         let active_sig = context.active_signal();
         #[cfg(target_arch = "wasm32")]
         let scroll_vel = context.scroll_velocity_signal();
         #[cfg(target_arch = "wasm32")]
         let ctx_for_scroll = context;
+        let mut raf_task: Signal<Option<Task>> = use_signal(|| None);
         use_effect(move || {
+            // Cancel any previous RAF task before potentially starting a new one.
+            if let Some(old) = raf_task.write().take() {
+                old.cancel();
+            }
             let is_active = active_sig.read().is_some();
             if is_active {
                 #[cfg(target_arch = "wasm32")]
                 {
                     // Spawn RAF loop for auto-scroll and viewport-driven rect refresh.
-                    spawn(async move {
+                    let task = spawn(async move {
                         loop {
                             NextAnimationFrame::new().await;
                             // Check if drag is still active (non-reactive peek)
@@ -130,7 +139,13 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                             }
                         }
                     });
+                    raf_task.write().replace(task);
                 }
+            }
+        });
+        use_drop(move || {
+            if let Some(task) = raf_task.write().take() {
+                task.cancel();
             }
         });
     }
@@ -357,7 +372,7 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                     {
                         if let Some(target) = context.current_target.peek().clone() {
                             let target_item_id = match &target {
-                                DropLocation::IntoItem { item_id, .. } => Some(item_id.0.as_str()),
+                                DropLocation::IntoItem { item_id, .. } => Some(item_id.as_str()),
                                 DropLocation::AtIndex { container_id, index } => {
                                     // Resolve item at this index for scrolling
                                     let zones = context.drop_zones.peek();

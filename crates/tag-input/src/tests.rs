@@ -133,6 +133,25 @@ fn match_ranges_match_at_start_and_middle() {
     assert_eq!(result, vec![(0, 3), (10, 13)]);
 }
 
+#[test]
+fn match_ranges_multibyte_lowercase_expansion() {
+    // "STRASSE" lowercases to "strasse"; query "ss" is 2 bytes in both cases.
+    let result = find_match_ranges("STRASSE", "ss");
+    // "strasse" contains "ss" at byte offset 4
+    assert_eq!(result, vec![(4, 6)]);
+
+    // "Straße" lowercases to "straße"; query "aß" lowercases to "aß" (3 bytes: a + 2-byte ß).
+    let result = find_match_ranges("Straße", "aß");
+    assert_eq!(result, vec![(3, 6)]); // match at byte 3, length 3
+
+    // Key regression test: uppercase query whose lowercase form is longer.
+    // "ß".to_uppercase() = "SS" (2 bytes), "SS".to_lowercase() = "ss" (2 bytes).
+    // query = "SS", query_lower = "ss" (2 bytes); old code used query.len()=2 which
+    // happened to match here, but the fix ensures we consistently use query_lower.len().
+    let result = find_match_ranges("STRASSE", "SS");
+    assert_eq!(result, vec![(4, 6)]);
+}
+
 // ---------------------------------------------------------------------------
 // build_groups tests
 // ---------------------------------------------------------------------------

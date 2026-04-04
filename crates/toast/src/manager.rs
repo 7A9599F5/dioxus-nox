@@ -1,5 +1,6 @@
 //! Toast queue manager.
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use dioxus::prelude::*;
@@ -16,7 +17,7 @@ use crate::types::{Toast, ToastId};
 /// so we manually implement `Copy` + `Clone` without requiring `T: Copy`.
 pub struct ToastManager<T: Clone + 'static> {
     /// Active toasts signal.
-    pub toasts: Signal<Vec<Toast<T>>>,
+    pub toasts: Signal<VecDeque<Toast<T>>>,
     /// Maximum simultaneous toasts (oldest removed when exceeded).
     pub max_toasts: usize,
 }
@@ -33,7 +34,7 @@ impl<T: Clone + 'static> ToastManager<T> {
     /// Create a new toast manager.
     pub fn new(max_toasts: usize) -> Self {
         Self {
-            toasts: Signal::new(Vec::new()),
+            toasts: Signal::new(VecDeque::new()),
             max_toasts,
         }
     }
@@ -82,10 +83,10 @@ impl<T: Clone + 'static> ToastManager<T> {
 
     fn push_toast(&mut self, toast: Toast<T>) {
         let mut toasts = self.toasts.write();
-        toasts.push(toast);
+        toasts.push_back(toast);
         // Evict oldest if over max.
         while toasts.len() > self.max_toasts {
-            toasts.remove(0);
+            toasts.pop_front();
         }
     }
 }
