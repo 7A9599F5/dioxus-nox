@@ -1,0 +1,23 @@
+[package]
+name = "dioxus-nox-datagrid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Headless interactive data grid primitives for Dioxus"
+keywords = ["dioxus", "datagrid", "table", "headless", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
+keyboard-types = { workspace = true }
+dioxus-nox-virtualize = { workspace = true, optional = true }
+dioxus-nox-dnd = { workspace = true, optional = true }
+dioxus-nox-select = { workspace = true, optional = true }
+
+[features]
+default = []
+virtualize = ["dep:dioxus-nox-virtualize"]
+dnd = ["dep:dioxus-nox-dnd"]
+select = ["dep:dioxus-nox-select"]

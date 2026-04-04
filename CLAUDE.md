@@ -19,6 +19,8 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 | `dioxus-nox-tag-input` | `crates/tag-input` | 0.1.0 | Headless tag/pill management (composes with select for dropdown) |
 | `dioxus-nox-markdown` | `crates/markdown` | 0.1.0 | Headless markdown editor/previewer/display |
 | `dioxus-nox-tabs` | `crates/tabs` | 0.13.0 | Headless tab management primitives |
+| `dioxus-nox-datagrid` | `crates/datagrid` | 0.13.0 | Headless interactive data grid (sorting, selection, editing, resize) |
+| `dioxus-nox-scheduler` | `crates/scheduler` | 0.13.0 | Headless scheduling/event primitives (day/week/agenda views) |
 | `noxpad` | `crates/noxpad` | 0.1.0 | 7-crate integration demo app |
 
 @crates/collection/CLAUDE.md
@@ -33,6 +35,8 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 @crates/tag-input/CLAUDE.md
 @crates/markdown/CLAUDE.md
 @crates/tabs/CLAUDE.md
+@crates/datagrid/CLAUDE.md
+@crates/scheduler/CLAUDE.md
 @crates/noxpad/CLAUDE.md
 
 ### Cross-Crate Relationships
@@ -44,6 +48,11 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 - `tag-input` optionally depends on `select` (feature `"combobox"` — `combo` module)
 - `shell` dev-depends on `cmdk` (examples only; not a runtime dep)
 - `tag-input` dev-depends on `dnd` (sortable pills example only)
+- `datagrid` optionally depends on `virtualize` (feature `"virtualize"` — virtual row scrolling)
+- `datagrid` optionally depends on `dnd` (feature `"dnd"` — column reordering)
+- `datagrid` optionally depends on `select` (feature `"select"` — dropdown cell editors)
+- `scheduler` optionally depends on `dnd` (feature `"dnd"` — event drag-to-move/resize)
+- `scheduler` depends on `chrono` for date/time arithmetic
 - All others are standalone
 
 ### Workspace Cargo Commands
