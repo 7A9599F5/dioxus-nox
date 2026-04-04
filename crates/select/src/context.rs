@@ -392,9 +392,8 @@ impl SelectContext {
         {
             let id = escape_js_string(&self.item_id(value));
             spawn(async move {
-                let js = format!(
-                    "document.getElementById('{id}')?.scrollIntoView({{block:'nearest'}})"
-                );
+                let js =
+                    format!("document.getElementById('{id}')?.scrollIntoView({{block:'nearest'}})");
                 _ = document::eval(&js).await;
             });
         }

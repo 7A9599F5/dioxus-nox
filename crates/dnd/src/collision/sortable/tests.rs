@@ -776,8 +776,7 @@ fn test_direction_aware_zones_dragging_down() {
     // When dragging DOWN (positive delta.y), Before zone shrinks to 15%
     // and IntoItem expands: 15/55/30 split
     // This compensates for the displacement gap above the target
-    let detector = SortableCollisionDetector::with_merge()
-        .with_delta(Position::new(0.0, 70.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 70.0));
     let mut zones = HashMap::new();
 
     // item1 (dragged) at y=0-100, item2 (target) at y=100-200
@@ -818,8 +817,7 @@ fn test_direction_aware_zones_dragging_down() {
 fn test_direction_aware_zones_dragging_up() {
     // When dragging UP (negative delta.y), After zone shrinks to 15%
     // and IntoItem expands: 30/55/15 split
-    let detector = SortableCollisionDetector::with_merge()
-        .with_delta(Position::new(0.0, -70.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, -70.0));
     let mut zones = HashMap::new();
 
     // item1 (target) at y=0-100, item2 (dragged) at y=100-200
@@ -1941,8 +1939,7 @@ fn test_min_zone_px_small_item() {
 fn test_min_zone_px_no_change_large_item() {
     // 200px item: 15% of 200 = 30px > MIN_ZONE_PX (15px), so no change
     // delta.y=220 → dragging down → 15/55/30 split
-    let detector = SortableCollisionDetector::with_merge()
-        .with_delta(Position::new(0.0, 220.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 220.0));
     let mut zones = HashMap::new();
 
     zones.insert(
@@ -2069,8 +2066,7 @@ fn test_cursor_position_collision() {
     //
     // With delta-based direction: delta.y=70 → dragging down → 15/55/30 split.
     // Target item at y=110-210. Before zone: 110 to 110+15=125. y=120 is within Before zone.
-    let detector = SortableCollisionDetector::with_merge()
-        .with_delta(Position::new(0.0, 70.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 70.0));
     let mut zones = HashMap::new();
 
     zones.insert(
@@ -2532,8 +2528,7 @@ fn test_delta_direction_independent_of_grab_position() {
     // Both move 70px down → delta.y=70 for both.
     // Cursor ends at different positions, but if we test the same cursor Y
     // we should get the same zone split (direction is from delta, not position).
-    let detector = SortableCollisionDetector::with_merge()
-        .with_delta(Position::new(0.0, 70.0)); // dragging down
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 70.0)); // dragging down
 
     let mut zones = HashMap::new();
     zones.insert(
@@ -2572,8 +2567,7 @@ fn test_delta_direction_independent_of_grab_position() {
 #[test]
 fn test_delta_zero_gives_symmetric_split() {
     // Zero delta → no direction → symmetric 25/50/25 split
-    let detector = SortableCollisionDetector::with_merge()
-        .with_delta(Position::new(0.0, 0.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 0.0));
 
     let mut zones = HashMap::new();
     // Cross-container setup: target in different container than dragged
