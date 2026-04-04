@@ -1,0 +1,20 @@
+[package]
+name = "dioxus-nox-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Headless scheduling/event primitives for Dioxus"
+keywords = ["dioxus", "scheduler", "calendar", "headless", "wasm"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "../../README.md"
+
+[dependencies]
+dioxus = { workspace = true }
+chrono = { workspace = true }
+keyboard-types = { workspace = true }
+dioxus-nox-dnd = { workspace = true, optional = true }
+
+[features]
+default = []
+dnd = ["dep:dioxus-nox-dnd"]
