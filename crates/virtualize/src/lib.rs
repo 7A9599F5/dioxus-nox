@@ -25,14 +25,27 @@
 //! ```
 
 mod viewport;
+mod variable_viewport;
 
 #[cfg(feature = "hooks")]
 mod hook;
 
+#[cfg(feature = "component")]
+mod component;
+
 pub use viewport::VirtualViewport;
+pub use variable_viewport::VariableViewport;
 
 #[cfg(feature = "hooks")]
 pub use hook::*;
+
+#[cfg(feature = "component")]
+pub mod virtual_list {
+    //! Compound component for virtual lists with variable-height items.
+    //!
+    //! See [`Root`], [`Viewport`], [`Item`], and [`use_visible_range`].
+    pub use crate::component::{Item, Root, Viewport, VirtualListContext, use_visible_range};
+}
 
 #[cfg(test)]
 mod tests {
