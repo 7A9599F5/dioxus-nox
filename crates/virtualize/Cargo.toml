@@ -14,3 +14,4 @@ dioxus = { workspace = true, optional = true }
 
 [features]
 hooks = ["dep:dioxus"]
+component = ["dep:dioxus"]
