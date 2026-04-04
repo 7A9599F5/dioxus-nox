@@ -209,7 +209,7 @@ fn test_sortable_prefers_smaller_zone_over_container() {
 
 #[test]
 fn test_merge_enabled_three_zones_vertical() {
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Single item at y=0-100 (height 100, index 0 in filtered list)
@@ -251,7 +251,7 @@ fn test_merge_enabled_three_zones_vertical() {
 
 #[test]
 fn test_merge_enabled_three_zones_horizontal() {
-    let detector = SortableCollisionDetector::with_merge(Orientation::Horizontal);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let mut zone = DropZoneState::new("item1", "list", Rect::new(0.0, 0.0, 100.0, 100.0), vec![]);
@@ -364,7 +364,7 @@ fn test_sortable_gap_maps_to_before_next_item() {
 
 #[test]
 fn test_merge_after_band_collapses_to_before_next() {
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container_zone =
@@ -726,7 +726,7 @@ fn test_into_item_stability() {
     // with the same pointer position still returns IntoItem (not Before/After).
     // This tests that the IntoItem zone is anchored to the item's base position,
     // preventing the displacement feedback loop.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 100.0, 300.0), vec![]);
@@ -776,8 +776,7 @@ fn test_direction_aware_zones_dragging_down() {
     // When dragging DOWN (positive delta.y), Before zone shrinks to 15%
     // and IntoItem expands: 15/55/30 split
     // This compensates for the displacement gap above the target
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical)
-        .with_delta(Position::new(0.0, 70.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 70.0));
     let mut zones = HashMap::new();
 
     // item1 (dragged) at y=0-100, item2 (target) at y=100-200
@@ -818,8 +817,7 @@ fn test_direction_aware_zones_dragging_down() {
 fn test_direction_aware_zones_dragging_up() {
     // When dragging UP (negative delta.y), After zone shrinks to 15%
     // and IntoItem expands: 30/55/15 split
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical)
-        .with_delta(Position::new(0.0, -70.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, -70.0));
     let mut zones = HashMap::new();
 
     // item1 (target) at y=0-100, item2 (dragged) at y=100-200
@@ -855,7 +853,7 @@ fn test_direction_aware_zones_dragging_up() {
 fn test_cross_container_uses_symmetric_zones() {
     // Cross-container drag: dragged item is NOT in the target's container
     // Should use symmetric 25/50/25 split
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // item_a in container "list-a", item_b in container "list-b"
@@ -909,7 +907,7 @@ fn test_cross_container_uses_symmetric_zones() {
 fn test_gap_into_item_when_merge_enabled() {
     // When merge is enabled and pointer is in the bottom half of a
     // displacement gap, return IntoItem(nextItem) instead of Before(nextItem)
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 100.0, 300.0), vec![]);
@@ -988,7 +986,7 @@ fn test_collision_skips_non_accepting_container_zones() {
     // produce collisions inside nested containers that only accept "sortable".
     use crate::types::DragType;
 
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Parent container (accepts all types — empty accepts)
@@ -1208,7 +1206,7 @@ fn test_nested_container_item_zone_skipped() {
 fn test_merge_suppressed_in_nested_container() {
     // IntoItem should NOT be returned for items inside nested containers,
     // even when enable_merge is true. Items get 50/50 Before/After split.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Parent container
@@ -1273,7 +1271,7 @@ fn test_merge_suppressed_in_nested_container() {
 fn test_merge_still_works_in_parent_container() {
     // IntoItem should still work for items directly in the parent container
     // (not inside a nested container), even when nested containers exist.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Parent container
@@ -1681,7 +1679,7 @@ fn test_into_item_displacement_matches_visual() {
     // displacement in item.rs: items between source and IntoItem target get
     // full displacement (same as Before/After), and the target stays at base
     // position (stability fix for IntoItem).
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);
@@ -1758,7 +1756,7 @@ fn test_gap_into_item_suppressed_for_displacement_gaps() {
     // in these artificial gaps — only in natural gaps (where the gap exists
     // at base positions too). This prevents oscillation between Before and
     // IntoItem targets.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 500.0), vec![]);
@@ -1817,7 +1815,7 @@ fn test_gap_into_item_suppressed_for_downward_displacement() {
     // Gap between item2 (eff 80+80=160) and item3 (240).
     // Without prev_displaced: pointer in bottom half → IntoItem(item3) ← BUG
     // With prev_displaced: item2 is displaced → Before(item3) ← CORRECT
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);
@@ -1872,7 +1870,7 @@ fn test_gap_into_item_suppressed_for_downward_displacement() {
 fn test_gap_into_item_suppressed_for_group_items() {
     // Items with inner_container_id (group items) should never be IntoItem
     // targets via gap detection. Groups should be entered, not merged into.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);
@@ -1909,7 +1907,7 @@ fn test_gap_into_item_suppressed_for_group_items() {
 #[test]
 fn test_min_zone_px_small_item() {
     // 40px item with merge: Before zone should be >= 15px (not 40*0.25 = 10px)
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Container
@@ -1941,8 +1939,7 @@ fn test_min_zone_px_small_item() {
 fn test_min_zone_px_no_change_large_item() {
     // 200px item: 15% of 200 = 30px > MIN_ZONE_PX (15px), so no change
     // delta.y=220 → dragging down → 15/55/30 split
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical)
-        .with_delta(Position::new(0.0, 220.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 220.0));
     let mut zones = HashMap::new();
 
     zones.insert(
@@ -2069,8 +2066,7 @@ fn test_cursor_position_collision() {
     //
     // With delta-based direction: delta.y=70 → dragging down → 15/55/30 split.
     // Target item at y=110-210. Before zone: 110 to 110+15=125. y=120 is within Before zone.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical)
-        .with_delta(Position::new(0.0, 70.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 70.0));
     let mut zones = HashMap::new();
 
     zones.insert(
@@ -2116,7 +2112,7 @@ fn test_cursor_position_collision() {
 /// In indicator mode with merge, zone split should be symmetric 15/70/15
 #[test]
 fn test_indicator_mode_symmetric_zones_with_merge() {
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, true);
+    let detector = SortableCollisionDetector::indicator_mode(true);
     let mut zones = HashMap::new();
 
     // Item at y=0-100 (height 100)
@@ -2178,7 +2174,7 @@ fn test_indicator_mode_symmetric_zones_with_merge() {
 /// Indicator mode without merge should use 50/50 split (same as gap mode)
 #[test]
 fn test_indicator_mode_50_50_without_merge() {
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, false);
+    let detector = SortableCollisionDetector::indicator_mode(false);
     let mut zones = HashMap::new();
 
     // Item at y=0-100 (height 100)
@@ -2215,7 +2211,7 @@ fn test_indicator_mode_50_50_without_merge() {
 /// Indicator mode should skip displacement-gap IntoItem detection
 #[test]
 fn test_indicator_mode_skips_gap_into_item() {
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, true);
+    let detector = SortableCollisionDetector::indicator_mode(true);
     let mut zones = HashMap::new();
 
     // Container with two items and a natural gap between them
@@ -2249,7 +2245,7 @@ fn test_indicator_mode_skips_gap_into_item() {
 /// (no direction-aware biasing)
 #[test]
 fn test_indicator_mode_no_direction_bias() {
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, true);
+    let detector = SortableCollisionDetector::indicator_mode(true);
     let mut zones = HashMap::new();
 
     // Container
@@ -2314,7 +2310,7 @@ fn test_nested_container_indicator_mode_no_phantom_displacement() {
     // In indicator mode (gap_displacement: false), effective_axis_start should
     // return base positions for all zones. This prevents phantom displacement
     // from shifting zone boundaries and causing flutter at nested container edges.
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, true);
+    let detector = SortableCollisionDetector::indicator_mode(true);
     let mut zones = HashMap::new();
 
     // Parent container
@@ -2532,8 +2528,7 @@ fn test_delta_direction_independent_of_grab_position() {
     // Both move 70px down → delta.y=70 for both.
     // Cursor ends at different positions, but if we test the same cursor Y
     // we should get the same zone split (direction is from delta, not position).
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical)
-        .with_delta(Position::new(0.0, 70.0)); // dragging down
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 70.0)); // dragging down
 
     let mut zones = HashMap::new();
     zones.insert(
@@ -2572,8 +2567,7 @@ fn test_delta_direction_independent_of_grab_position() {
 #[test]
 fn test_delta_zero_gives_symmetric_split() {
     // Zero delta → no direction → symmetric 25/50/25 split
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical)
-        .with_delta(Position::new(0.0, 0.0));
+    let detector = SortableCollisionDetector::with_merge().with_delta(Position::new(0.0, 0.0));
 
     let mut zones = HashMap::new();
     // Cross-container setup: target in different container than dragged
@@ -2738,7 +2732,7 @@ fn test_overshoot_beyond_tolerance() {
 #[test]
 fn test_overshoot_with_merge_suppresses_into_item() {
     // Overshoot + merge enabled → should never produce IntoItem
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Container at y=100..400
@@ -3009,7 +3003,7 @@ fn test_overshoot_horizontal_orientation() {
 #[test]
 fn test_overshoot_indicator_mode() {
     // Indicator mode (gap_displacement=false) also benefits from overshoot tolerance
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, false);
+    let detector = SortableCollisionDetector::indicator_mode(false);
     let mut zones = HashMap::new();
 
     // Container at y=100..400
@@ -3052,7 +3046,7 @@ fn test_overshoot_indicator_mode() {
 fn test_side_overshoot_into_item_with_merge() {
     // Side drift with merge enabled, pointer at item's IntoItem zone Y position
     // → should return IntoItem (not Before/After)
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Container at x=50..250, y=0..200
@@ -3089,7 +3083,7 @@ fn test_side_overshoot_into_item_with_merge() {
 fn test_side_overshoot_before_after_with_merge() {
     // Side drift with merge enabled, pointer at item's Before/After zone Y position
     // → should return Before/After (not IntoItem)
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     // Container at x=50..250, y=0..200
@@ -3128,7 +3122,7 @@ fn test_side_overshoot_before_after_with_merge() {
 #[test]
 fn test_side_overshoot_indicator_mode_into_item() {
     // Side drift in indicator mode (symmetric 15/70/15) with merge → IntoItem works
-    let detector = SortableCollisionDetector::indicator_mode(Orientation::Vertical, true);
+    let detector = SortableCollisionDetector::indicator_mode(true);
     let mut zones = HashMap::new();
 
     // Container at x=50..250, y=0..200
@@ -3614,7 +3608,7 @@ fn test_group_header_never_produces_into_item() {
     // When dragging a group header (type "group-header"), IntoItem should be
     // suppressed on standalone targets that only accept "sortable". The type
     // mismatch prevents merging a header into a standalone item.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);
@@ -3654,7 +3648,7 @@ fn test_group_header_never_produces_into_item() {
 fn test_group_header_gap_into_item_suppressed() {
     // When dragging a group header, gap-based IntoItem should also be
     // suppressed via type mismatch with targets that only accept "sortable".
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);
@@ -3707,7 +3701,7 @@ fn test_group_header_gap_into_item_suppressed() {
 fn test_same_type_items_can_still_merge() {
     // Two "sortable" items with merge enabled → IntoItem should still work.
     // Regression guard: the type-based check must not break normal merging.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);
@@ -3750,7 +3744,7 @@ fn test_same_type_items_can_still_merge() {
 fn test_empty_accepts_allows_any_merge() {
     // Target with empty accepts list should allow IntoItem from any drag type.
     // Backward compatibility guard: empty accepts = accepts all.
-    let detector = SortableCollisionDetector::with_merge(Orientation::Vertical);
+    let detector = SortableCollisionDetector::with_merge();
     let mut zones = HashMap::new();
 
     let container = DropZoneState::new("list", "list", Rect::new(0.0, 0.0, 200.0, 400.0), vec![]);

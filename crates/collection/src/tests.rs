@@ -65,6 +65,7 @@ fn ti_disabled(value: &str, label: &str) -> TestItem {
     }
 }
 
+#[allow(dead_code)]
 fn ti_group(value: &str, label: &str, group: &str) -> TestItem {
     TestItem {
         value: value.to_string(),
@@ -602,7 +603,7 @@ fn list_item_ref_works() {
     assert_eq!(r.label(), "Apple");
 
     // Can use with score_items via &T
-    let items = vec![ti("a", "Apple"), ti("b", "Banana")];
+    let items = [ti("a", "Apple"), ti("b", "Banana")];
     let refs: Vec<&TestItem> = items.iter().collect();
     let results = score_items(&refs, "app", None, None, &mut matcher());
     assert_eq!(results.len(), 1);

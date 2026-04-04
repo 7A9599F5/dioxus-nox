@@ -74,7 +74,7 @@ pub fn find_match_ranges(text: &str, query: &str) -> Vec<(usize, usize)> {
     let mut start = 0;
     while let Some(pos) = text_lower[start..].find(&query_lower) {
         let abs_start = start + pos;
-        let abs_end = abs_start + query.len();
+        let abs_end = abs_start + query_lower.len();
         ranges.push((abs_start, abs_end));
         start = abs_end;
     }

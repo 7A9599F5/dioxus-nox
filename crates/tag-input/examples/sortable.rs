@@ -138,10 +138,10 @@ fn SelectTagBridge(available: Vec<FruitTag>, children: Element) -> Element {
             .map(|t| t.id().to_string())
             .collect();
         for val in &selected_values {
-            if !tag_ids.contains(val) {
-                if let Some(tag) = available.iter().find(|t| t.id() == val.as_str()) {
-                    state.add_tag(tag.clone());
-                }
+            if !tag_ids.contains(val)
+                && let Some(tag) = available.iter().find(|t| t.id() == val.as_str())
+            {
+                state.add_tag(tag.clone());
             }
         }
     });
@@ -207,7 +207,7 @@ fn TagInputUI(available: Vec<FruitTag>) -> Element {
                     orientation: Orientation::Horizontal,
                     on_reorder: move |e: ReorderEvent| {
                         let tags = ctx.selected_tags.read();
-                        if let Some(from) = tags.iter().position(|t| t.id() == e.item_id.0.as_str()) {
+                        if let Some(from) = tags.iter().position(|t| t.id() == e.item_id.as_str()) {
                             // Compute insertion index in the list after removing the dragged item
                             let mut ids: Vec<DragId> = tags.iter().map(|t| DragId::new(t.id())).collect();
                             ids.remove(from);
@@ -255,7 +255,7 @@ fn TagInputUI(available: Vec<FruitTag>) -> Element {
                         align_to_grab_point: true,
                         render: move |active: ActiveDrag| {
                             let tags = ctx.selected_tags.read();
-                            if let Some(tag) = tags.iter().find(|t| t.id() == active.data.id.0.as_str()) {
+                            if let Some(tag) = tags.iter().find(|t| t.id() == active.data.id.as_str()) {
                                 let name = tag.name().to_string();
                                 rsx! {
                                     div {

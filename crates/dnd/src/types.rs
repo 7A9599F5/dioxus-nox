@@ -6,32 +6,47 @@
 //! - Drop location abstraction (`DropLocation`)
 //! - Event types for drag operations
 
+use std::borrow::Cow;
+
 use dioxus::prelude::{ReadableExt, WritableExt};
 
 // ============================================================================
 // Identity Types (Task 1.1)
 // ============================================================================
 
-/// Unique identifier for any draggable or droppable entity
+/// Unique identifier for any draggable or droppable entity.
+///
+/// Uses `Cow<'static, str>` internally so that static string IDs avoid
+/// heap allocation while dynamic IDs are still supported.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct DragId(pub String);
+pub struct DragId(pub Cow<'static, str>);
 
 impl DragId {
     /// Create a new DragId from a string
     pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
+        Self(Cow::Owned(id.into()))
+    }
+
+    /// Create a DragId from a static string without allocation
+    pub fn new_static(id: &'static str) -> Self {
+        Self(Cow::Borrowed(id))
+    }
+
+    /// View as a string slice
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl From<&str> for DragId {
     fn from(s: &str) -> Self {
-        Self(s.to_string())
+        Self(Cow::Owned(s.to_string()))
     }
 }
 
 impl From<String> for DragId {
     fn from(s: String) -> Self {
-        Self(s)
+        Self(Cow::Owned(s))
     }
 }
 
@@ -41,26 +56,39 @@ impl std::fmt::Display for DragId {
     }
 }
 
-/// Type discriminator - drop zones can filter by accepted types
+/// Type discriminator - drop zones can filter by accepted types.
+///
+/// Uses `Cow<'static, str>` internally so that static type names avoid
+/// heap allocation while dynamic names are still supported.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct DragType(pub String);
+pub struct DragType(pub Cow<'static, str>);
 
 impl DragType {
     /// Create a new DragType from a string
     pub fn new(drag_type: impl Into<String>) -> Self {
-        Self(drag_type.into())
+        Self(Cow::Owned(drag_type.into()))
+    }
+
+    /// Create a DragType from a static string without allocation
+    pub fn new_static(drag_type: &'static str) -> Self {
+        Self(Cow::Borrowed(drag_type))
+    }
+
+    /// View as a string slice
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl From<&str> for DragType {
     fn from(s: &str) -> Self {
-        Self(s.to_string())
+        Self(Cow::Owned(s.to_string()))
     }
 }
 
 impl From<String> for DragType {
     fn from(s: String) -> Self {
-        Self(s)
+        Self(Cow::Owned(s))
     }
 }
 

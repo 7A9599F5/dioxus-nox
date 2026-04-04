@@ -192,7 +192,7 @@ fn WorkoutList(items: Signal<Vec<WorkoutItem>>) -> Element {
 
                         let drop_disabled = is_group_drag_active && group_id.is_some();
                         let drag_id = item.drag_id();
-                        let key = format!("{}__{}", drag_id.0, style_info.data_group_role.unwrap_or("standalone"));
+                        let key = format!("{}__{}", drag_id.as_str(), style_info.data_group_role.unwrap_or("standalone"));
 
                         let content = match item {
                             WorkoutItem::SupersetHeader { .. } => {

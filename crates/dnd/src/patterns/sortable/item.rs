@@ -671,7 +671,7 @@ pub fn SortableItem(props: SortableItemProps) -> Element {
             aria_describedby: "{instructions_id}",
             // Data attributes
             "data-dnd-item": "",
-            "data-dnd-id": props.id.0.as_str(),
+            "data-dnd-id": props.id.as_str(),
             "data-state": "{dnd_state}",
             "data-merge-target": if is_merge_target { "true" },
             "data-drop-disabled": if props.drop_disabled { "true" },

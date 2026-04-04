@@ -97,7 +97,7 @@ fn SortableFileFolder(
     } else {
         let types: Vec<&str> = accepts
             .iter()
-            .map(|t| match t.0.as_str() {
+            .map(|t| match t.as_str() {
                 TYPE_IMAGE => "Images",
                 TYPE_DOCUMENT => "Documents",
                 TYPE_VIDEO => "Videos",
