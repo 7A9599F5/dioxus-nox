@@ -16,6 +16,59 @@ use crate::patterns::sortable::item::NextAnimationFrame;
 use crate::types::{AnnouncementEvent, DropEvent, DropLocation, Position};
 use crate::utils::{extract_attribute, filter_class_style};
 
+/// Shared keyboard-drop logic invoked by both Space and Enter handlers.
+///
+/// Reads the active drag's id, current keyboard container, and index, then
+/// (if the drag ends successfully) dispatches a `Dropped` announcement,
+/// fires `on_drop`, and focuses the dropped item.
+/// Reconstruct the items list for a keyboard-drag container, with the
+/// currently dragged item appended at the end. Returns `None` if no drag
+/// is active.
+fn items_in_keyboard_container(
+    context: DragContext,
+    cid: &super::DragId,
+) -> Option<Vec<super::DragId>> {
+    let active_id = context.active.peek().as_ref().map(|a| a.data.id.clone())?;
+    let zones = context.drop_zones.peek();
+    let mut items = sorted_items_in_container(&zones, cid, Some(&active_id));
+    drop(zones);
+    items.push(active_id);
+    Some(items)
+}
+
+/// Shared keyboard-drop logic invoked by both Space and Enter handlers.
+fn handle_keyboard_drop(context: DragContext, on_drop: EventHandler<DropEvent>) {
+    let (item_id, cid, index, total) = {
+        let a = context.active.peek();
+        let id = a.as_ref().map(|a| a.data.id.clone());
+        let c = context.keyboard_container();
+        let i = *context.keyboard_index.peek();
+        // Compute real total: items in container + dragged item
+        let t = c
+            .as_ref()
+            .and_then(|cid| items_in_keyboard_container(context, cid).map(|i| i.len()));
+        (id, c, i, t)
+    };
+    let _focus_id = item_id.clone();
+    if let Some(event) = context.end_keyboard_drag() {
+        if let (Some(item_id), Some(cid), Some(idx), Some(total)) = (item_id, cid, index, total) {
+            context.dispatch_announcement(AnnouncementEvent::Dropped {
+                item_id,
+                position: idx + 1,
+                total,
+                container_id: cid,
+            });
+        }
+        on_drop.call(event);
+
+        // Focus the dropped item at its new position
+        #[cfg(target_arch = "wasm32")]
+        if let Some(focus_id) = _focus_id {
+            keyboard_focus_item(focus_id);
+        }
+    }
+}
+
 /// Props for the DragContextProvider component
 #[derive(Props, Clone)]
 pub struct DragContextProviderProps {
@@ -198,16 +251,6 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
 
                 // During keyboard drag: handle navigation and drop
                 if context.is_keyboard_drag() {
-                    // Helper: reconstruct items list for current keyboard container
-                    let get_all_items = |cid: &super::DragId| -> Option<(Vec<super::DragId>, super::DragId)> {
-                        let active_id = context.active.peek().as_ref().map(|a| a.data.id.clone())?;
-                        let zones = context.drop_zones.peek();
-                        let mut items = sorted_items_in_container(&zones, cid, Some(&active_id));
-                        drop(zones);
-                        items.push(active_id.clone());
-                        Some((items, active_id))
-                    };
-
                     match key {
                         Key::Escape => {
                             let item_id = context.active.peek().as_ref().map(|a| a.data.id.clone());
@@ -219,7 +262,8 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                         }
                         Key::ArrowDown | Key::ArrowRight => {
                             if let Some(cid) = context.keyboard_container()
-                                && let Some((all_items, item_id)) = get_all_items(&cid)
+                                && let Some(item_id) = context.active.peek().as_ref().map(|a| a.data.id.clone())
+                                && let Some(all_items) = items_in_keyboard_container(context, &cid)
                             {
                                 if let Some((pos, total)) = context.keyboard_move(1, &all_items) {
                                     // Check if the new target is a group item — enter it
@@ -245,7 +289,8 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                         }
                         Key::ArrowUp | Key::ArrowLeft => {
                             if let Some(cid) = context.keyboard_container()
-                                && let Some((all_items, item_id)) = get_all_items(&cid)
+                                && let Some(item_id) = context.active.peek().as_ref().map(|a| a.data.id.clone())
+                                && let Some(all_items) = items_in_keyboard_container(context, &cid)
                             {
                                 if let Some((pos, total)) = context.keyboard_move(-1, &all_items) {
                                     // Check if the new target is a group item — enter it
@@ -270,63 +315,11 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                             e.prevent_default();
                         }
                         Key::Character(ref c) if c == " " => {
-                            // Keyboard drop (Space)
-                            let (item_id, cid, index, total) = {
-                                let a = context.active.peek();
-                                let id = a.as_ref().map(|a| a.data.id.clone());
-                                let c = context.keyboard_container();
-                                let i = *context.keyboard_index.peek();
-                                // Compute real total: items in container + dragged item
-                                let t = c.as_ref().and_then(|cid| {
-                                    get_all_items(cid).map(|(items, _)| items.len())
-                                });
-                                (id, c, i, t)
-                            };
-                            let _focus_id = item_id.clone();
-                            if let Some(event) = context.end_keyboard_drag() {
-                                if let (Some(item_id), Some(cid), Some(idx), Some(total)) = (item_id, cid, index, total) {
-                                    context.dispatch_announcement(AnnouncementEvent::Dropped {
-                                        item_id, position: idx + 1, total, container_id: cid,
-                                    });
-                                }
-                                on_drop.call(event);
-
-                                // Focus the dropped item at its new position
-                                #[cfg(target_arch = "wasm32")]
-                                if let Some(focus_id) = _focus_id {
-                                    keyboard_focus_item(focus_id);
-                                }
-                            }
+                            handle_keyboard_drop(context, on_drop);
                             e.prevent_default();
                         }
                         Key::Enter => {
-                            // Keyboard drop (Enter)
-                            let (item_id, cid, index, total) = {
-                                let a = context.active.peek();
-                                let id = a.as_ref().map(|a| a.data.id.clone());
-                                let c = context.keyboard_container();
-                                let i = *context.keyboard_index.peek();
-                                // Compute real total: items in container + dragged item
-                                let t = c.as_ref().and_then(|cid| {
-                                    get_all_items(cid).map(|(items, _)| items.len())
-                                });
-                                (id, c, i, t)
-                            };
-                            let _focus_id = item_id.clone();
-                            if let Some(event) = context.end_keyboard_drag() {
-                                if let (Some(item_id), Some(cid), Some(idx), Some(total)) = (item_id, cid, index, total) {
-                                    context.dispatch_announcement(AnnouncementEvent::Dropped {
-                                        item_id, position: idx + 1, total, container_id: cid,
-                                    });
-                                }
-                                on_drop.call(event);
-
-                                // Focus the dropped item at its new position
-                                #[cfg(target_arch = "wasm32")]
-                                if let Some(focus_id) = _focus_id {
-                                    keyboard_focus_item(focus_id);
-                                }
-                            }
+                            handle_keyboard_drop(context, on_drop);
                             e.prevent_default();
                         }
                         Key::Tab => {
