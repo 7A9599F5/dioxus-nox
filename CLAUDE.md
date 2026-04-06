@@ -21,6 +21,9 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 | `dioxus-nox-tabs` | `crates/tabs` | 0.13.0 | Headless tab management primitives |
 | `dioxus-nox-datagrid` | `crates/datagrid` | 0.13.0 | Headless interactive data grid (sorting, selection, editing, resize) |
 | `dioxus-nox-scheduler` | `crates/scheduler` | 0.13.0 | Headless scheduling/event primitives (day/week/agenda views) |
+| `dioxus-nox-calendar` | `crates/calendar` | 0.13.2 | Headless calendar primitive (single + range selection, year/decade views) |
+| `dioxus-nox-date-picker` | `crates/date-picker` | 0.13.2 | Headless date picker, date range picker, and date field |
+| `dioxus-nox-time-picker` | `crates/time-picker` | 0.13.2 | Headless time picker (hour/minute/second spinbuttons) |
 | `noxpad` | `crates/noxpad` | 0.1.0 | 7-crate integration demo app |
 
 @crates/collection/CLAUDE.md
@@ -37,6 +40,9 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 @crates/tabs/CLAUDE.md
 @crates/datagrid/CLAUDE.md
 @crates/scheduler/CLAUDE.md
+@crates/calendar/CLAUDE.md
+@crates/date-picker/CLAUDE.md
+@crates/time-picker/CLAUDE.md
 @crates/noxpad/CLAUDE.md
 
 ### Cross-Crate Relationships
@@ -53,6 +59,8 @@ Headless component library for Dioxus 0.7 (Rust/WASM). 12+ crates in `crates/`.
 - `datagrid` optionally depends on `select` (feature `"select"` — dropdown cell editors)
 - `scheduler` optionally depends on `dnd` (feature `"dnd"` — event drag-to-move/resize)
 - `scheduler` depends on `chrono` for date/time arithmetic
+- `date-picker` depends on `calendar` (wraps `calendar::Root` and `range_calendar::Root`)
+- `time-picker` is standalone — no dependency on calendar or date-picker
 - All others are standalone
 
 ### Workspace Cargo Commands
@@ -176,7 +184,7 @@ If you must use `web_sys`/`js_sys`:
 ## Shared Conventions
 
 - **Edition:** 2024 (`edition.workspace = true` in all crates)
-- **Dioxus pin:** `dioxus = "=0.7.3"` via `workspace.dependencies`
+- **Dioxus pin:** `dioxus = "=0.7.4"` via `workspace.dependencies`
 - **Components:** `#[component]` macro for all components; `#[props(default)]` / `#[props(into)]` for props
 - **Visibility:** `pub(crate)` for internal helpers, `pub` only for user-facing API
 - **Commits:** conventional commits — `feat(scope):`, `fix(scope):`, `test(scope):`, `docs(scope):`

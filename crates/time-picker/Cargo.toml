@@ -1,0 +1,23 @@
+[package]
+name = "dioxus-nox-time-picker"
+description = "Headless time picker for Dioxus — hour, minute, second spinbutton segments"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["time-picker", "headless", "dioxus"]
+categories = ["gui"]
+
+[features]
+default = ["web"]
+web = []
+desktop = []
+mobile = []
+
+[dependencies]
+dioxus = { workspace = true }
+time = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+time = { version = "0.3", features = ["macros"] }
