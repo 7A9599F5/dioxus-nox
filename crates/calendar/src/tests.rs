@@ -1,4 +1,4 @@
-use time::{macros::date, Date, Month, Weekday};
+use time::{Date, Month, Weekday, macros::date};
 
 use crate::math::*;
 use crate::types::*;
@@ -16,7 +16,10 @@ fn weekday_set_single_and_contains() {
 #[test]
 fn weekday_set_first() {
     assert_eq!(WeekdaySet::EMPTY.first(), None);
-    assert_eq!(WeekdaySet::single(Weekday::Friday).first(), Some(Weekday::Friday));
+    assert_eq!(
+        WeekdaySet::single(Weekday::Friday).first(),
+        Some(Weekday::Friday)
+    );
     assert_eq!(WeekdaySet::ALL.first(), Some(Weekday::Monday));
 }
 
@@ -240,7 +243,10 @@ fn month_grid_may_2024_sunday_start() {
     assert_eq!(grid.len(), 35);
     assert_eq!(grid.len() % 7, 0);
 
-    let may_days: Vec<_> = grid.iter().filter(|d| d.month() == Month::May && d.year() == 2024).collect();
+    let may_days: Vec<_> = grid
+        .iter()
+        .filter(|d| d.month() == Month::May && d.year() == 2024)
+        .collect();
     assert_eq!(may_days.len(), 31);
 }
 

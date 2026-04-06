@@ -235,8 +235,7 @@ fn SegmentedInput(
     disabled: bool,
     read_only: bool,
     slot_name: &'static str,
-    #[props(default)]
-    class: Option<String>,
+    #[props(default)] class: Option<String>,
 ) -> Element {
     let mut year_ref: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
     let mut month_ref: Signal<Option<Rc<MountedData>>> = use_signal(|| None);

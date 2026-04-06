@@ -137,7 +137,9 @@ fn TimeSpinbutton(
                     }
                 }
             }
-            Key::Character(ref c) if c.len() == 1 && c.chars().next().is_some_and(|ch| ch.is_ascii_digit()) => {
+            Key::Character(ref c)
+                if c.len() == 1 && c.chars().next().is_some_and(|ch| ch.is_ascii_digit()) =>
+            {
                 e.prevent_default();
                 let mut digits = (typed_digits)();
                 digits.push_str(c);
@@ -304,9 +306,7 @@ pub fn Second(
 /// ## Data attributes
 /// - `data-period` — `"am"` or `"pm"`
 #[component]
-pub fn Period(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn Period(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: TimePickerContext = use_context();
     let is_am = ctx.is_am();
     let label = if is_am { "AM" } else { "PM" };

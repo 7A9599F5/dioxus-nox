@@ -203,9 +203,7 @@ pub fn Popover(
 
 /// Segmented YYYY-MM-DD input wired to the DatePickerContext.
 #[component]
-pub fn Input(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn Input(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: DatePickerContext = use_context();
 
     let mut year_ref: Signal<Option<Rc<MountedData>>> = use_signal(|| None);

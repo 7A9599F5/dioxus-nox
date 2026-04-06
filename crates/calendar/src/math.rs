@@ -3,7 +3,7 @@
 //! All functions are pure Rust — no Dioxus, no signals, no web-sys.
 //! Testable without any framework runtime.
 
-use time::{ext::NumericalDuration, Date, Month, Weekday};
+use time::{Date, Month, Weekday, ext::NumericalDuration};
 
 use crate::types::{DateRange, RelativeMonth, WeekdaySet};
 
@@ -87,11 +87,19 @@ pub fn leading_days(date: Date, first_day_of_week: Weekday) -> u8 {
     let fdow = first_day_of_week.number_days_from_monday() as i8;
     let fom = first.number_days_from_monday() as i8;
     let diff = fom - fdow;
-    if diff < 0 { (diff + 7) as u8 } else { diff as u8 }
+    if diff < 0 {
+        (diff + 7) as u8
+    } else {
+        diff as u8
+    }
 }
 
 /// Which relative month a date belongs to, given the displayed month.
-pub fn relative_month(date: Date, displayed_month: Month, enabled_range: DateRange) -> RelativeMonth {
+pub fn relative_month(
+    date: Date,
+    displayed_month: Month,
+    enabled_range: DateRange,
+) -> RelativeMonth {
     if date < enabled_range.start() {
         RelativeMonth::Previous
     } else if date > enabled_range.end() {
@@ -179,11 +187,7 @@ pub fn weekday_short(weekday: Weekday) -> &'static str {
 
 /// Move focus by arrow keys within a calendar grid.
 /// Returns the new focused date, or `None` if movement is not possible.
-pub fn navigate(
-    focused: Date,
-    key: NavigationKey,
-    enabled_range: DateRange,
-) -> Option<Date> {
+pub fn navigate(focused: Date, key: NavigationKey, enabled_range: DateRange) -> Option<Date> {
     navigate_with(focused, key, enabled_range, |_| false)
 }
 

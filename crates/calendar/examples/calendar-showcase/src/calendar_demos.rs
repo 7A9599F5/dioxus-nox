@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
-use dioxus_nox_calendar::{calendar, range_calendar, CellRenderData, DateRange};
-use time::{Date, Month, Weekday};
+use dioxus_nox_calendar::{CellRenderData, DateRange, calendar, range_calendar};
 use time::macros::date;
+use time::{Date, Month, Weekday};
 
 use crate::DemoSection;
 
@@ -55,7 +55,7 @@ fn BasicDemo() -> Element {
 
 #[component]
 fn ControlledDemo() -> Element {
-    let mut selected = use_signal(|| Option::<Date>::Some(date!(2026-04-05)));
+    let mut selected = use_signal(|| Option::<Date>::Some(date!(2026 - 04 - 05)));
 
     rsx! {
         DemoSection {
@@ -196,12 +196,15 @@ fn DisabledDemo() -> Element {
     let mut selected = use_signal(|| Option::<Date>::None);
 
     // Weekends are disabled (non-interactive)
-    let is_disabled = Callback::new(|date: Date| {
-        matches!(date.weekday(), Weekday::Saturday | Weekday::Sunday)
-    });
+    let is_disabled =
+        Callback::new(|date: Date| matches!(date.weekday(), Weekday::Saturday | Weekday::Sunday));
 
     // Specific dates are unavailable (marked but focusable)
-    let holidays = [date!(2026-04-10), date!(2026-04-17), date!(2026-05-01)];
+    let holidays = [
+        date!(2026 - 04 - 10),
+        date!(2026 - 04 - 17),
+        date!(2026 - 05 - 01),
+    ];
     let is_unavailable = Callback::new(move |date: Date| holidays.contains(&date));
 
     rsx! {
@@ -334,11 +337,11 @@ fn CustomCellDemo() -> Element {
 
     // Dates with "events" (dot indicators)
     let event_dates = [
-        date!(2026-04-07),
-        date!(2026-04-12),
-        date!(2026-04-15),
-        date!(2026-04-22),
-        date!(2026-04-28),
+        date!(2026 - 04 - 07),
+        date!(2026 - 04 - 12),
+        date!(2026 - 04 - 15),
+        date!(2026 - 04 - 22),
+        date!(2026 - 04 - 28),
     ];
 
     let render_cell = Callback::new(move |cell: CellRenderData| {

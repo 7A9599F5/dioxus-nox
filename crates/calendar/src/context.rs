@@ -100,8 +100,7 @@ impl BaseCalendarContext {
     pub fn is_prev_disabled(&self) -> bool {
         self.disabled || {
             let view = self.current_view();
-            math::previous_month(view)
-                .is_none_or(|d| d < math::first_of_month(self.min_date))
+            math::previous_month(view).is_none_or(|d| d < math::first_of_month(self.min_date))
         }
     }
 
@@ -109,8 +108,7 @@ impl BaseCalendarContext {
     pub fn is_next_disabled(&self) -> bool {
         self.disabled || {
             let view = self.current_view();
-            math::next_month(view)
-                .is_none_or(|d| d > self.max_date)
+            math::next_month(view).is_none_or(|d| d > self.max_date)
         }
     }
 
@@ -275,7 +273,11 @@ impl SingleContext {
     pub fn select(&mut self, date: Date) {
         let current = self.current_selected();
         // Toggle: clicking the selected date deselects it
-        let new_val = if current == Some(date) { None } else { Some(date) };
+        let new_val = if current == Some(date) {
+            None
+        } else {
+            Some(date)
+        };
 
         if let Some(mut controlled) = self.controlled_selected {
             controlled.set(new_val);
@@ -345,7 +347,8 @@ impl RangeContext {
     /// Update the preview range on hover (after first click).
     pub fn hover_date(&mut self, date: Date) {
         if let Some(anchor) = (self.anchor_date)() {
-            self.highlighted_range.set(Some(DateRange::new(anchor, date)));
+            self.highlighted_range
+                .set(Some(DateRange::new(anchor, date)));
         }
     }
 

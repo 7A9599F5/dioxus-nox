@@ -87,9 +87,7 @@ pub fn Root(
     children: Element,
 ) -> Element {
     let today_val = today.unwrap_or_else(today_date);
-    let initial_view = default_view_date
-        .or(default_value)
-        .unwrap_or(today_val);
+    let initial_view = default_view_date.or(default_value).unwrap_or(today_val);
 
     let internal_view = use_signal(|| initial_view);
     let internal_selected = use_signal(|| default_value);
@@ -443,9 +441,7 @@ pub fn NextButton(
 /// - In `Year` mode → switches to `Decade` mode
 /// - In `Decade` mode → no-op
 #[component]
-pub fn Title(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn Title(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: BaseCalendarContext = use_context();
     let view = effective_view(&ctx);
     let offset = current_offset();
@@ -489,9 +485,7 @@ pub fn Title(
 ///
 /// Renders a `<select>` element with months within the enabled date range.
 #[component]
-pub fn SelectMonth(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn SelectMonth(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: BaseCalendarContext = use_context();
     let view = effective_view(&ctx);
     let current_month = view.month();
@@ -552,9 +546,7 @@ pub fn SelectMonth(
 ///
 /// Renders a `<select>` element with years within the enabled date range.
 #[component]
-pub fn SelectYear(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn SelectYear(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: BaseCalendarContext = use_context();
     let view = effective_view(&ctx);
     let current_year = view.year();
@@ -572,9 +564,8 @@ pub fn SelectYear(
         let mut ctx: BaseCalendarContext = consume_context();
         let current = ctx.current_view();
         let max_day = math::days_in_month(current.month(), year);
-        let new_view =
-            Date::from_calendar_date(year, current.month(), current.day().min(max_day))
-                .unwrap_or(current);
+        let new_view = Date::from_calendar_date(year, current.month(), current.day().min(max_day))
+            .unwrap_or(current);
         ctx.set_view(new_view);
     };
 
@@ -759,9 +750,7 @@ fn Cell(date: Date) -> Element {
     let mut mounted_ref: Signal<Option<Rc<MountedData>>> = use_signal(|| None);
     use_effect(move || {
         let is_focused = focus.is_focused(date);
-        if is_focused
-            && let Some(el) = (mounted_ref)()
-        {
+        if is_focused && let Some(el) = (mounted_ref)() {
             spawn(async move {
                 _ = el.set_focus(true).await;
             });
@@ -828,8 +817,8 @@ fn handle_keyboard(event: KeyboardEvent, enabled_range: DateRange) {
     };
 
     // Enter/Space: select the focused date (unless read-only or disabled)
-    let is_enter_or_space = event.key() == Key::Enter
-        || matches!(event.key(), Key::Character(ref c) if c == " ");
+    let is_enter_or_space =
+        event.key() == Key::Enter || matches!(event.key(), Key::Character(ref c) if c == " ");
     if is_enter_or_space {
         event.prevent_default();
         if !base.is_read_only() && !base.is_date_disabled(focused) {
@@ -880,9 +869,9 @@ fn handle_keyboard(event: KeyboardEvent, enabled_range: DateRange) {
             }
         };
 
-        if let Some(new_date) = math::navigate_with(focused, key, effective_range, |d| {
-            base.is_date_disabled(d)
-        }) {
+        if let Some(new_date) =
+            math::navigate_with(focused, key, effective_range, |d| base.is_date_disabled(d))
+        {
             focus.set_focused(Some(new_date));
 
             // If navigated outside current view, update view month
@@ -925,9 +914,7 @@ fn current_offset() -> u8 {
 /// - `data-month-cell` — on each month button
 /// - `data-selected` — on the month matching the current view
 #[component]
-pub fn YearView(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn YearView(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: BaseCalendarContext = use_context();
     let view = ctx.current_view();
     let months = math::year_grid();
@@ -969,9 +956,7 @@ pub fn YearView(
 /// - `data-year-cell` — on each year button
 /// - `data-selected` — on the year matching the current view
 #[component]
-pub fn DecadeView(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn DecadeView(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: BaseCalendarContext = use_context();
     let view = ctx.current_view();
     let years = math::decade_grid(view.year());

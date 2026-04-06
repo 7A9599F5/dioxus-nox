@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus_nox_calendar::DateRange;
-use time::{ext::NumericalDuration, Date, Weekday};
+use time::{Date, Weekday, ext::NumericalDuration};
 
 /// Create a range covering the last `n` days ending at `today`.
 pub fn last_n_days(n: u32, today: Date) -> DateRange {

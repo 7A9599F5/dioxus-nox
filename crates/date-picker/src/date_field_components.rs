@@ -95,9 +95,7 @@ pub fn Root(
 ///
 /// Contains three `DateSegment` spinbuttons with separator characters.
 #[component]
-pub fn Input(
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-) -> Element {
+pub fn Input(#[props(extends = GlobalAttributes)] attributes: Vec<Attribute>) -> Element {
     let ctx: DateFieldContext = use_context();
 
     // Focus refs for the three segments

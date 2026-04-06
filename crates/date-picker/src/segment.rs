@@ -184,7 +184,9 @@ pub fn DateSegment(
                     }
                 }
             }
-            Key::Character(ref c) if c.len() == 1 && c.chars().next().is_some_and(|ch| ch.is_ascii_digit()) => {
+            Key::Character(ref c)
+                if c.len() == 1 && c.chars().next().is_some_and(|ch| ch.is_ascii_digit()) =>
+            {
                 e.prevent_default();
                 let mut digits = (typed_digits)();
                 digits.push_str(c);

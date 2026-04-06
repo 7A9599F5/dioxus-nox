@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxus_nox_calendar::{calendar, range_calendar, DateRange};
+use dioxus_nox_calendar::{DateRange, calendar, range_calendar};
 use dioxus_nox_date_picker::presets::PresetItem;
 use dioxus_nox_date_picker::{date_field, date_picker, date_range_picker};
 use time::macros::date;
@@ -88,7 +88,7 @@ fn DatePickerDemo() -> Element {
 fn RangePickerDemo() -> Element {
     let mut range = use_signal(|| Option::<DateRange>::None);
 
-    let today = date!(2026-04-05);
+    let today = date!(2026 - 04 - 05);
     let presets = vec![
         PresetItem {
             label: "Last 7 days".to_string(),

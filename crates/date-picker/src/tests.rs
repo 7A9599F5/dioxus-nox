@@ -1,4 +1,4 @@
-use time::{macros::date, Weekday};
+use time::{Weekday, macros::date};
 
 use crate::presets::*;
 use crate::segment::*;

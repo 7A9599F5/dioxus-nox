@@ -22,8 +22,8 @@ mod components;
 /// ```
 pub mod calendar {
     pub use crate::components::{
-        DecadeView, Grid, Header, MonthView, NextButton, PrevButton, Root, SelectMonth,
-        SelectYear, Title, YearView,
+        DecadeView, Grid, Header, MonthView, NextButton, PrevButton, Root, SelectMonth, SelectYear,
+        Title, YearView,
     };
 }
 
