@@ -282,8 +282,26 @@ pub fn DropZone(props: DropZoneProps) -> Element {
     let zone_disabled = props.disabled;
     let on_drop = props.on_drop;
 
-    // Keyboard handler: Space/Enter completes drop onto this zone
+    // Keyboard handler: Space/Enter completes drop onto this zone.
+    //
+    // CRITICAL: only handle keydowns that originated on this DropZone element,
+    // not events bubbling from focusable descendants (e.g. a `SortableItem`
+    // inside a `SortableContext` wrapped in a DropZone). Without this guard,
+    // pressing Space on a child sortable item would bubble here, end the
+    // drag, and the provider's activation arm would then start a fresh one
+    // on the next event tick — see #58.
     let onkeydown = move |e: KeyboardEvent| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(web_event) = e.data().downcast::<web_sys::KeyboardEvent>() {
+                let target = web_event.target();
+                let current = web_event.current_target();
+                if target != current {
+                    return;
+                }
+            }
+        }
+
         let key = e.key();
 
         // Check drag state at event time (not stale closure capture)

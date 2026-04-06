@@ -293,6 +293,22 @@ pub struct DragContext {
     /// Unique ID for the ARIA instructions element, ensuring no duplicates
     /// when multiple DragContextProviders exist on the same page.
     pub(super) instructions_id: Signal<String>,
+    /// Currently focused sortable item (set onfocusin / cleared onfocusout
+    /// by `SortableItem`). The provider's keyboard handler peeks this on
+    /// Space/Enter to start a keyboard drag. Single owner of activation.
+    pub(super) focused_sortable: Signal<Option<FocusedSortable>>,
+}
+
+/// Snapshot of a focused sortable item, used by the provider to start a
+/// keyboard drag from a single owner. Captured at focusin time.
+#[derive(Clone, PartialEq)]
+pub struct FocusedSortable {
+    pub id: DragId,
+    pub container_id: DragId,
+    pub items: Vec<DragId>,
+    pub index: usize,
+    pub drag_types: Vec<DragType>,
+    pub disabled: bool,
 }
 
 impl DragContext {
@@ -319,6 +335,7 @@ impl DragContext {
             keyboard_container: Signal::new(None),
             active_pointer_id: Signal::new(None),
             instructions_id: Signal::new(format!("dxdnd-drag-instructions-{}", id)),
+            focused_sortable: Signal::new(None),
         }
     }
 
@@ -345,6 +362,7 @@ impl DragContext {
             keyboard_container: Signal::new(None),
             active_pointer_id: Signal::new(None),
             instructions_id: Signal::new(format!("dxdnd-drag-instructions-{}", id)),
+            focused_sortable: Signal::new(None),
         }
     }
 
@@ -683,6 +701,20 @@ impl DragContext {
     ///
     /// Calls the `on_announce` callback (if set), then updates the ARIA live
     /// region with the event's default English text.
+    /// Set (or clear) the currently focused sortable item. Called by
+    /// `SortableItem` from its `onfocusin`/`onfocusout` handlers. The
+    /// provider's keyboard handler reads this on Space/Enter to start a
+    /// keyboard drag from a single owner.
+    pub fn set_focused_sortable(&self, focused: Option<FocusedSortable>) {
+        let mut sig = self.focused_sortable;
+        sig.set(focused);
+    }
+
+    /// Peek the currently focused sortable item without subscribing.
+    pub fn focused_sortable(&self) -> Option<FocusedSortable> {
+        self.focused_sortable.peek().clone()
+    }
+
     pub fn dispatch_announcement(&self, event: AnnouncementEvent) {
         if let Some(handler) = self.on_announce.peek().as_ref() {
             handler.call(event.clone());
