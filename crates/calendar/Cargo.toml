@@ -1,0 +1,23 @@
+[package]
+name = "dioxus-nox-calendar"
+description = "Headless calendar primitive for Dioxus — date grid math, navigation, and range utilities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["calendar", "date-picker", "headless", "dioxus"]
+categories = ["gui"]
+
+[features]
+default = ["web"]
+web = []
+desktop = []
+mobile = []
+
+[dependencies]
+dioxus = { workspace = true }
+time = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+time = { version = "0.3", features = ["macros"] }

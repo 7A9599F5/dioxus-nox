@@ -1,0 +1,16 @@
+[package]
+name = "calendar-showcase"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "calendar-showcase"
+path = "src/main.rs"
+
+[dependencies]
+dioxus = { workspace = true, features = ["web"] }
+dioxus-nox-calendar = { workspace = true }
+dioxus-nox-date-picker = { workspace = true }
+dioxus-nox-time-picker = { workspace = true }
+time = { version = "0.3", features = ["macros", "wasm-bindgen"] }

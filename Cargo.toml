@@ -33,6 +33,10 @@ members = [
     "crates/collection",
     "crates/datagrid",
     "crates/scheduler",
+    "crates/calendar",
+    "crates/date-picker",
+    "crates/time-picker",
+    "crates/calendar/examples/calendar-showcase",
 ]
 resolver = "2"
 
@@ -75,7 +79,10 @@ dioxus-nox-inline-confirm = { path = "crates/inline-confirm", version = "0.13" }
 dioxus-nox-toggle-group = { path = "crates/toggle-group", version = "0.13" }
 dioxus-nox-password-strength = { path = "crates/password-strength", version = "0.13" }
 dioxus-nox-select = { path = "crates/select", version = "0.13" }
+dioxus-nox-calendar = { path = "crates/calendar", version = "0.13" }
 dioxus-nox-collection = { path = "crates/collection", version = "0.13" }
+dioxus-nox-date-picker = { path = "crates/date-picker", version = "0.13" }
+dioxus-nox-time-picker = { path = "crates/time-picker", version = "0.13" }
 dioxus-nox = { path = "crates/dioxus-nox", version = "0.13" }
 dioxus-nox-datagrid = { path = "crates/datagrid", version = "0.13" }
 dioxus-nox-scheduler = { path = "crates/scheduler", version = "0.13" }
