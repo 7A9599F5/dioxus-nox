@@ -620,29 +620,38 @@ pub fn SortableItem(props: SortableItemProps) -> Element {
         ctx.start_pointer_drag(data, id_for_start.clone(), position, e.data().pointer_id());
     };
 
-    let id_for_keyboard = props.id.clone();
-    let drag_types_for_keyboard = all_drag_types.clone();
-    let disabled_for_keyboard = props.disabled;
-    let onkeydown = move |e: KeyboardEvent| {
-        let key = e.key();
-
-        // Space/Enter: start a keyboard drag (when not already dragging and not disabled)
-        if matches!(key, Key::Character(ref c) if c == " ") || key == Key::Enter {
-            e.prevent_default();
-
-            if disabled_for_keyboard || ctx.is_dragging() {
-                return;
-            }
-
-            let items = sortable.items.read();
-            let my_index = items.iter().position(|id| id == &id_for_keyboard);
-
-            if let Some(idx) = my_index {
-                let data =
-                    DragData::with_types(id_for_keyboard.clone(), drag_types_for_keyboard.clone());
-                let container_id = sortable.container_id.read().clone();
-                ctx.start_keyboard_drag(data, id_for_keyboard.clone(), container_id, &items, idx);
-            }
+    // Focus tracking: register on focusin, clear on focusout. The provider's
+    // single onkeydown handler reads `ctx.focused_sortable()` on Space/Enter
+    // to start the keyboard drag. SortableItem never starts drags directly —
+    // this avoids the dual-handler bubble race that previously cancelled the
+    // drag in the same event tick (#58).
+    let id_for_focus_in = props.id.clone();
+    let drag_types_for_focus = all_drag_types.clone();
+    let disabled_for_focus = props.disabled;
+    let onfocusin = move |_e: FocusEvent| {
+        let items_snapshot = sortable.items.read().clone();
+        let Some(idx) = items_snapshot.iter().position(|id| id == &id_for_focus_in) else {
+            return;
+        };
+        let container_id = sortable.container_id.read().clone();
+        ctx.set_focused_sortable(Some(crate::context::FocusedSortable {
+            id: id_for_focus_in.clone(),
+            container_id,
+            items: items_snapshot,
+            index: idx,
+            drag_types: drag_types_for_focus.clone(),
+            disabled: disabled_for_focus,
+        }));
+    };
+    let id_for_focus_out = props.id.clone();
+    let onfocusout = move |_e: FocusEvent| {
+        // Only clear if we're still the registered focus — sibling focus
+        // moves fire focusout(prev) before focusin(next); the new focusin
+        // will overwrite, so don't stomp on it here.
+        if let Some(focused) = ctx.focused_sortable()
+            && focused.id == id_for_focus_out
+        {
+            ctx.set_focused_sortable(None);
         }
     };
 
@@ -682,7 +691,8 @@ pub fn SortableItem(props: SortableItemProps) -> Element {
             "data-dnd-handle-mode": if has_handle { "true" },
             // Pointer handlers (inlined from Draggable)
             onpointerdown: start_drag,
-            onkeydown: onkeydown,
+            onfocusin: onfocusin,
+            onfocusout: onfocusout,
             oncontextmenu: move |e: Event<MouseData>| {
                 e.prevent_default();
             },

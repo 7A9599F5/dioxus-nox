@@ -13,7 +13,7 @@ use super::{DragContext, sorted_items_in_container};
 use crate::collision::CollisionStrategy;
 #[cfg(target_arch = "wasm32")]
 use crate::patterns::sortable::item::NextAnimationFrame;
-use crate::types::{AnnouncementEvent, DropEvent, DropLocation, Position};
+use crate::types::{AnnouncementEvent, DragData, DropEvent, DropLocation, Position};
 use crate::utils::{extract_attribute, filter_class_style};
 
 /// Shared keyboard-drop logic invoked by both Space and Enter handlers.
@@ -34,6 +34,33 @@ fn items_in_keyboard_container(
     drop(zones);
     items.push(active_id);
     Some(items)
+}
+
+/// Start a keyboard drag from the currently focused `SortableItem`. Single
+/// owner of keyboard activation — `SortableItem` only registers focus, this
+/// is the only place that calls `start_keyboard_drag`. Returns true if a
+/// drag was started so the caller can `prevent_default()` on the event.
+///
+/// Note: standalone `Draggable::onkeydown` also handles Space/Enter activation
+/// for non-sortable draggables. Those use `ctx.start_drag` (pointer-drag
+/// state), so `is_keyboard_drag()` stays false and the provider's keyboard
+/// branch never fires for them — no double-handle race.
+fn start_keyboard_drag_from_focus(context: DragContext) -> bool {
+    let Some(focused) = context.focused_sortable() else {
+        return false;
+    };
+    if focused.disabled || context.is_dragging() {
+        return false;
+    }
+    let data = DragData::with_types(focused.id.clone(), focused.drag_types.clone());
+    context.start_keyboard_drag(
+        data,
+        focused.id.clone(),
+        focused.container_id.clone(),
+        &focused.items,
+        focused.index,
+    );
+    true
 }
 
 /// Shared keyboard-drop logic invoked by both Space and Enter handlers.
@@ -407,10 +434,26 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                     return;
                 }
 
-                // Not in keyboard drag: Escape cancels pointer drag
-                if key == Key::Escape && context.is_dragging() {
-                    context.cancel_drag();
-                    e.prevent_default();
+                // Not in keyboard drag yet.
+                match key {
+                    // Activation: Space/Enter on a focused SortableItem starts
+                    // a keyboard drag. This is the single owner of activation —
+                    // SortableItem only registers focus, never starts drags.
+                    Key::Character(ref c) if c == " " => {
+                        if start_keyboard_drag_from_focus(context) {
+                            e.prevent_default();
+                        }
+                    }
+                    Key::Enter => {
+                        if start_keyboard_drag_from_focus(context) {
+                            e.prevent_default();
+                        }
+                    }
+                    Key::Escape if context.is_dragging() => {
+                        context.cancel_drag();
+                        e.prevent_default();
+                    }
+                    _ => {}
                 }
             },
             ..remaining_attrs,
