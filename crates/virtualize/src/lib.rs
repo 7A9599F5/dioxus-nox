@@ -24,15 +24,28 @@
 //! let bottom_spacer = vp.bottom_spacer_height();
 //! ```
 
+mod variable_viewport;
 mod viewport;
 
 #[cfg(feature = "hooks")]
 mod hook;
 
+#[cfg(feature = "component")]
+mod component;
+
+pub use variable_viewport::{LayoutSnapshot, VariableViewport};
 pub use viewport::VirtualViewport;
 
 #[cfg(feature = "hooks")]
 pub use hook::*;
+
+#[cfg(feature = "component")]
+pub mod virtual_list {
+    //! Compound component for virtual lists with variable-height items.
+    //!
+    //! See [`Root`], [`Viewport`], [`Item`], and [`use_visible_range`].
+    pub use crate::component::{Item, Root, Viewport, VirtualListContext, use_visible_range};
+}
 
 #[cfg(test)]
 mod tests {
