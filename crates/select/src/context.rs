@@ -185,60 +185,47 @@ impl SelectContext {
 
     // ── Highlight navigation ─────────────────────────────────
 
-    /// Move highlight to the next visible non-disabled item.
-    pub fn highlight_next(&mut self) {
+    /// Shared logic for `highlight_*`: read items/visible/current, run a navigation
+    /// function, then commit the result and scroll it into view.
+    fn navigate_highlight(
+        &mut self,
+        f: impl FnOnce(&[ItemEntry], &[String], Option<&str>) -> Option<String>,
+    ) {
         let visible = self.visible_values.read();
         let items = self.items.read();
         let current = self.highlighted.read();
-        let next = navigation::navigate(&items, &visible, current.as_deref(), Direction::Forward);
+        let target = f(&items, &visible, current.as_deref());
         drop(visible);
         drop(items);
         drop(current);
-        self.highlighted.set(next.clone());
-        if let Some(ref val) = next {
+        self.highlighted.set(target.clone());
+        if let Some(ref val) = target {
             self.scroll_item_into_view(val);
         }
+    }
+
+    /// Move highlight to the next visible non-disabled item.
+    pub fn highlight_next(&mut self) {
+        self.navigate_highlight(|items, visible, current| {
+            navigation::navigate(items, visible, current, Direction::Forward)
+        });
     }
 
     /// Move highlight to the previous visible non-disabled item.
     pub fn highlight_prev(&mut self) {
-        let visible = self.visible_values.read();
-        let items = self.items.read();
-        let current = self.highlighted.read();
-        let prev = navigation::navigate(&items, &visible, current.as_deref(), Direction::Backward);
-        drop(visible);
-        drop(items);
-        drop(current);
-        self.highlighted.set(prev.clone());
-        if let Some(ref val) = prev {
-            self.scroll_item_into_view(val);
-        }
+        self.navigate_highlight(|items, visible, current| {
+            navigation::navigate(items, visible, current, Direction::Backward)
+        });
     }
 
     /// Move highlight to the first visible non-disabled item.
     pub fn highlight_first(&mut self) {
-        let visible = self.visible_values.read();
-        let items = self.items.read();
-        let target = navigation::first(&items, &visible);
-        drop(visible);
-        drop(items);
-        self.highlighted.set(target.clone());
-        if let Some(ref val) = target {
-            self.scroll_item_into_view(val);
-        }
+        self.navigate_highlight(|items, visible, _| navigation::first(items, visible));
     }
 
     /// Move highlight to the last visible non-disabled item.
     pub fn highlight_last(&mut self) {
-        let visible = self.visible_values.read();
-        let items = self.items.read();
-        let target = navigation::last(&items, &visible);
-        drop(visible);
-        drop(items);
-        self.highlighted.set(target.clone());
-        if let Some(ref val) = target {
-            self.scroll_item_into_view(val);
-        }
+        self.navigate_highlight(|items, visible, _| navigation::last(items, visible));
     }
 
     /// Type-ahead: find the first matching item by prefix.
