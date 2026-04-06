@@ -44,7 +44,9 @@ pub fn Item(
             let height = (rect.height() as u32).max(1);
 
             // Write measurement to the heights Signal.
-            let delta = heights_sig.write().set_measured_height_with_delta(idx, height);
+            let delta = heights_sig
+                .write()
+                .set_measured_height_with_delta(idx, height);
             if delta == 0 {
                 return;
             }

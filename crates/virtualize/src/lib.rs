@@ -24,8 +24,8 @@
 //! let bottom_spacer = vp.bottom_spacer_height();
 //! ```
 
-mod viewport;
 mod variable_viewport;
+mod viewport;
 
 #[cfg(feature = "hooks")]
 mod hook;
@@ -33,8 +33,8 @@ mod hook;
 #[cfg(feature = "component")]
 mod component;
 
-pub use viewport::VirtualViewport;
 pub use variable_viewport::{LayoutSnapshot, VariableViewport};
+pub use viewport::VirtualViewport;
 
 #[cfg(feature = "hooks")]
 pub use hook::*;

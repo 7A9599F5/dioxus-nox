@@ -19,15 +19,15 @@
 //! Use [`use_visible_range`] inside a `Viewport` to get the current
 //! `[start, end)` range of item indices to render.
 
-mod types;
-mod root;
-mod viewport_part;
 mod item;
+mod root;
+mod types;
+mod viewport_part;
 
-pub use types::VirtualListContext;
-pub use root::Root;
-pub use viewport_part::Viewport;
 pub use item::Item;
+pub use root::Root;
+pub use types::VirtualListContext;
+pub use viewport_part::Viewport;
 
 use dioxus::prelude::*;
 
