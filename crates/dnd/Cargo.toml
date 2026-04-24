@@ -21,7 +21,7 @@ dioxus = { workspace = true }
 web-sys = { workspace = true, features = ["Element", "HtmlElement", "DomRect", "PointerEvent", "Window", "Document", "Performance"] }
 wasm-bindgen = { workspace = true }
 tracing = { workspace = true }
-uuid = { version = "1.11", features = ["v4", "v7"] }
+uuid = { version = "1.23", features = ["v4", "v7"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-timers = { workspace = true }
