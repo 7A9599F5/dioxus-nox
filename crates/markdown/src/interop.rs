@@ -184,9 +184,16 @@ impl CaretAdapter for WebviewCaretAdapter {
     }
 
     fn read_contenteditable_text_js(&self, block_id: &str) -> String {
+        // Use `textContent`, not `innerText`: every caret/selection offset in this
+        // module is measured with `range.toString().length` / `node.nodeValue.length`,
+        // which share `textContent` semantics. `innerText` is layout-aware (collapses
+        // whitespace, emits "\n" for <br>/block boundaries, forces reflow) and would
+        // put the text read in a different coordinate space than the offsets, corrupting
+        // edit reconstruction. Hidden markers are excluded from the rendered DOM, so
+        // `textContent` equals the model's `visible_text`.
         format!(
             "var el = document.getElementById('{block_id}');\
-             if(el) dioxus.send(el.innerText ?? '');\
+             if(el) dioxus.send(el.textContent ?? '');\
              else dioxus.send('');"
         )
     }

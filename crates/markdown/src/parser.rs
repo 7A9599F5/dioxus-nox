@@ -466,13 +466,7 @@ fn render_tag(
             });
             if is_task {
                 let checked_str = match &children.first().unwrap().event {
-                    CustomEvent::Standard(Event::TaskListMarker(checked)) => {
-                        if *checked {
-                            "true"
-                        } else {
-                            "false"
-                        }
-                    }
+                    CustomEvent::Standard(Event::TaskListMarker(checked)) if *checked => "true",
                     _ => "false",
                 };
                 rsx! {
