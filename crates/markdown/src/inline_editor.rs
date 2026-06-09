@@ -3,9 +3,9 @@ use dioxus::prelude::*;
 use crate::context::{CursorContext, MarkdownContext};
 use crate::hooks::select_all_children_js;
 use crate::inline_tokens::{
-    InlineMark, InlineSegment, MarkerVisibility, SegmentKind, TokenizedBlock,
-    build_tokenized_block, collect_marker_tokens, raw_offset_to_visible_utf16,
-    visible_utf16_to_raw_offset,
+    InlineMark, InlineSegment, MarkerKind, MarkerToken, MarkerVisibility, SegmentKind,
+    TokenizedBlock, build_tokenized_block, byte_to_utf16_index, collect_marker_tokens,
+    raw_offset_to_visible_utf16, utf16_len, utf16_to_byte_index, visible_utf16_to_raw_offset,
 };
 use crate::interop;
 use crate::reveal_engine::{RevealContext, marker_visibility};
@@ -29,6 +29,21 @@ struct SelectionDetails {
     collapsed: bool,
 }
 
+/// Outcome of the `vertical_caret_move_js` DOM-geometry probe (see
+/// `CaretAdapter::vertical_caret_move_js`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum VerticalCaretMove {
+    /// No element/selection to act on — leave the caret untouched.
+    None,
+    /// Caret moved one visual row within the block. `visible_utf16` is the new
+    /// caret offset; `goal_x` is the sticky horizontal position to carry forward.
+    Moved { visible_utf16: usize, goal_x: f64 },
+    /// Caret is on the block's boundary visual row in the press direction; the
+    /// caller hops to the adjacent block. `visible_utf16` seeds `goal_column` when
+    /// unset; `goal_x` is the sticky horizontal position to carry forward.
+    Escape { visible_utf16: usize, goal_x: f64 },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BeforeInputMeta {
     input_type: String,
@@ -36,11 +51,24 @@ struct BeforeInputMeta {
     pre_visible_caret_utf16: usize,
     pre_visible_selection_end_utf16: usize,
     is_collapsed: bool,
+    /// Visible UTF-16 range the browser will modify, from `getTargetRanges()[0]`
+    /// (normalized so `start <= end`). Authoritative for word/line deletes
+    /// (`deleteWord*`, `deleteSoftLine*`, `deleteHardLine*`) where the selection
+    /// is collapsed but the affected span is wider than one character. `None`
+    /// when the browser reports no target range — the caller then falls back to
+    /// the diff path.
+    target_start_utf16: Option<usize>,
+    target_end_utf16: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
 struct InlineNavCtx {
     goal_column: Signal<Option<usize>>,
+    /// Desired horizontal caret position (viewport CSS px) sticky across a run of
+    /// vertical arrow presses, so the caret tracks a column even over short visual
+    /// rows — the visual-geometry analogue of `goal_column`. `None` resets it to the
+    /// caret's live x on the next vertical move. Reset alongside `goal_column`.
+    goal_x: Signal<Option<f64>>,
 }
 
 /// Obsidian-style inline markdown editor surface.
@@ -59,6 +87,7 @@ pub fn InlineEditor(
 
     provide_context(InlineNavCtx {
         goal_column: use_signal(|| None),
+        goal_x: use_signal(|| None),
     });
 
     let ctx = use_context::<MarkdownContext>();
@@ -368,12 +397,12 @@ fn TokenAwareBlockEditor(
                         );
                         return;
                     }
-                    // Arrow navigation for empty blocks
+                    // Arrow navigation for empty blocks. An empty block is genuinely
+                    // one visual line (a single <br> placeholder), so ArrowUp/Down
+                    // always escapes to the adjacent block — no DOM line-geometry
+                    // probe is needed here (unlike the token editor's handler).
                     if key == "ArrowUp" || key == "ArrowDown" {
                         evt.prevent_default();
-                        // NOTE (#75): the visual-line sub-issues (multi-line block caret
-                        // trap; soft-wrapped single raw line treated as one visual line)
-                        // remain unaddressed — they need DOM line geometry.
                         if let Some(mut cctx) = cursor_ctx {
                             let parsed = (ctx.parsed_doc)();
                             let raw_nav = ctx.raw_value();
@@ -511,7 +540,6 @@ fn TokenAwareBlockEditor(
     let visible_input_cursor = target_visible_cursor;
     let inline_visible_text = model.visible_text.clone();
     let inline_raw_text = model.raw_text.clone();
-    let is_single_line_block = !model.raw_text.contains('\n');
     let pending_restore_for_keyup = pending_restore_raw;
     let pending_restore_for_mouseup = pending_restore_raw;
     let pending_restore_for_nav = pending_restore_raw;
@@ -574,6 +602,8 @@ fn TokenAwareBlockEditor(
                     if let Some(nc) = nav_ctx {
                         let mut gc = nc.goal_column;
                         gc.set(None);
+                        let mut gx = nc.goal_x;
+                        gx.set(None);
                     }
                     let block_id_enter = block_id_enter.clone();
                     let model_enter = model_for_enter.clone();
@@ -607,81 +637,142 @@ fn TokenAwareBlockEditor(
                     if let Some(nc) = nav_ctx {
                         let mut gc = nc.goal_column;
                         gc.set(None);
+                        let mut gx = nc.goal_x;
+                        gx.set(None);
                     }
                     perform_block_join(ctx, cursor_ctx, safe_start);
                     return;
                 }
-                if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
+                if key == "ArrowUp" || key == "ArrowDown" {
+                    // Vertical nav for ALL token blocks (single- and multi-line, plus
+                    // soft-wrapped single raw lines). `preventDefault` always, then an
+                    // async DOM-geometry probe decides escape-to-adjacent-block vs
+                    // move-by-visual-row — a single code path that respects the
+                    // `on_key_intercept` precedence above. The probe (a) treats a
+                    // soft-wrapped raw line as multiple visual rows (#75e) and (b) lets
+                    // a genuinely multi-line block escape only at its first/last visual
+                    // row instead of trapping the caret (#75c).
                     evt.prevent_default();
-                    // NOTE (#75): the visual-line sub-issues remain unaddressed here — a
-                    // soft-wrapped single raw line is still treated as one visual line
-                    // (`is_single_line_block`), so ArrowUp/Down jumps to the adjacent
-                    // block instead of the adjacent visual row. That requires DOM line
-                    // geometry and is out of scope for this fix.
                     if let Some(mut cctx) = cursor_ctx {
-                        let parsed = (ctx.parsed_doc)();
-                        let direction = if key == "ArrowUp" {
+                        let going_up = key == "ArrowUp";
+                        let direction = if going_up {
                             NavDirection::Prev
                         } else {
                             NavDirection::Next
                         };
                         let block_id_vert = block_id_nav.clone();
+                        let model = model_for_nav.clone();
                         let raw_vert = ctx.raw_value();
+                        let parsed = (ctx.parsed_doc)();
                         // Navigate over the AUGMENTED AST so synthetic blank-line gap
                         // paragraphs (from `inject_gap_paragraphs`) are reachable by
                         // arrow keys — matching the empty-block handler. Navigating the
                         // raw `parsed.ast` would skip them, jumping over visible blank
                         // lines that are clickable but otherwise unreachable.
                         let augmented = inject_gap_paragraphs(&parsed.ast, &raw_vert);
+                        // Sticky goal x: carried in from a prior vertical move, or -1 to
+                        // tell the JS probe to use the caret's live x as the new goal.
+                        let goal_x = nav_ctx.and_then(|nc| (nc.goal_x)()).unwrap_or(-1.0);
+                        let mut pending_restore = pending_restore_for_nav;
+                        let generation = caret_generation_for_nav();
+                        let generation_sig = caret_generation_for_nav;
                         spawn(async move {
-                            let visible_now = {
+                            let resp = {
                                 let js = interop::caret_adapter()
-                                    .read_contenteditable_selection_js(&block_id_vert);
+                                    .vertical_caret_move_js(&block_id_vert, going_up, goal_x);
                                 let mut eval = interop::start_eval(&js);
-                                interop::recv_string(&mut eval)
-                                    .await
-                                    .and_then(|s| s.parse::<usize>().ok())
-                                    .unwrap_or(0)
+                                interop::recv_string(&mut eval).await.unwrap_or_default()
                             };
-                            let goal_col = if let Some(nc) = nav_ctx {
-                                if let Some(gc) = (nc.goal_column)() {
-                                    gc
-                                } else {
-                                    let mut gc_sig = nc.goal_column;
-                                    gc_sig.set(Some(visible_now));
-                                    visible_now
+                            // Staleness guard: if a newer edit/nav bumped the caret
+                            // generation while the DOM-geometry probe was in flight,
+                            // bail before writing cursor/goal state — mirrors the
+                            // ArrowLeft/Right branch so vertical nav cannot stomp a
+                            // fresher caret.
+                            if !is_latest_revision(generation, *generation_sig.read()) {
+                                return;
+                            }
+                            match parse_vertical_caret_response(&resp) {
+                                // No DOM/selection to act on — leave the caret untouched.
+                                VerticalCaretMove::None => {}
+                                // Caret moved one visual row inside this block: sync the
+                                // cursor context to the new visible offset and persist x.
+                                // Mirrors the ArrowLeft/Right cursor/restore pattern.
+                                VerticalCaretMove::Moved {
+                                    visible_utf16,
+                                    goal_x,
+                                } => {
+                                    if let Some(nc) = nav_ctx {
+                                        let mut gx = nc.goal_x;
+                                        gx.set(Some(goal_x));
+                                    }
+                                    let local_raw =
+                                        visible_utf16_to_raw_offset(&model, visible_utf16)
+                                            .min(last_caret_offset(&(0..model.raw_text.len())));
+                                    let abs_raw = safe_start.saturating_add(local_raw);
+                                    cctx.cursor_position.set(CursorPosition {
+                                        offset: abs_raw,
+                                        line: 0,
+                                        column: 0,
+                                    });
+                                    pending_restore
+                                        .set(Some(PendingCaretRestore::Raw(abs_raw)));
                                 }
-                            } else {
-                                visible_now
-                            };
-                            if let Some(target_node) = adjacent_editable_node(
-                                &augmented,
-                                safe_start,
-                                direction,
-                            ) {
-                                let t_start = target_node.range.start.min(raw_vert.len());
-                                let t_end = target_node.range.end.min(raw_vert.len());
-                                let clamped = resolve_visible_column_in_block(
-                                    &target_node,
-                                    &raw_vert,
-                                    t_start,
-                                    t_end,
-                                    goal_col,
-                                );
-                                cctx.cursor_position.set(CursorPosition {
-                                    offset: clamped,
-                                    line: 0,
-                                    column: 0,
-                                });
+                                // Caret is on the block's boundary visual row in the press
+                                // direction: hop to the adjacent block at the goal column,
+                                // mirroring the empty-block escape path.
+                                VerticalCaretMove::Escape {
+                                    visible_utf16,
+                                    goal_x,
+                                } => {
+                                    if let Some(nc) = nav_ctx {
+                                        let mut gx = nc.goal_x;
+                                        gx.set(Some(goal_x));
+                                    }
+                                    let goal_col = if let Some(nc) = nav_ctx {
+                                        if let Some(gc) = (nc.goal_column)() {
+                                            gc
+                                        } else {
+                                            let mut gc_sig = nc.goal_column;
+                                            gc_sig.set(Some(visible_utf16));
+                                            visible_utf16
+                                        }
+                                    } else {
+                                        visible_utf16
+                                    };
+                                    if let Some(target_node) = adjacent_editable_node(
+                                        &augmented,
+                                        safe_start,
+                                        direction,
+                                    ) {
+                                        let t_start =
+                                            target_node.range.start.min(raw_vert.len());
+                                        let t_end = target_node.range.end.min(raw_vert.len());
+                                        let clamped = resolve_visible_column_in_block(
+                                            &target_node,
+                                            &raw_vert,
+                                            t_start,
+                                            t_end,
+                                            goal_col,
+                                        );
+                                        cctx.cursor_position.set(CursorPosition {
+                                            offset: clamped,
+                                            line: 0,
+                                            column: 0,
+                                        });
+                                    }
+                                }
                             }
                         });
                     }
+                    return;
                 }
                 if key == "ArrowLeft" || key == "ArrowRight" {
                     evt.prevent_default();
                     if let Some(nc) = nav_ctx {
                         let mut gc = nc.goal_column;
                         gc.set(None);
+                        let mut gx = nc.goal_x;
+                        gx.set(None);
                     }
                     if let Some(mut cctx) = cursor_ctx {
                         let block_id = block_id_nav.clone();
@@ -728,6 +819,8 @@ fn TokenAwareBlockEditor(
                 if let Some(nc) = nav_ctx {
                     let mut gc = nc.goal_column;
                     gc.set(None);
+                    let mut gx = nc.goal_x;
+                    gx.set(None);
                 }
                 // Drop stale restore requests from earlier click/nav events.
                 // Text mutations own caret placement via the input pipeline.
@@ -801,7 +894,11 @@ fn TokenAwareBlockEditor(
                 if key == "ArrowLeft" || key == "ArrowRight" {
                     return;
                 }
-                if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
+                // keydown now fully owns vertical nav (preventDefault + manual
+                // move/escape + cursor sync via the geometry probe), so keyup must
+                // never re-read and re-sync the caret for ArrowUp/Down — doing so
+                // would double-sync and clobber the move just performed.
+                if key == "ArrowUp" || key == "ArrowDown" {
                     return;
                 }
                 if let Some(mut cctx) = cursor_ctx {
@@ -839,6 +936,8 @@ fn TokenAwareBlockEditor(
                 if let Some(nc) = nav_ctx {
                     let mut gc = nc.goal_column;
                     gc.set(None);
+                    let mut gx = nc.goal_x;
+                    gx.set(None);
                 }
                 if let Some(mut cctx) = cursor_ctx {
                     let block_id = block_id_mouseup.clone();
@@ -991,9 +1090,165 @@ fn visible_char_raw_range(
     None
 }
 
+/// Raw byte extent of one inline-markup token (e.g. `**bold**`): its full
+/// `token_range` plus the raw byte span of its visible content (between the
+/// opening and closing delimiters). All offsets are block-local raw bytes.
+struct InlineTokenExtent {
+    token_start: usize,
+    token_end: usize,
+    content_start: usize,
+    content_end: usize,
+}
+
+/// Pair up the opening/closing delimiters of every `MarkerKind::Inline` token
+/// and report its content extent. Markers are grouped by their shared
+/// `token_range`; the opening delimiter is the one whose `raw_range.start`
+/// equals the token start (its `raw_range.end` is the content start), and the
+/// closing delimiter is the one whose `raw_range.end` equals the token end (its
+/// `raw_range.start` is the content end). Only tokens with both delimiters and
+/// non-empty content (`content_end > content_start`) are emitted.
+fn inline_token_extents(markers: &[MarkerToken]) -> Vec<InlineTokenExtent> {
+    let mut out = Vec::new();
+    let mut seen: Vec<(usize, usize)> = Vec::new();
+
+    for marker in markers {
+        if marker.kind != MarkerKind::Inline {
+            continue;
+        }
+        let token_start = marker.token_range.start;
+        let token_end = marker.token_range.end;
+        if seen.contains(&(token_start, token_end)) {
+            continue;
+        }
+        seen.push((token_start, token_end));
+
+        let opening = markers.iter().find(|m| {
+            m.kind == MarkerKind::Inline
+                && m.token_range.start == token_start
+                && m.token_range.end == token_end
+                && m.raw_range.start == token_start
+        });
+        let closing = markers.iter().find(|m| {
+            m.kind == MarkerKind::Inline
+                && m.token_range.start == token_start
+                && m.token_range.end == token_end
+                && m.raw_range.end == token_end
+        });
+
+        if let (Some(open), Some(close)) = (opening, closing) {
+            let content_start = open.raw_range.end;
+            let content_end = close.raw_range.start;
+            if content_end > content_start {
+                out.push(InlineTokenExtent {
+                    token_start,
+                    token_end,
+                    content_start,
+                    content_end,
+                });
+            }
+        }
+    }
+
+    out
+}
+
+/// Map a visible UTF-16 offset to a raw byte offset with a FORWARD bias at a
+/// segment boundary. At an exact boundary (`visible_utf16 == seg.visible_utf16_end`)
+/// this keeps scanning to the *next* visible segment and returns the start of its
+/// raw content — i.e. it lands past any hidden opening delimiter that sits between
+/// the two visible segments — rather than the end of the preceding segment (which
+/// equals the start of the next span's hidden opening marker).
+///
+/// Contrast with [`visible_utf16_to_raw_offset`], which is backward-biased at a
+/// boundary (returns the end of the preceding segment). The forward variant is
+/// used for the START of a deletion range so a partial word-delete at a span's
+/// left edge does not eat the span's hidden opening delimiter; the backward
+/// variant remains correct for the END of the range.
+fn visible_utf16_to_raw_offset_fwd(model: &TokenizedBlock, visible_utf16: usize) -> usize {
+    for seg in &model.segments {
+        if visible_utf16 < seg.visible_utf16_start {
+            return seg.raw_range.start;
+        }
+        if visible_utf16 < seg.visible_utf16_end {
+            let local = visible_utf16 - seg.visible_utf16_start;
+            let byte = utf16_to_byte_index(&seg.text, local).unwrap_or(0);
+            return seg.raw_range.start + byte;
+        }
+        // == visible_utf16_end: forward bias -> keep scanning to the next segment.
+    }
+    model.raw_text.len()
+}
+
+/// Map a visible UTF-16 deletion range to a raw byte range, swallowing the
+/// hidden delimiters of any inline-markup span whose content is wholly emptied
+/// by the deletion. Block prefixes (headings, list markers, blockquotes) are
+/// left intact — only `MarkerKind::Inline` tokens are expanded.
+///
+/// The fixpoint loop lets nested spans cascade: deleting the content of
+/// `***x***` first swallows the inner emphasis delimiters, which then makes the
+/// outer strong delimiters wholly contained, swallowing them on the next pass.
+///
+/// Bias asymmetry: `raw_start` is mapped with a FORWARD bias
+/// ([`visible_utf16_to_raw_offset_fwd`]) so a deletion whose visible start sits
+/// exactly on a span boundary lands on the START of the following visible content,
+/// past any hidden opening delimiter — a partial word-delete at a span's left
+/// edge therefore preserves the opening `**`. `raw_end` keeps the backward bias of
+/// [`visible_utf16_to_raw_offset`], which is correct for the end of the range.
+/// When the span's content IS wholly covered, the fixpoint below grows the range
+/// back out to the full token, swallowing both delimiters.
+///
+/// Returns `None` when the visible range is empty or maps to an empty raw range.
+fn ranged_delete_raw_range(
+    model: &TokenizedBlock,
+    markers: &[MarkerToken],
+    vis_start: usize,
+    vis_end: usize,
+) -> Option<(usize, usize)> {
+    if vis_end <= vis_start {
+        return None;
+    }
+    let mut raw_start = visible_utf16_to_raw_offset_fwd(model, vis_start);
+    let mut raw_end = visible_utf16_to_raw_offset(model, vis_end);
+    if raw_end <= raw_start {
+        return None;
+    }
+
+    let extents = inline_token_extents(markers);
+    loop {
+        let mut grew = false;
+        for extent in &extents {
+            // Only swallow delimiters of a span whose visible content is
+            // entirely inside the current deletion range. `raw_start`/`raw_end`
+            // are compared against the content bounds, so a partial overlap
+            // (deletion touches but does not cover the content) is skipped.
+            if extent.content_start < extent.content_end
+                && raw_start <= extent.content_start
+                && extent.content_end <= raw_end
+                && (raw_start > extent.token_start || raw_end < extent.token_end)
+            {
+                raw_start = raw_start.min(extent.token_start);
+                raw_end = raw_end.max(extent.token_end);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+
+    Some((raw_start, raw_end))
+}
+
 /// For single-character collapsed deletions (`deleteContentBackward` /
 /// `deleteContentForward`), compute the exact raw byte range to delete
 /// using the render-time model and pre-edit caret position.
+///
+/// For word- and line-granularity deletions (`deleteWord*`, `deleteSoftLine*`,
+/// `deleteHardLine*`), the browser's collapsed caret is insufficient — the
+/// affected span is reported via `getTargetRanges()` and threaded through
+/// `meta.target_*_utf16`. That visible range is mapped to raw bytes, swallowing
+/// the hidden delimiters of any wholly-emptied inline span (see
+/// `ranged_delete_raw_range`).
 ///
 /// Returns `Some((raw_del_start, raw_del_end, new_cursor_vis_utf16))` on
 /// success, or `None` if this edit type is not handled (falls through to
@@ -1001,6 +1256,7 @@ fn visible_char_raw_range(
 fn direct_delete_from_beforeinput(
     meta: &BeforeInputMeta,
     model: &TokenizedBlock,
+    markers: &[MarkerToken],
     block_raw: &str,
 ) -> Option<(usize, usize, usize)> {
     if !meta.is_collapsed {
@@ -1024,6 +1280,21 @@ fn direct_delete_from_beforeinput(
                 return None;
             }
             Some((raw_start, raw_end, caret))
+        }
+        "deleteWordBackward"
+        | "deleteWordForward"
+        | "deleteSoftLineBackward"
+        | "deleteSoftLineForward"
+        | "deleteHardLineBackward"
+        | "deleteHardLineForward" => {
+            let vis_start = meta.target_start_utf16?;
+            let vis_end = meta.target_end_utf16?;
+            let (raw_start, raw_end) = ranged_delete_raw_range(model, markers, vis_start, vis_end)?;
+            if raw_start >= raw_end || raw_end > block_raw.len() {
+                return None;
+            }
+            let new_cursor_vis = raw_offset_to_visible_utf16(model, raw_start);
+            Some((raw_start, raw_end, new_cursor_vis))
         }
         _ => None,
     }
@@ -1086,10 +1357,14 @@ fn spawn_token_editor_sync(
         // ── Direct-delete fast path ──────────────────────────────────
         // For single-character collapsed deletions, bypass DOM text diffing
         // entirely: use the render-time model + beforeinput caret to compute
-        // the exact raw byte range.
+        // the exact raw byte range. Word/line deletes additionally swallow the
+        // hidden delimiters of any inline span their target range empties, so
+        // they need the render-time marker layout (block-local; `node_local.range.start`
+        // equals `model.block_start`).
+        let markers = collect_marker_tokens(&node_local, &model.raw_text, model.block_start);
         if let Some(ref meta) = before_input_meta
             && let Some((raw_del_start, raw_del_end, new_cursor_vis)) =
-                direct_delete_from_beforeinput(meta, &model, &block_raw_current)
+                direct_delete_from_beforeinput(meta, &model, &markers, &block_raw_current)
         {
             // Floor to char boundaries: the delete range is derived from the
             // render-time model, which may disagree with the live `block_raw_current`
@@ -1564,6 +1839,8 @@ fn handle_inactive_block_click(
     if let Some(nc) = try_use_context::<InlineNavCtx>() {
         let mut gc = nc.goal_column;
         gc.set(None);
+        let mut gx = nc.goal_x;
+        gx.set(None);
     }
     if let Some(mut cctx) = cursor_ctx {
         spawn(async move {
@@ -1681,10 +1958,6 @@ fn is_navigation_key(key: &str) -> bool {
     )
 }
 
-fn utf16_len(s: &str) -> usize {
-    s.chars().map(char::len_utf16).sum()
-}
-
 /// Clamp a byte offset to a valid UTF-8 char boundary of `s` (flooring).
 ///
 /// Offsets mapped through a possibly-stale `TokenizedBlock` model can land in the
@@ -1714,42 +1987,6 @@ fn trim_editable_block_end(raw: &str, start: usize, end: usize) -> usize {
         }
     }
     trimmed_end
-}
-
-fn utf16_to_byte_index(s: &str, utf16_idx: usize) -> Option<usize> {
-    let mut utf16_count = 0usize;
-    for (byte_idx, ch) in s.char_indices() {
-        if utf16_count == utf16_idx {
-            return Some(byte_idx);
-        }
-        utf16_count += ch.len_utf16();
-    }
-    if utf16_count == utf16_idx {
-        Some(s.len())
-    } else {
-        None
-    }
-}
-
-fn byte_to_utf16_index(s: &str, byte_idx: usize) -> Option<usize> {
-    if byte_idx > s.len() {
-        return None;
-    }
-    let mut utf16_count = 0usize;
-    for (idx, ch) in s.char_indices() {
-        if idx == byte_idx {
-            return Some(utf16_count);
-        }
-        if idx > byte_idx {
-            break;
-        }
-        utf16_count += ch.len_utf16();
-    }
-    if byte_idx == s.len() {
-        Some(utf16_count)
-    } else {
-        None
-    }
 }
 
 fn render_inline_segment(seg: InlineSegment) -> Element {
@@ -1902,16 +2139,56 @@ fn parse_selection_details(raw: &str) -> Option<SelectionDetails> {
     })
 }
 
+/// Parse a `vertical_caret_move_js` response (`"none"`, `"moved:V:X"`, or
+/// `"escape:V:X"`). Unknown / malformed payloads map to `None` so the handler
+/// leaves the caret untouched.
+fn parse_vertical_caret_response(raw: &str) -> VerticalCaretMove {
+    if raw == "none" {
+        return VerticalCaretMove::None;
+    }
+    let parse_v_x = |rest: &str| -> Option<(usize, f64)> {
+        let mut parts = rest.splitn(2, ':');
+        let v = parts.next()?.parse::<usize>().ok()?;
+        let x = parts.next()?.parse::<f64>().ok()?;
+        Some((v, x))
+    };
+    if let Some(rest) = raw.strip_prefix("moved:")
+        && let Some((visible_utf16, goal_x)) = parse_v_x(rest)
+    {
+        return VerticalCaretMove::Moved {
+            visible_utf16,
+            goal_x,
+        };
+    }
+    if let Some(rest) = raw.strip_prefix("escape:")
+        && let Some((visible_utf16, goal_x)) = parse_v_x(rest)
+    {
+        return VerticalCaretMove::Escape {
+            visible_utf16,
+            goal_x,
+        };
+    }
+    VerticalCaretMove::None
+}
+
 fn parse_before_input_meta(raw: &str) -> Option<BeforeInputMeta> {
     if raw.is_empty() {
         return None;
     }
-    let mut parts = raw.splitn(5, '\u{1f}');
+    // Fields: start, end, collapsed, inputType, data, targetStart, targetEnd.
+    // `data` may itself contain the field separator only if a browser ever put a
+    // U+001F into composed text, which it does not; splitn(7) keeps `data` intact
+    // and the two trailing target fields separate. Older payloads without the
+    // target fields parse to `None`/`None` targets (graceful fallback).
+    let mut parts = raw.splitn(7, '\u{1f}');
     let start = parts.next()?.parse::<usize>().ok()?;
     let end = parts.next()?.parse::<usize>().ok()?;
     let is_collapsed = matches!(parts.next()?, "1" | "true");
     let input_type = parts.next()?.to_string();
     let data = parts.next().unwrap_or_default().to_string();
+    // `-1` (or absent / unparsable) → no target range reported.
+    let target_start_utf16 = parts.next().and_then(|s| s.parse::<usize>().ok());
+    let target_end_utf16 = parts.next().and_then(|s| s.parse::<usize>().ok());
 
     Some(BeforeInputMeta {
         input_type,
@@ -1919,6 +2196,8 @@ fn parse_before_input_meta(raw: &str) -> Option<BeforeInputMeta> {
         pre_visible_caret_utf16: start,
         pre_visible_selection_end_utf16: end,
         is_collapsed,
+        target_start_utf16,
+        target_end_utf16,
     })
 }
 
@@ -2193,14 +2472,18 @@ fn perform_block_join(ctx: MarkdownContext, cursor_ctx: Option<CursorContext>, b
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_node,
+        BeforeInputMeta, NavDirection, VerticalCaretMove, VisibleEdit, adjacent_editable_node,
         adjacent_editable_offset, block_has_inline_markup, clamp_to_char_boundary,
         compute_block_split, compute_post_visible_caret, cursor_within_inline_markup,
         direct_delete_from_beforeinput, inject_gap_paragraphs, is_latest_revision,
-        next_visible_char_utf16, normalize_cursor_visible_for_edit, previous_visible_char_utf16,
-        select_best_input_projection, snap_cursor_to_block, uses_token_aware_surface,
+        next_visible_char_utf16, normalize_cursor_visible_for_edit, parse_before_input_meta,
+        parse_vertical_caret_response, previous_visible_char_utf16, select_best_input_projection,
+        snap_cursor_to_block, uses_token_aware_surface,
     };
-    use crate::inline_tokens::{InlineSegment, SegmentKind, TokenizedBlock};
+    use crate::inline_tokens::{
+        InlineSegment, MarkerVisibility, SegmentKind, TokenizedBlock, build_tokenized_block,
+        collect_marker_tokens,
+    };
     use crate::types::{NodeType, OwnedAstNode};
 
     fn text_node(start: usize, end: usize, text: &str) -> OwnedAstNode {
@@ -2425,6 +2708,8 @@ mod tests {
             pre_visible_caret_utf16: 57,
             pre_visible_selection_end_utf16: 57,
             is_collapsed: true,
+            target_start_utf16: None,
+            target_end_utf16: None,
         };
         let post = compute_post_visible_caret(Some(&meta), &edit, 56, 80);
         assert_eq!(post, 58);
@@ -2443,6 +2728,8 @@ mod tests {
             pre_visible_caret_utf16: 20,
             pre_visible_selection_end_utf16: 22,
             is_collapsed: false,
+            target_start_utf16: None,
+            target_end_utf16: None,
         };
         let post = compute_post_visible_caret(Some(&meta), &edit, 0, 80);
         assert_eq!(post, 22);
@@ -2461,6 +2748,8 @@ mod tests {
             pre_visible_caret_utf16: 12,
             pre_visible_selection_end_utf16: 12,
             is_collapsed: true,
+            target_start_utf16: None,
+            target_end_utf16: None,
         };
         let post = compute_post_visible_caret(Some(&meta), &edit, 12, 80);
         assert_eq!(post, 11);
@@ -2815,6 +3104,8 @@ mod tests {
             pre_visible_caret_utf16: caret,
             pre_visible_selection_end_utf16: caret,
             is_collapsed: true,
+            target_start_utf16: None,
+            target_end_utf16: None,
         }
     }
 
@@ -2825,6 +3116,8 @@ mod tests {
             pre_visible_caret_utf16: caret,
             pre_visible_selection_end_utf16: caret,
             is_collapsed: true,
+            target_start_utf16: None,
+            target_end_utf16: None,
         }
     }
 
@@ -2833,7 +3126,7 @@ mod tests {
         // "hello" → backspace at position 5 → delete 'o' (bytes 4..5)
         let model = plain_model("hello");
         let meta = backspace_meta(5);
-        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "hello");
         assert_eq!(result, Some((4, 5, 4)));
     }
 
@@ -2851,7 +3144,7 @@ mod tests {
             ],
         );
         let meta = backspace_meta(4); // end of visible "bold"
-        let result = direct_delete_from_beforeinput(&meta, &model, "**bold**");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "**bold**");
         assert_eq!(result, Some((5, 6, 3))); // delete raw 5..6 ('d'), cursor → vis 3
     }
 
@@ -2868,7 +3161,7 @@ mod tests {
             ],
         );
         let meta = backspace_meta(2); // after opening "**"
-        let result = direct_delete_from_beforeinput(&meta, &model, "**bold**");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "**bold**");
         assert_eq!(result, Some((1, 2, 1))); // delete raw 1..2 ('*'), cursor → vis 1
     }
 
@@ -2891,7 +3184,7 @@ mod tests {
             ],
         );
         let meta = backspace_meta(5); // cursor at vis 5 (space before "more")
-        let result = direct_delete_from_beforeinput(&meta, &model, "**bold** more");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "**bold** more");
         // vis 5 = ' ' (raw 8), vis 4 = 'd' (raw 5) — wait, vis 4 is the start of " more" seg
         // Actually: "bold" is vis 0..4, " more" is vis 4..9
         // vis 5 maps to raw 9 (' ' is at raw 8, 'm' at raw 9 — vis 4 = raw 8)
@@ -2905,7 +3198,7 @@ mod tests {
         // "hello" → Delete key at position 0 → delete 'h' (bytes 0..1)
         let model = plain_model("hello");
         let meta = forward_delete_meta(0);
-        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "hello");
         assert_eq!(result, Some((0, 1, 0)));
     }
 
@@ -2915,7 +3208,7 @@ mod tests {
         let model = plain_model("a😀b");
         // Cursor at vis pos 3 (after 😀: 'a'=1 UTF-16, '😀'=2 UTF-16)
         let meta = backspace_meta(3);
-        let result = direct_delete_from_beforeinput(&meta, &model, "a😀b");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "a😀b");
         // Should delete '😀' at raw bytes 1..5, cursor → vis 1
         assert_eq!(result, Some((1, 5, 1)));
     }
@@ -2924,7 +3217,7 @@ mod tests {
     fn direct_backspace_at_position_zero_returns_none() {
         let model = plain_model("hello");
         let meta = backspace_meta(0);
-        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "hello");
         assert_eq!(result, None);
     }
 
@@ -2937,8 +3230,10 @@ mod tests {
             pre_visible_caret_utf16: 2,
             pre_visible_selection_end_utf16: 4,
             is_collapsed: false,
+            target_start_utf16: None,
+            target_end_utf16: None,
         };
-        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "hello");
         assert_eq!(result, None);
     }
 
@@ -2951,8 +3246,10 @@ mod tests {
             pre_visible_caret_utf16: 3,
             pre_visible_selection_end_utf16: 3,
             is_collapsed: true,
+            target_start_utf16: None,
+            target_end_utf16: None,
         };
-        let result = direct_delete_from_beforeinput(&meta, &model, "hello");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "hello");
         assert_eq!(result, None);
     }
 
@@ -2969,8 +3266,149 @@ mod tests {
             ],
         );
         let meta = backspace_meta(6);
-        let result = direct_delete_from_beforeinput(&meta, &model, "~~strike~~");
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "~~strike~~");
         assert_eq!(result, Some((7, 8, 5)));
+    }
+
+    // ── ranged-delete (#87: deleteWord/deleteLine swallow markers) ────
+
+    /// Build the `"some **bold**"` model (Strong wraps "bold" with hidden `**`)
+    /// plus its marker tokens, mirroring the `inline_tokens` AST fixtures.
+    /// Raw bytes: `some ` (0..5), `**` (5..7), `bold` (7..11), `**` (11..13).
+    /// Visible text: `"some bold"`.
+    fn some_bold_model() -> (TokenizedBlock, Vec<super::MarkerToken>) {
+        let strong = OwnedAstNode {
+            node_type: NodeType::Strong,
+            range: 5..13,
+            children: vec![text_node(7, 11, "bold")],
+        };
+        let node = OwnedAstNode {
+            node_type: NodeType::Paragraph,
+            range: 0..13,
+            children: vec![text_node(0, 5, "some "), strong],
+        };
+        let raw = "some **bold**";
+        let hidden = vec![
+            MarkerVisibility {
+                marker_idx: 0,
+                visible: false,
+            },
+            MarkerVisibility {
+                marker_idx: 1,
+                visible: false,
+            },
+        ];
+        let model = build_tokenized_block(&node, raw, &hidden);
+        let markers = collect_marker_tokens(&node, raw, 0);
+        (model, markers)
+    }
+
+    fn word_delete_meta(
+        input_type: &str,
+        caret: usize,
+        target_start: usize,
+        target_end: usize,
+    ) -> BeforeInputMeta {
+        BeforeInputMeta {
+            input_type: input_type.to_string(),
+            data: String::new(),
+            pre_visible_caret_utf16: caret,
+            pre_visible_selection_end_utf16: caret,
+            is_collapsed: true,
+            target_start_utf16: Some(target_start),
+            target_end_utf16: Some(target_end),
+        }
+    }
+
+    #[test]
+    fn word_delete_backward_swallows_inline_markers() {
+        // "some **bold**" → visible "some bold". Word-delete-backward with the
+        // caret after "bold" targets the visible range 5..9. The deletion empties
+        // the Strong span's content, so its hidden `**` delimiters must go too,
+        // yielding raw range 5..13 (the whole `**bold**`).
+        let (model, markers) = some_bold_model();
+        assert_eq!(model.visible_text, "some bold");
+        let meta = word_delete_meta("deleteWordBackward", 9, 5, 9);
+        let block_raw = "some **bold**";
+        let result = direct_delete_from_beforeinput(&meta, &model, &markers, block_raw);
+        assert_eq!(result, Some((5, 13, 5)));
+
+        // Splicing out [5..13) leaves "some " — no dangling `****`.
+        let (raw_start, raw_end, _) = result.unwrap();
+        let spliced = format!("{}{}", &block_raw[..raw_start], &block_raw[raw_end..]);
+        assert_eq!(spliced, "some ");
+    }
+
+    #[test]
+    fn word_delete_forward_swallows_inline_markers() {
+        // Same span, caret before "bold"; deleteWordForward targets the same
+        // visible range 5..9 and produces the same marker-swallowing raw range.
+        let (model, markers) = some_bold_model();
+        let meta = word_delete_meta("deleteWordForward", 5, 5, 9);
+        let block_raw = "some **bold**";
+        let result = direct_delete_from_beforeinput(&meta, &model, &markers, block_raw);
+        assert_eq!(result, Some((5, 13, 5)));
+    }
+
+    #[test]
+    fn word_delete_plain_text_no_marker_growth() {
+        // "hello world" with no markers: deleting the word "world" (visible 6..11)
+        // maps straight through to raw 6..11 and grows no span.
+        let model = plain_model("hello world");
+        let meta = word_delete_meta("deleteWordForward", 6, 6, 11);
+        let result = direct_delete_from_beforeinput(&meta, &model, &[], "hello world");
+        assert_eq!(result, Some((6, 11, 6)));
+    }
+
+    #[test]
+    fn word_delete_without_target_range_returns_none() {
+        // No `getTargetRanges()` reported → fall back to the diff path.
+        let (model, markers) = some_bold_model();
+        let meta = BeforeInputMeta {
+            input_type: "deleteWordBackward".to_string(),
+            data: String::new(),
+            pre_visible_caret_utf16: 9,
+            pre_visible_selection_end_utf16: 9,
+            is_collapsed: true,
+            target_start_utf16: None,
+            target_end_utf16: None,
+        };
+        let result = direct_delete_from_beforeinput(&meta, &model, &markers, "some **bold**");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn word_delete_partial_overlap_keeps_markers() {
+        // Deleting only "bo" (visible 5..7) leaves "ld" inside the span, so the
+        // Strong content is NOT wholly emptied — both `**` delimiters stay. The
+        // start is mapped with a forward bias so it lands on the "bold" content
+        // (raw 7), past the hidden opening `**`; the end is backward-biased to
+        // raw 9 (after "bo"). raw 7..9 splices out "bo" → "some **ld**".
+        let (model, markers) = some_bold_model();
+        let meta = word_delete_meta("deleteWordBackward", 7, 5, 7);
+        let block_raw = "some **bold**";
+        let result = direct_delete_from_beforeinput(&meta, &model, &markers, block_raw);
+        assert_eq!(result, Some((7, 9, 5)));
+        let (raw_start, raw_end, _) = result.unwrap();
+        assert!(raw_start > 5, "opening ** must not be swallowed");
+        assert!(raw_end < 13, "closing ** must not be swallowed");
+        let spliced = format!("{}{}", &block_raw[..raw_start], &block_raw[raw_end..]);
+        assert_eq!(spliced, "some **ld**");
+    }
+
+    #[test]
+    fn word_delete_caret_mid_word_preserves_opening_marker() {
+        // Caret placed after "bo" inside the bold span; a backward word-delete
+        // targets the visible range 5..7 ("bo"). The opening `**` must survive
+        // because the span content is only partially emptied — confirming the
+        // forward-bias start mapping does not eat the hidden opening delimiter.
+        let (model, markers) = some_bold_model();
+        let meta = word_delete_meta("deleteWordBackward", 7, 5, 7);
+        let block_raw = "some **bold**";
+        let result = direct_delete_from_beforeinput(&meta, &model, &markers, block_raw);
+        let (raw_start, raw_end, _) = result.unwrap();
+        let spliced = format!("{}{}", &block_raw[..raw_start], &block_raw[raw_end..]);
+        assert_eq!(spliced, "some **ld**");
     }
 
     #[test]
@@ -2999,5 +3437,151 @@ mod tests {
         // "a😀b" — UTF-16: a(1) 😀(2) b(1)
         assert_eq!(next_visible_char_utf16("a😀b", 1), Some(3)); // 😀 occupies 2 units
         assert_eq!(next_visible_char_utf16("a😀b", 3), Some(4)); // 'b' is 1 unit
+    }
+
+    // ── parse_vertical_caret_response (#75 visual-row vertical nav) ───────
+
+    #[test]
+    fn vertical_caret_response_none() {
+        assert_eq!(
+            parse_vertical_caret_response("none"),
+            VerticalCaretMove::None
+        );
+    }
+
+    #[test]
+    fn vertical_caret_response_moved() {
+        assert_eq!(
+            parse_vertical_caret_response("moved:7:142"),
+            VerticalCaretMove::Moved {
+                visible_utf16: 7,
+                goal_x: 142.0
+            }
+        );
+    }
+
+    #[test]
+    fn vertical_caret_response_escape() {
+        assert_eq!(
+            parse_vertical_caret_response("escape:0:0"),
+            VerticalCaretMove::Escape {
+                visible_utf16: 0,
+                goal_x: 0.0
+            }
+        );
+    }
+
+    #[test]
+    fn vertical_caret_response_fractional_x() {
+        // Math.round on the JS side yields integers, but the parser accepts any
+        // finite f64 so an unrounded x still round-trips.
+        assert_eq!(
+            parse_vertical_caret_response("moved:3:12.5"),
+            VerticalCaretMove::Moved {
+                visible_utf16: 3,
+                goal_x: 12.5
+            }
+        );
+    }
+
+    #[test]
+    fn vertical_caret_response_malformed_maps_to_none() {
+        // Empty / unknown / partial payloads fall back to None so the handler
+        // leaves the caret untouched rather than acting on garbage.
+        assert_eq!(parse_vertical_caret_response(""), VerticalCaretMove::None);
+        assert_eq!(
+            parse_vertical_caret_response("moved:"),
+            VerticalCaretMove::None
+        );
+        assert_eq!(
+            parse_vertical_caret_response("moved:7"),
+            VerticalCaretMove::None
+        );
+        assert_eq!(
+            parse_vertical_caret_response("escape:x:y"),
+            VerticalCaretMove::None
+        );
+        assert_eq!(
+            parse_vertical_caret_response("teleport:1:2"),
+            VerticalCaretMove::None
+        );
+    }
+
+    // ── parse_before_input_meta (#87 target-field 5→7 format) ────────
+    //
+    // The payload separator is U+001F (Unit Separator). In Rust source it is
+    // written as the char escape `\u{1f}` — a real U+001F, not the literal
+    // text `\u{1f}` (the JS side has already interpreted its own escape before
+    // Rust ever sees the string). Field order: start, end, collapsed, inputType,
+    // data, targetStart, targetEnd.
+
+    #[test]
+    fn before_input_meta_full_word_delete_payload() {
+        // 7-field word-delete payload: collapsed caret at 5, selection end 9,
+        // with an authoritative target range 5..9 from getTargetRanges().
+        let meta =
+            parse_before_input_meta("5\u{1f}9\u{1f}1\u{1f}deleteWordBackward\u{1f}\u{1f}5\u{1f}9")
+                .expect("full 7-field payload should parse");
+        assert_eq!(meta.input_type, "deleteWordBackward");
+        assert!(meta.is_collapsed);
+        assert_eq!(meta.pre_visible_caret_utf16, 5);
+        assert_eq!(meta.pre_visible_selection_end_utf16, 9);
+        assert_eq!(meta.data, "");
+        assert_eq!(meta.target_start_utf16, Some(5));
+        assert_eq!(meta.target_end_utf16, Some(9));
+    }
+
+    #[test]
+    fn before_input_meta_negative_one_target_sentinel_maps_to_none() {
+        // `-1` sentinel means the browser reported no target range. `-1` fails
+        // `usize::parse`, so both target fields fall back to `None`.
+        let meta = parse_before_input_meta(
+            "5\u{1f}9\u{1f}1\u{1f}deleteWordBackward\u{1f}\u{1f}-1\u{1f}-1",
+        )
+        .expect("payload with -1 sentinels should still parse");
+        assert_eq!(meta.input_type, "deleteWordBackward");
+        assert!(meta.is_collapsed);
+        assert_eq!(meta.pre_visible_caret_utf16, 5);
+        assert_eq!(meta.pre_visible_selection_end_utf16, 9);
+        assert_eq!(meta.data, "");
+        assert_eq!(meta.target_start_utf16, None);
+        assert_eq!(meta.target_end_utf16, None);
+    }
+
+    #[test]
+    fn before_input_meta_legacy_short_payload_targets_none() {
+        // Legacy 5-field payload (no trailing target fields) parses with both
+        // targets `None` — graceful fallback to the diff path.
+        let meta = parse_before_input_meta("3\u{1f}3\u{1f}1\u{1f}deleteContentBackward\u{1f}")
+            .expect("legacy 5-field payload should parse");
+        assert_eq!(meta.input_type, "deleteContentBackward");
+        assert!(meta.is_collapsed);
+        assert_eq!(meta.pre_visible_caret_utf16, 3);
+        assert_eq!(meta.pre_visible_selection_end_utf16, 3);
+        assert_eq!(meta.data, "");
+        assert_eq!(meta.target_start_utf16, None);
+        assert_eq!(meta.target_end_utf16, None);
+    }
+
+    #[test]
+    fn before_input_meta_insert_text_carries_data() {
+        // insertText payload: the `data` field carries the typed character and
+        // the target fields are the `-1` sentinel → `None`.
+        let meta =
+            parse_before_input_meta("2\u{1f}2\u{1f}1\u{1f}insertText\u{1f}x\u{1f}-1\u{1f}-1")
+                .expect("insertText payload should parse");
+        assert_eq!(meta.input_type, "insertText");
+        assert!(meta.is_collapsed);
+        assert_eq!(meta.pre_visible_caret_utf16, 2);
+        assert_eq!(meta.pre_visible_selection_end_utf16, 2);
+        assert_eq!(meta.data, "x");
+        assert_eq!(meta.target_start_utf16, None);
+        assert_eq!(meta.target_end_utf16, None);
+    }
+
+    #[test]
+    fn before_input_meta_empty_payload_is_none() {
+        // An empty payload yields `None` (no beforeinput metadata).
+        assert_eq!(parse_before_input_meta(""), None);
     }
 }

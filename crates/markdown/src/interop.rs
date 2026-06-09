@@ -36,6 +36,15 @@ pub trait CaretAdapter: Send + Sync {
     ) -> String;
     /// JS hook for contenteditable input/traversal behavior.
     fn bind_contenteditable_input_js(&self, block_id: &str) -> String;
+    /// JS to attempt a one-visual-row vertical caret move inside a contenteditable
+    /// block using DOM line geometry. `going_up` selects the direction; `goal_x` is
+    /// the desired horizontal caret position in viewport CSS px (or a negative value
+    /// to use the caret's live x). Sends back one of:
+    /// - `"none"` — no element/selection to act on.
+    /// - `"moved:<visibleUtf16>:<x>"` — caret moved one visual row within the block.
+    /// - `"escape:<visibleUtf16>:<x>"` — caret is on the boundary visual row in the
+    ///   press direction; the caller hops to the adjacent block at column `<x>`.
+    fn vertical_caret_move_js(&self, block_id: &str, going_up: bool, goal_x: f64) -> String;
 }
 
 #[derive(Debug, Default)]
@@ -271,25 +280,28 @@ impl CaretAdapter for WebviewCaretAdapter {
     if (root._noxBeforeInputBound) {{ dioxus.send("bound"); return; }}
     root._noxBeforeInputMeta = null;
 
+    // Shared DOM-node → visible-UTF-16-offset converter. Returns -1 when the node
+    // is outside this editing host so callers can distinguish "no offset".
+    var toOffset = function(node, offset) {{
+        if (!node || !root.contains(node)) return -1;
+        try {{
+            var r = document.createRange();
+            r.selectNodeContents(root);
+            r.setEnd(node, offset);
+            return r.toString().length;
+        }} catch (_e) {{
+            return -1;
+        }}
+    }};
+
     var selectionDetails = function() {{
         var sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) {{
             return {{ start: 0, end: 0, collapsed: true }};
         }}
         var range = sel.getRangeAt(0);
-        var toOffset = function(node, offset) {{
-            if (!node || !root.contains(node)) return 0;
-            try {{
-                var r = document.createRange();
-                r.selectNodeContents(root);
-                r.setEnd(node, offset);
-                return r.toString().length;
-            }} catch (_e) {{
-                return 0;
-            }}
-        }};
-        var start = toOffset(range.startContainer, range.startOffset);
-        var end = toOffset(range.endContainer, range.endOffset);
+        var start = Math.max(0, toOffset(range.startContainer, range.startOffset));
+        var end = Math.max(0, toOffset(range.endContainer, range.endOffset));
         if (end < start) {{
             var t = start; start = end; end = t;
         }}
@@ -299,17 +311,173 @@ impl CaretAdapter for WebviewCaretAdapter {
     root.addEventListener('beforeinput', function(e) {{
         var sel = selectionDetails();
         var inputType = (e && typeof e.inputType === 'string') ? e.inputType : '';
-        var data = (e && typeof e.data === 'string') ? e.data : '';
+        var rawData = (e && typeof e.data === 'string') ? e.data : '';
+        // Defensively drop any U+001F from composed text: it is the meta-string
+        // field separator, and a stray one would desync the Rust splitn(7) parse
+        // (shifting the trailing targetStart/targetEnd fields). Browsers do not
+        // emit U+001F in `data`, so this strip is a no-op in practice.
+        var data = rawData.split('\u001f').join('');
+        // getTargetRanges() is the exact range the browser will modify - the
+        // authoritative span for word/line deletes (deleteWord*, deleteSoftLine*,
+        // deleteHardLine*), where the selection is collapsed but more than one
+        // character is removed. Converting it to visible UTF-16 offsets lets Rust
+        // splice the orphaned hidden delimiters of an emptied inline span (#87).
+        var tStart = -1, tEnd = -1;
+        try {{
+            var ranges = (e && typeof e.getTargetRanges === 'function')
+                ? e.getTargetRanges() : null;
+            if (ranges && ranges.length > 0) {{
+                var tr = ranges[0];
+                var a = toOffset(tr.startContainer, tr.startOffset);
+                var b = toOffset(tr.endContainer, tr.endOffset);
+                if (a >= 0 && b >= 0) {{
+                    tStart = Math.min(a, b);
+                    tEnd = Math.max(a, b);
+                }}
+            }}
+        }} catch (_e) {{}}
         root._noxBeforeInputMeta =
             sel.start.toString() + '\u001f' +
             sel.end.toString() + '\u001f' +
             (sel.collapsed ? '1' : '0') + '\u001f' +
             inputType + '\u001f' +
-            data;
+            data + '\u001f' +
+            tStart.toString() + '\u001f' +
+            tEnd.toString();
     }});
 
     root._noxBeforeInputBound = true;
     dioxus.send("bound");
+}})();"#
+        )
+    }
+
+    fn vertical_caret_move_js(&self, block_id: &str, going_up: bool, goal_x: f64) -> String {
+        // document::eval is Dioxus-native (NOT web_sys): all DOM access here goes
+        // through the framework's eval channel, so this works on every webview
+        // target. Confirmed no Dioxus 0.7 native API exposes caret line-geometry
+        // (getClientRects on a Range) or hit-testing (caretRangeFromPoint /
+        // caretPositionFromPoint) as of 2026-06 — these are required to detect
+        // visual-row boundaries and to move the caret by one visual row inside a
+        // soft-wrapped/multi-line block. `NoopCaretAdapter` is the non-web fallback.
+        let going_up_js = if going_up { "true" } else { "false" };
+        format!(
+            r#"(function() {{
+    try {{
+        var root = document.getElementById('{block_id}');
+        if (!root) {{ dioxus.send("none"); return; }}
+        var sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) {{ dioxus.send("none"); return; }}
+        var range = sel.getRangeAt(0);
+        var goingUp = {going_up_js};
+        var goalX = {goal_x};
+        var rootRect = root.getBoundingClientRect();
+
+        // Visible UTF-16 offset from block start to the caret (textContent space).
+        var pre = document.createRange();
+        pre.selectNodeContents(root);
+        pre.setEnd(range.endContainer, range.endOffset);
+        var caretVisible = pre.toString().length;
+
+        // Last client rect of a range, falling back to its bounding box when
+        // getClientRects() is empty (e.g. a collapsed caret between nodes).
+        var caretRect = function(r) {{
+            var rects = r.getClientRects();
+            if (rects && rects.length) {{ return rects[rects.length - 1]; }}
+            var b = r.getBoundingClientRect();
+            if (b && (b.width || b.height || b.top || b.left)) {{ return b; }}
+            return null;
+        }};
+
+        var full = document.createRange();
+        full.selectNodeContents(root);
+        var fr = full.getClientRects();
+        var firstTop = fr.length ? fr[0].top : rootRect.top;
+        var lastBottom = fr.length ? fr[fr.length - 1].bottom : rootRect.bottom;
+
+        var cr = caretRect(range);
+        var lineH = cr ? (cr.bottom - cr.top)
+            : (fr.length ? (fr[0].bottom - fr[0].top) : 16);
+        var caretTop = cr ? cr.top : firstTop;
+        var caretBottom = cr ? cr.bottom : lastBottom;
+        var caretMidY = (caretTop + caretBottom) / 2;
+        var caretX = (goalX >= 0) ? goalX : (cr ? cr.left : rootRect.left);
+
+        // Row-relative visible column for an escape. `caretVisible` is measured from
+        // the BLOCK start, but the adjacent-block seeding in Rust treats the value as
+        // a column within the target block's first row. For a multi-line block,
+        // escaping from a non-first visual row would otherwise seed a too-large column.
+        // Hit-test this row's left edge (rootRect.left, caretMidY) to find the visible
+        // offset where the caret's row begins, then subtract. Defensive: any failure or
+        // out-of-host hit falls back to the block-start offset so escape never breaks.
+        var escapeColumn = caretVisible;
+        try {{
+            var rowStart = null;
+            if (document.caretRangeFromPoint) {{
+                rowStart = document.caretRangeFromPoint(rootRect.left, caretMidY);
+            }} else if (document.caretPositionFromPoint) {{
+                var rcp = document.caretPositionFromPoint(rootRect.left, caretMidY);
+                if (rcp && rcp.offsetNode) {{
+                    rowStart = document.createRange();
+                    rowStart.setStart(rcp.offsetNode, rcp.offset);
+                }}
+            }}
+            if (rowStart && root.contains(rowStart.startContainer)) {{
+                var rs = document.createRange();
+                rs.selectNodeContents(root);
+                rs.setEnd(rowStart.startContainer, rowStart.startOffset);
+                var rowStartVisible = rs.toString().length;
+                escapeColumn = Math.max(0, caretVisible - rowStartVisible);
+            }}
+        }} catch (_e) {{
+            escapeColumn = caretVisible;
+        }}
+
+        // Boundary detection: caret sits on the first/last visual row when its
+        // top/bottom is within half a line height of the block's first/last row.
+        var isFirst = (caretTop - firstTop) < lineH * 0.5;
+        var isLast = (lastBottom - caretBottom) < lineH * 0.5;
+
+        if (goingUp && isFirst) {{
+            dioxus.send("escape:" + escapeColumn + ":" + Math.round(caretX));
+            return;
+        }}
+        if (!goingUp && isLast) {{
+            dioxus.send("escape:" + escapeColumn + ":" + Math.round(caretX));
+            return;
+        }}
+
+        // Hit-test one visual row above/below at the goal x.
+        var targetY = goingUp ? (caretTop - lineH * 0.5) : (caretBottom + lineH * 0.5);
+        var pos = null;
+        if (document.caretRangeFromPoint) {{
+            pos = document.caretRangeFromPoint(caretX, targetY);
+        }} else if (document.caretPositionFromPoint) {{
+            var cp = document.caretPositionFromPoint(caretX, targetY);
+            if (cp && cp.offsetNode) {{
+                pos = document.createRange();
+                pos.setStart(cp.offsetNode, cp.offset);
+            }}
+        }}
+        // Defensive: a hit-test that misses or lands outside this editing host
+        // escapes rather than risk placing the caret in a sibling block. Seed the
+        // row-relative column (same rationale as the boundary escapes above).
+        if (!pos || !root.contains(pos.startContainer)) {{
+            dioxus.send("escape:" + escapeColumn + ":" + Math.round(caretX));
+            return;
+        }}
+
+        pos.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(pos);
+        var post = document.createRange();
+        post.selectNodeContents(root);
+        post.setEnd(pos.startContainer, pos.startOffset);
+        var newVisible = post.toString().length;
+        dioxus.send("moved:" + newVisible + ":" + Math.round(caretX));
+    }} catch (_e) {{
+        dioxus.send("none");
+    }}
 }})();"#
         )
     }
@@ -366,6 +534,14 @@ impl CaretAdapter for NoopCaretAdapter {
 
     fn bind_contenteditable_input_js(&self, _block_id: &str) -> String {
         "dioxus.send(\"noop\");".to_string()
+    }
+
+    fn vertical_caret_move_js(&self, _block_id: &str, _going_up: bool, _goal_x: f64) -> String {
+        // No DOM line geometry on non-webview targets. Returning "none" would make
+        // vertical nav fully inert; instead degrade to an escape at column 0 so the
+        // Rust escape branch navigates to the adjacent block — matching pre-#75
+        // behavior (vertical nav escaped at column 0 with no in-block row movement).
+        "dioxus.send(\"escape:0:-1\");".to_string()
     }
 }
 

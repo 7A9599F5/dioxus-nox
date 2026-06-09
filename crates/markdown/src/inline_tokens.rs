@@ -236,6 +236,37 @@ pub fn utf16_to_byte_index(s: &str, utf16_idx: usize) -> Option<usize> {
     }
 }
 
+/// Convert a Rust `str` byte offset to a UTF-16 code-unit index. Returns `None`
+/// if `byte_idx` falls outside the string or in the middle of a character.
+///
+/// Canonical home for this conversion (see also [`utf16_to_byte_index`] and
+/// [`utf16_len`]); other modules import these rather than re-rolling them.
+pub fn byte_to_utf16_index(s: &str, byte_idx: usize) -> Option<usize> {
+    if byte_idx > s.len() {
+        return None;
+    }
+    let mut utf16_count = 0usize;
+    for (idx, ch) in s.char_indices() {
+        if idx == byte_idx {
+            return Some(utf16_count);
+        }
+        if idx > byte_idx {
+            break;
+        }
+        utf16_count += ch.len_utf16();
+    }
+    if byte_idx == s.len() {
+        Some(utf16_count)
+    } else {
+        None
+    }
+}
+
+/// UTF-16 code-unit length of `s`.
+pub fn utf16_len(s: &str) -> usize {
+    s.chars().map(char::len_utf16).sum()
+}
+
 fn collect_inline_markers_recursive(
     node: &OwnedAstNode,
     block_start: usize,

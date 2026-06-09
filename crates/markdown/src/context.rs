@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use dioxus::prelude::*;
 
+use crate::inline_tokens::utf16_to_byte_index;
 use crate::interop;
 use crate::types::{CursorPosition, LivePreviewVariant, Mode, ParsedDoc, Selection};
 use crop::Rope;
@@ -196,8 +197,8 @@ pub(crate) async fn read_cursor_and_selection(
     let end_utf16 = *arr.get(1)? as usize;
 
     // Convert UTF-16 code-unit indices to byte offsets
-    let start_byte = utf16_to_byte_index_ctx(text, start_utf16).unwrap_or(0);
-    let end_byte = utf16_to_byte_index_ctx(text, end_utf16).unwrap_or(start_byte);
+    let start_byte = utf16_to_byte_index(text, start_utf16).unwrap_or(0);
+    let end_byte = utf16_to_byte_index(text, end_utf16).unwrap_or(start_byte);
 
     let pos = CursorPosition {
         offset: start_byte,
@@ -213,22 +214,6 @@ pub(crate) async fn read_cursor_and_selection(
         })
     };
     Some((pos, sel))
-}
-
-/// UTF-16 to byte index conversion for use in context.rs.
-fn utf16_to_byte_index_ctx(s: &str, utf16_idx: usize) -> Option<usize> {
-    let mut utf16_count = 0usize;
-    for (byte_idx, ch) in s.char_indices() {
-        if utf16_count == utf16_idx {
-            return Some(byte_idx);
-        }
-        utf16_count += ch.len_utf16();
-    }
-    if utf16_count == utf16_idx {
-        Some(s.len())
-    } else {
-        None
-    }
 }
 
 // ── JS helper functions for MarkdownHandle ──────────────────────────
