@@ -167,13 +167,11 @@ pub fn use_swipe_gesture(config: SwipeConfig, on_commit: EventHandler<()>) -> Sw
             }
 
             match current_phase {
-                SwipePhase::Idle => {
-                    // Enter dragging once past the deadzone (only leftward).
-                    if dx.abs() > DEADZONE_PX && dx < 0.0 {
-                        phase.set(SwipePhase::Dragging);
-                        let clamped = dx.max(-cfg.action_width_px).min(0.0);
-                        offset_px.set(clamped);
-                    }
+                // Enter dragging once past the deadzone (only leftward).
+                SwipePhase::Idle if dx.abs() > DEADZONE_PX && dx < 0.0 => {
+                    phase.set(SwipePhase::Dragging);
+                    let clamped = dx.max(-cfg.action_width_px).min(0.0);
+                    offset_px.set(clamped);
                 }
                 SwipePhase::Dragging => {
                     let clamped = dx.max(-cfg.action_width_px).min(0.0);

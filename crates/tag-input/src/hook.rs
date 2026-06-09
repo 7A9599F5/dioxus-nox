@@ -989,13 +989,11 @@ impl<T: TagLike> TagInputState<T> {
         // ── Readonly mode: only allow pill entry and escape ─────────────
         if readonly {
             match key {
-                Key::ArrowLeft => {
-                    if self.search_query.read().is_empty() {
-                        let len = self.selected_tags.read().len();
-                        if len > 0 {
-                            event.prevent_default();
-                            self.active_pill.set(Some(len - 1));
-                        }
+                Key::ArrowLeft if self.search_query.read().is_empty() => {
+                    let len = self.selected_tags.read().len();
+                    if len > 0 {
+                        event.prevent_default();
+                        self.active_pill.set(Some(len - 1));
                     }
                 }
                 Key::Escape => {
@@ -1009,14 +1007,12 @@ impl<T: TagLike> TagInputState<T> {
 
         // ── Input mode (normal) ─────────────────────────────────────────
         match key {
-            Key::ArrowLeft => {
-                // Enter pill mode from the right when query is empty
-                if self.search_query.read().is_empty() {
-                    let len = self.selected_tags.read().len();
-                    if len > 0 {
-                        event.prevent_default();
-                        self.active_pill.set(Some(len - 1));
-                    }
+            // Enter pill mode from the right when query is empty
+            Key::ArrowLeft if self.search_query.read().is_empty() => {
+                let len = self.selected_tags.read().len();
+                if len > 0 {
+                    event.prevent_default();
+                    self.active_pill.set(Some(len - 1));
                 }
             }
             Key::Enter => {
@@ -1040,14 +1036,12 @@ impl<T: TagLike> TagInputState<T> {
                     }
                 }
             }
-            Key::Backspace => {
-                // On empty input, select last *unlocked* pill instead of immediately deleting
-                if self.search_query.read().is_empty() {
-                    let tags = self.selected_tags.read();
-                    if let Some(pos) = tags.iter().rposition(|t| !t.is_locked()) {
-                        drop(tags);
-                        self.active_pill.set(Some(pos));
-                    }
+            // On empty input, select last *unlocked* pill instead of immediately deleting
+            Key::Backspace if self.search_query.read().is_empty() => {
+                let tags = self.selected_tags.read();
+                if let Some(pos) = tags.iter().rposition(|t| !t.is_locked()) {
+                    drop(tags);
+                    self.active_pill.set(Some(pos));
                 }
             }
             Key::Escape => {

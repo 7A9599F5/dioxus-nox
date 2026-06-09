@@ -19,10 +19,7 @@ enum PendingCaretRestore {
     /// visibility after a reparse.
     Raw(usize),
     /// Visible UTF-16 offsets for a non-collapsed selection.
-    Selection {
-        start: usize,
-        end: usize,
-    },
+    Selection { start: usize, end: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

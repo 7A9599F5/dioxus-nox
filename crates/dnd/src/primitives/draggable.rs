@@ -473,11 +473,9 @@ pub fn Draggable(props: DraggableProps) -> Element {
                     on_start.call(id_for_keyboard.clone());
                 }
             }
-            Key::Escape => {
-                if ctx.is_dragging() {
-                    ctx.cancel_drag();
-                    e.prevent_default();
-                }
+            Key::Escape if ctx.is_dragging() => {
+                ctx.cancel_drag();
+                e.prevent_default();
             }
             _ => {}
         }

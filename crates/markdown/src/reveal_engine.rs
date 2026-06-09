@@ -241,13 +241,33 @@ mod tests {
         // `**bold**` envelope 0..8; caret at 8 (just past the closing `**`) is
         // OUTSIDE the token → markers hidden, so Backspace there deletes content.
         let markers = vec![
-            MarkerToken { raw_range: 0..2, token_range: 0..8, kind: MarkerKind::Inline },
-            MarkerToken { raw_range: 6..8, token_range: 0..8, kind: MarkerKind::Inline },
+            MarkerToken {
+                raw_range: 0..2,
+                token_range: 0..8,
+                kind: MarkerKind::Inline,
+            },
+            MarkerToken {
+                raw_range: 6..8,
+                token_range: 0..8,
+                kind: MarkerKind::Inline,
+            },
         ];
-        let at_end = marker_visibility(&markers, RevealContext { caret_raw_offset: 8, selection: None });
+        let at_end = marker_visibility(
+            &markers,
+            RevealContext {
+                caret_raw_offset: 8,
+                selection: None,
+            },
+        );
         assert_eq!(at_end, vec![false, false]);
         // Caret just inside the closing content (offset 6, end of "bold") still reveals.
-        let inside = marker_visibility(&markers, RevealContext { caret_raw_offset: 6, selection: None });
+        let inside = marker_visibility(
+            &markers,
+            RevealContext {
+                caret_raw_offset: 6,
+                selection: None,
+            },
+        );
         assert_eq!(inside, vec![true, true]);
     }
 
@@ -255,12 +275,34 @@ mod tests {
     fn adjacent_tokens_resolve_to_the_one_being_entered() {
         // Token A 0..8 and token B 8..16 share boundary 8. Caret at 8 reveals B, not A.
         let markers = vec![
-            MarkerToken { raw_range: 0..2, token_range: 0..8, kind: MarkerKind::Inline },
-            MarkerToken { raw_range: 6..8, token_range: 0..8, kind: MarkerKind::Inline },
-            MarkerToken { raw_range: 8..10, token_range: 8..16, kind: MarkerKind::Inline },
-            MarkerToken { raw_range: 14..16, token_range: 8..16, kind: MarkerKind::Inline },
+            MarkerToken {
+                raw_range: 0..2,
+                token_range: 0..8,
+                kind: MarkerKind::Inline,
+            },
+            MarkerToken {
+                raw_range: 6..8,
+                token_range: 0..8,
+                kind: MarkerKind::Inline,
+            },
+            MarkerToken {
+                raw_range: 8..10,
+                token_range: 8..16,
+                kind: MarkerKind::Inline,
+            },
+            MarkerToken {
+                raw_range: 14..16,
+                token_range: 8..16,
+                kind: MarkerKind::Inline,
+            },
         ];
-        let vis = marker_visibility(&markers, RevealContext { caret_raw_offset: 8, selection: None });
+        let vis = marker_visibility(
+            &markers,
+            RevealContext {
+                caret_raw_offset: 8,
+                selection: None,
+            },
+        );
         assert_eq!(vis, vec![false, false, true, true]);
     }
 }
