@@ -327,7 +327,6 @@ fn TokenAwareBlockEditor(
     let current_len = use_signal(|| safe_end.saturating_sub(safe_start));
     let mut is_composing = use_signal(|| false);
     let mut input_revision = use_signal(|| 0u64);
-    let applied_revision = use_signal(|| 0u64);
     let mut caret_generation = use_signal(|| 0u64);
     let restore_generation = use_signal(|| 0u64);
     let mut pending_restore_raw = use_signal(|| None::<PendingCaretRestore>);
@@ -732,7 +731,6 @@ fn TokenAwareBlockEditor(
                     handler,
                     next_revision,
                     input_revision,
-                    applied_revision,
                     pending_restore_raw,
                 );
             },
@@ -767,7 +765,6 @@ fn TokenAwareBlockEditor(
                     handler,
                     next_revision,
                     input_revision,
-                    applied_revision,
                     pending_restore_raw,
                 );
             },
@@ -1019,7 +1016,6 @@ fn spawn_token_editor_sync(
     handler: Option<EventHandler<ActiveBlockInputEvent>>,
     captured_revision: u64,
     latest_revision: Signal<u64>,
-    mut applied_revision: Signal<u64>,
     mut pending_restore: Signal<Option<PendingCaretRestore>>,
 ) {
     spawn(async move {
@@ -1084,7 +1080,6 @@ fn spawn_token_editor_sync(
             len_sig.set(rebuilt_local.len());
             ctx.handle_value_change(rebuilt_global.clone());
             ctx.trigger_parse.call(());
-            applied_revision.set(captured_revision);
 
             let raw_cursor_local = raw_del_start.min(last_caret_offset(&(0..rebuilt_local.len())));
 
@@ -1211,7 +1206,6 @@ fn spawn_token_editor_sync(
         len_sig.set(rebuilt_local.len());
         ctx.handle_value_change(rebuilt_global.clone());
         ctx.trigger_parse.call(());
-        applied_revision.set(captured_revision);
 
         let raw_cursor_local = cursor_after_visible_edit(
             selected_model,
@@ -2097,6 +2091,35 @@ pub(crate) fn snap_cursor_to_block(ast: &[OwnedAstNode], cursor: usize) -> usize
 /// Shared between `TokenAwareBlockEditor` (Enter key) and `ActiveBlockEditor`
 /// (textarea split message). Updates raw content, triggers reparse, and sets
 /// cursor to the start of the new paragraph.
+/// Pure logic for splitting a block at `split_byte` (offset within the block).
+///
+/// Returns `(rebuilt_global, new_left_len, cursor_offset)`. Inserts a paragraph
+/// break at the split point. When splitting at the very END of a block that is
+/// already followed by a blank-line gap (`after` begins with `\n`), inserts a
+/// single `\n` instead of `\n\n` — otherwise the block's own trailing newline plus
+/// the inserted pair stack into 3-4 consecutive newlines and the gap grows on every
+/// Enter-at-block-end.
+fn compute_block_split(
+    global: &str,
+    start: usize,
+    end: usize,
+    split_byte: usize,
+) -> (String, usize, usize) {
+    let before = &global[..start];
+    let block = &global[start..end];
+    let after = &global[end..];
+    let split_at = clamp_to_char_boundary(block, split_byte.min(block.len()));
+    let left = &block[..split_at];
+    let right = &block[split_at..];
+    let sep: &str = if right.is_empty() && after.starts_with('\n') {
+        "\n"
+    } else {
+        "\n\n"
+    };
+    let rebuilt = format!("{before}{left}{sep}{right}{after}");
+    (rebuilt, left.len(), start + split_at + sep.len())
+}
+
 fn perform_block_split(
     ctx: MarkdownContext,
     cursor_ctx: Option<CursorContext>,
@@ -2108,19 +2131,14 @@ fn perform_block_split(
     let start = safe_start.min(current_global.len());
     let old_len = *len_sig.read();
     let end = (start + old_len).min(current_global.len());
-    let before = &current_global[..start];
-    let block = &current_global[start..end];
-    let after = &current_global[end..];
-    let split_at = split_byte.min(block.len());
-    let left = &block[..split_at];
-    let right = &block[split_at..];
-    let rebuilt = format!("{before}{left}\n\n{right}{after}");
+    let (rebuilt, left_len, cursor_offset) =
+        compute_block_split(&current_global, start, end, split_byte);
     ctx.handle_value_change(rebuilt);
     ctx.trigger_parse.call(());
-    len_sig.set(left.len());
+    len_sig.set(left_len);
     if let Some(mut cctx) = cursor_ctx {
         cctx.cursor_position.set(CursorPosition {
-            offset: start + split_at + 2,
+            offset: cursor_offset,
             line: 0,
             column: 0,
         });
@@ -2162,8 +2180,9 @@ fn perform_block_join(ctx: MarkdownContext, cursor_ctx: Option<CursorContext>, b
 mod tests {
     use super::{
         BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_offset,
-        block_has_inline_markup, clamp_to_char_boundary, compute_post_visible_caret,
-        cursor_within_inline_markup, direct_delete_from_beforeinput, inject_gap_paragraphs,
+        block_has_inline_markup, clamp_to_char_boundary, compute_block_split,
+        compute_post_visible_caret, cursor_within_inline_markup, direct_delete_from_beforeinput,
+        inject_gap_paragraphs,
         is_latest_revision, next_visible_char_utf16, normalize_cursor_visible_for_edit,
         previous_visible_char_utf16, select_best_input_projection, snap_cursor_to_block,
         uses_token_aware_surface,
@@ -2447,6 +2466,35 @@ mod tests {
         assert_eq!(result[0].range, 0..2);
         assert_eq!(result[1].range, 5..6); // synthetic at the real '\n', not 2..3
         assert_eq!(result[2].range, 6..7);
+    }
+
+    #[test]
+    fn compute_block_split_midblock_inserts_paragraph_break() {
+        // "HelloWorld" split at 5 → two paragraphs, cursor at start of "World".
+        let (rebuilt, left_len, cursor) = compute_block_split("HelloWorld", 0, 10, 5);
+        assert_eq!(rebuilt, "Hello\n\nWorld");
+        assert_eq!(left_len, 5);
+        assert_eq!(cursor, 7);
+    }
+
+    #[test]
+    fn compute_block_split_at_end_before_gap_avoids_triple_newline() {
+        // "Hello\n\nWorld": block "Hello" is bytes 0..5 (trimmed), so `after`
+        // ("\n\nWorld") already starts with the block's trailing newline. Splitting
+        // at the end must insert ONE newline, not "\n\n" (which would stack to 4).
+        let (rebuilt, left_len, cursor) = compute_block_split("Hello\n\nWorld", 0, 5, 5);
+        assert_eq!(rebuilt, "Hello\n\n\nWorld");
+        assert!(!rebuilt.contains("\n\n\n\n"));
+        assert_eq!(left_len, 5);
+        assert_eq!(cursor, 6); // lands in the new blank paragraph
+    }
+
+    #[test]
+    fn compute_block_split_at_end_of_last_block_uses_full_break() {
+        // Last block, no following gap → "\n\n" so a new empty paragraph is created.
+        let (rebuilt, _left, cursor) = compute_block_split("Hello", 0, 5, 5);
+        assert_eq!(rebuilt, "Hello\n\n");
+        assert_eq!(cursor, 7);
     }
 
     #[test]
