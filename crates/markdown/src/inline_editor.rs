@@ -1019,6 +1019,12 @@ fn spawn_token_editor_sync(
     mut pending_restore: Signal<Option<PendingCaretRestore>>,
 ) {
     spawn(async move {
+        // Early bail: if a newer oninput already superseded us, stop before issuing
+        // any DOM reads. The beforeinput metadata read below is non-destructive, so a
+        // stale sync that slips past here cannot starve the latest sync of its meta.
+        if *latest_revision.read() != captured_revision {
+            return;
+        }
         let new_visible = {
             let js = interop::caret_adapter().read_contenteditable_text_js(&block_id);
             let mut eval = interop::start_eval(&js);
@@ -1427,7 +1433,6 @@ fn ActiveBlockEditor(
             },
             onmounted: move |_| {
                 let js = interop::caret_adapter().mount_active_textarea_js(&block_id_mount, target_cursor);
-                let mut len_sig = current_len;
                 if let Some(mut cctx) = cursor_ctx {
                     spawn(async move {
                         let mut eval = interop::start_eval(&js);
@@ -1466,23 +1471,9 @@ fn ActiveBlockEditor(
                                 perform_block_join(ctx, Some(cctx), safe_start);
                                 continue;
                             }
-                            if let Some(rest) = msg.strip_prefix("split:")
-                                && let Ok(split_utf16) = rest.parse::<usize>()
-                            {
-                                let current_global = ctx.raw_value();
-                                let start = safe_start.min(current_global.len());
-                                let old_len = *len_sig.read();
-                                let end = (start + old_len).min(current_global.len());
-                                let block = &current_global[start..end];
-                                let split_byte = utf16_to_byte_index(block, split_utf16).unwrap_or(block.len());
-                                perform_block_split(
-                                    ctx,
-                                    Some(cctx),
-                                    safe_start,
-                                    &mut len_sig,
-                                    split_byte,
-                                );
-                            }
+                            // Enter is not intercepted for code blocks (see
+                            // mount_active_textarea_js): it inserts a literal newline,
+                            // so no "split:" message is dispatched here.
                         }
                     });
                 } else {

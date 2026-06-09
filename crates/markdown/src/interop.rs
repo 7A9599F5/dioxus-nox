@@ -122,12 +122,10 @@ impl CaretAdapter for WebviewCaretAdapter {
                         e.preventDefault();
                         dioxus.send("backjoin");
                     }}
-                }} else if (e.key === 'Enter') {{
-                    if (!e.shiftKey) {{
-                        e.preventDefault();
-                        dioxus.send("split:" + (el.selectionStart ?? 0));
-                    }}
                 }}
+                // Enter is intentionally NOT intercepted: this textarea backs a fenced
+                // code block, where Enter must insert a literal newline within the block
+                // (native textarea behavior), not split it into two paragraphs.
             }});
             el._noxTraversalBound = true;
         }}
@@ -176,9 +174,11 @@ impl CaretAdapter for WebviewCaretAdapter {
         dioxus.send("");
         return;
     }}
-    var meta = root._noxBeforeInputMeta;
-    root._noxBeforeInputMeta = null;
-    dioxus.send(meta);
+    // Non-destructive: do NOT null the slot here. Each `beforeinput` overwrites it,
+    // so the slot always reflects the latest edit; reading it destructively let a
+    // stale (superseded) sync consume the metadata before the surviving latest sync
+    // could read it, which dropped the latest edit onto the lossy diff fallback.
+    dioxus.send(root._noxBeforeInputMeta);
 }})();"#
         )
     }

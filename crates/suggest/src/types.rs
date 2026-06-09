@@ -161,13 +161,9 @@ impl TriggerContext {
                 self.select_prev();
                 true
             }
-            "Enter" => {
-                if self.highlighted_index.read().is_some() {
-                    self.confirm_selection();
-                    true
-                } else {
-                    false
-                }
+            "Enter" if self.highlighted_index.read().is_some() => {
+                self.confirm_selection();
+                true
             }
             "Escape" | "Tab" => {
                 self.close();
