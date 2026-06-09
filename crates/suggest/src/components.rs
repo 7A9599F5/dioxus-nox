@@ -167,8 +167,9 @@ pub fn Trigger(
     // effect with zero subscriptions; when the prop later flips `None -> Some`
     // (e.g. editor mode switch Inline -> Source -> Inline), Dioxus 0.7's effect
     // scheduler has nothing to invalidate and the effect never re-runs, so
-    // trigger detection silently dies until reload. See crate CLAUDE.md
-    // "Known Issues: external_input effect subscription lost after mode switch".
+    // trigger detection silently dies until reload. Bumping this counter on every
+    // `None <-> Some` transition (see below) gives the scheduler a subscription to
+    // invalidate, forcing the effect to re-run and rebind to the new prop.
     let detect_gen: Signal<u64> = use_signal(|| 0);
 
     // Previous `external_input.is_some()` value, tracked via a plain Cell so the

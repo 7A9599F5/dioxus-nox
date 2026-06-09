@@ -374,6 +374,9 @@ fn TokenAwareBlockEditor(
                     // Arrow navigation for empty blocks
                     if key == "ArrowUp" || key == "ArrowDown" {
                         evt.prevent_default();
+                        // NOTE (#75): the visual-line sub-issues (multi-line block caret
+                        // trap; soft-wrapped single raw line treated as one visual line)
+                        // remain unaddressed — they need DOM line geometry.
                         if let Some(mut cctx) = cursor_ctx {
                             let parsed = (ctx.parsed_doc)();
                             let raw_nav = ctx.raw_value();
@@ -383,22 +386,36 @@ fn TokenAwareBlockEditor(
                             } else {
                                 NavDirection::Next
                             };
-                            let mut nodes = Vec::new();
-                            collect_editable_nodes(&augmented, &mut nodes);
-                            let target = match direction {
-                                NavDirection::Prev => nodes
-                                    .iter()
-                                    .rev()
-                                    .find(|n| n.range.start < safe_start)
-                                    .map(|n| n.range.start),
-                                NavDirection::Next => nodes
-                                    .iter()
-                                    .find(|n| n.range.start > safe_start)
-                                    .map(|n| n.range.start),
+                            // Preserve goal_column across the empty block, mirroring the
+                            // token handler. An empty block's caret is always at visible
+                            // column 0, so when goal_column is unset we seed it with 0;
+                            // when it is already set (carried in from an earlier block) we
+                            // keep it so the caret lands at that column in the target.
+                            let goal_col = if let Some(nc) = nav_ctx {
+                                if let Some(gc) = (nc.goal_column)() {
+                                    gc
+                                } else {
+                                    let mut gc_sig = nc.goal_column;
+                                    gc_sig.set(Some(0));
+                                    0
+                                }
+                            } else {
+                                0
                             };
-                            if let Some(target_offset) = target {
+                            if let Some(target_node) =
+                                adjacent_editable_node(&augmented, safe_start, direction)
+                            {
+                                let t_start = target_node.range.start.min(raw_nav.len());
+                                let t_end = target_node.range.end.min(raw_nav.len());
+                                let clamped = resolve_visible_column_in_block(
+                                    &target_node,
+                                    &raw_nav,
+                                    t_start,
+                                    t_end,
+                                    goal_col,
+                                );
                                 cctx.cursor_position.set(CursorPosition {
-                                    offset: target_offset,
+                                    offset: clamped,
                                     line: 0,
                                     column: 0,
                                 });
@@ -599,6 +616,11 @@ fn TokenAwareBlockEditor(
                 }
                 if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
                     evt.prevent_default();
+                    // NOTE (#75): the visual-line sub-issues remain unaddressed here — a
+                    // soft-wrapped single raw line is still treated as one visual line
+                    // (`is_single_line_block`), so ArrowUp/Down jumps to the adjacent
+                    // block instead of the adjacent visual row. That requires DOM line
+                    // geometry and is out of scope for this fix.
                     if let Some(mut cctx) = cursor_ctx {
                         let parsed = (ctx.parsed_doc)();
                         let direction = if key == "ArrowUp" {
@@ -608,6 +630,12 @@ fn TokenAwareBlockEditor(
                         };
                         let block_id_vert = block_id_nav.clone();
                         let raw_vert = ctx.raw_value();
+                        // Navigate over the AUGMENTED AST so synthetic blank-line gap
+                        // paragraphs (from `inject_gap_paragraphs`) are reachable by
+                        // arrow keys — matching the empty-block handler. Navigating the
+                        // raw `parsed.ast` would skip them, jumping over visible blank
+                        // lines that are clickable but otherwise unreachable.
+                        let augmented = inject_gap_paragraphs(&parsed.ast, &raw_vert);
                         spawn(async move {
                             let visible_now = {
                                 let js = interop::caret_adapter()
@@ -630,7 +658,7 @@ fn TokenAwareBlockEditor(
                                 visible_now
                             };
                             if let Some(target_node) = adjacent_editable_node(
-                                &parsed.ast,
+                                &augmented,
                                 safe_start,
                                 direction,
                             ) {
@@ -2077,11 +2105,6 @@ pub(crate) fn snap_cursor_to_block(ast: &[OwnedAstNode], cursor: usize) -> usize
     }
 }
 
-/// Perform a block split: insert `\n\n` at the cursor position within a block.
-///
-/// Shared between `TokenAwareBlockEditor` (Enter key) and `ActiveBlockEditor`
-/// (textarea split message). Updates raw content, triggers reparse, and sets
-/// cursor to the start of the new paragraph.
 /// Pure logic for splitting a block at `split_byte` (offset within the block).
 ///
 /// Returns `(rebuilt_global, new_left_len, cursor_offset)`. Inserts a paragraph
@@ -2111,6 +2134,9 @@ fn compute_block_split(
     (rebuilt, left.len(), start + split_at + sep.len())
 }
 
+/// Apply a block split via [`compute_block_split`]: rewrite the raw content,
+/// trigger a reparse, update the block length signal, and move the cursor to the
+/// start of the new paragraph.
 fn perform_block_split(
     ctx: MarkdownContext,
     cursor_ctx: Option<CursorContext>,
@@ -2170,13 +2196,12 @@ fn perform_block_join(ctx: MarkdownContext, cursor_ctx: Option<CursorContext>, b
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_offset,
-        block_has_inline_markup, clamp_to_char_boundary, compute_block_split,
-        compute_post_visible_caret, cursor_within_inline_markup, direct_delete_from_beforeinput,
-        inject_gap_paragraphs,
-        is_latest_revision, next_visible_char_utf16, normalize_cursor_visible_for_edit,
-        previous_visible_char_utf16, select_best_input_projection, snap_cursor_to_block,
-        uses_token_aware_surface,
+        BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_node,
+        adjacent_editable_offset, block_has_inline_markup, clamp_to_char_boundary,
+        compute_block_split, compute_post_visible_caret, cursor_within_inline_markup,
+        direct_delete_from_beforeinput, inject_gap_paragraphs, is_latest_revision,
+        next_visible_char_utf16, normalize_cursor_visible_for_edit, previous_visible_char_utf16,
+        select_best_input_projection, snap_cursor_to_block, uses_token_aware_surface,
     };
     use crate::inline_tokens::{InlineSegment, SegmentKind, TokenizedBlock};
     use crate::types::{NodeType, OwnedAstNode};
@@ -2259,6 +2284,94 @@ mod tests {
 
         let prev = adjacent_editable_offset(&ast, 7, 12, NavDirection::Prev);
         assert_eq!(prev, 4);
+    }
+
+    // ── adjacent_editable_node over the AUGMENTED ast (#75) ──────────
+    //
+    // The vertical-arrow handlers navigate over `inject_gap_paragraphs(...)`
+    // so the synthetic blank-line gap paragraphs are reachable. These guard
+    // that `adjacent_editable_node` lands on the synthetic gap node rather than
+    // skipping over it to the next real block.
+
+    fn augmented_two_paragraphs() -> Vec<OwnedAstNode> {
+        // "Hello\n\nWorld\n": pulldown-cmark absorbs one trailing '\n' into the
+        // first block (0..6), leaving a 1-byte gap (the second '\n') at 6..7.
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6, // "Hello\n"
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 7..13, // "World\n"
+                children: vec![text_node(7, 12, "World")],
+            },
+        ];
+        let augmented = inject_gap_paragraphs(&ast, "Hello\n\nWorld\n");
+        // Sanity: [Hello, <gap 6..7>, World].
+        assert_eq!(augmented.len(), 3);
+        assert_eq!(augmented[1].range, 6..7);
+        assert!(augmented[1].children.is_empty());
+        augmented
+    }
+
+    #[test]
+    fn adjacent_node_next_reaches_synthetic_gap_paragraph() {
+        let augmented = augmented_two_paragraphs();
+        // From the first block (start 0), Next must land on the synthetic gap
+        // paragraph at 6..7, NOT skip ahead to "World" at 7.
+        let target = adjacent_editable_node(&augmented, 0, NavDirection::Next)
+            .expect("a next editable node exists");
+        assert_eq!(target.range, 6..7);
+        assert!(target.children.is_empty());
+    }
+
+    #[test]
+    fn adjacent_node_prev_reaches_synthetic_gap_paragraph() {
+        let augmented = augmented_two_paragraphs();
+        // From "World" (start 7), Prev must land on the synthetic gap paragraph
+        // at 6..7, NOT skip back to "Hello" at 0.
+        let target = adjacent_editable_node(&augmented, 7, NavDirection::Prev)
+            .expect("a prev editable node exists");
+        assert_eq!(target.range, 6..7);
+        assert!(target.children.is_empty());
+    }
+
+    #[test]
+    fn adjacent_node_skips_gap_when_navigating_off_synthetic_node() {
+        // Standing ON the synthetic gap node (start 6): Next reaches "World" (7),
+        // Prev reaches "Hello" (0). Confirms the gap is a first-class waypoint that
+        // arrow keys stop on exactly once in each direction.
+        let augmented = augmented_two_paragraphs();
+        let next = adjacent_editable_node(&augmented, 6, NavDirection::Next)
+            .expect("next exists from gap");
+        assert_eq!(next.range, 7..13);
+        let prev = adjacent_editable_node(&augmented, 6, NavDirection::Prev)
+            .expect("prev exists from gap");
+        assert_eq!(prev.range, 0..6);
+    }
+
+    #[test]
+    fn adjacent_node_non_augmented_ast_skips_gap() {
+        // Contrast: over the RAW (non-augmented) ast there is no node between the
+        // two paragraphs, so Next from "Hello" jumps straight to "World". This is
+        // the pre-#75 behaviour the augmented-ast fix corrects.
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 7..13,
+                children: vec![text_node(7, 12, "World")],
+            },
+        ];
+        let target =
+            adjacent_editable_node(&ast, 0, NavDirection::Next).expect("a next editable node");
+        assert_eq!(target.range, 7..13);
     }
 
     #[test]
