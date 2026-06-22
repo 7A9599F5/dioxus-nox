@@ -432,6 +432,72 @@ fn relative_month_data_attr() {
     assert_eq!(RelativeMonth::Next.as_data_attr(), "next");
 }
 
+// ── pane_relative_month (multi-month pane classification) ───────────
+
+#[test]
+fn pane_relative_month_offset_zero_matches_base() {
+    // Offset 0 is single-month mode: classification must equal classifying
+    // against the base view's own month, byte-for-byte.
+    let range = DateRange::new(date!(2026 - 01 - 01), date!(2026 - 12 - 31));
+    let base = date!(2026 - 04 - 01);
+    for day in 1..=30u8 {
+        let d = date!(2026 - 04 - 01).replace_day(day).unwrap();
+        assert_eq!(
+            pane_relative_month(base, 0, d, range),
+            relative_month(d, base.month(), range),
+            "offset-0 classification diverged from base month for {d}"
+        );
+    }
+}
+
+#[test]
+fn pane_relative_month_offset_one_in_month_is_current() {
+    // Regression for #90: base view March 2026, second pane (offset 1) shows
+    // April. An April date is in-month for that pane and must classify as
+    // Current — the pre-fix path classified it against March and returned Next,
+    // flagging the entire second pane as outside-month.
+    let range = DateRange::new(date!(2026 - 01 - 01), date!(2026 - 12 - 31));
+    let base = date!(2026 - 03 - 01);
+    assert_eq!(
+        pane_relative_month(base, 1, date!(2026 - 04 - 15), range),
+        RelativeMonth::Current
+    );
+    // And the buggy base-month path would have (wrongly) said Next — proving
+    // this test depends on the corrected pane month, not the base month.
+    assert_eq!(
+        relative_month(date!(2026 - 04 - 15), base.month(), range),
+        RelativeMonth::Next
+    );
+}
+
+#[test]
+fn pane_relative_month_offset_one_leading_and_trailing() {
+    // For the offset-1 (April) pane: a trailing March date is Previous, a
+    // leading May date is Next, relative to the pane's own month.
+    let range = DateRange::new(date!(2026 - 01 - 01), date!(2026 - 12 - 31));
+    let base = date!(2026 - 03 - 01);
+    assert_eq!(
+        pane_relative_month(base, 1, date!(2026 - 03 - 31), range),
+        RelativeMonth::Previous
+    );
+    assert_eq!(
+        pane_relative_month(base, 1, date!(2026 - 05 - 01), range),
+        RelativeMonth::Next
+    );
+}
+
+#[test]
+fn pane_relative_month_offset_wraps_year() {
+    // Base December 2026, offset 1 → pane is January 2027. A January 2027 date
+    // is in-month for that pane.
+    let range = DateRange::new(date!(2026 - 01 - 01), date!(2027 - 12 - 31));
+    let base = date!(2026 - 12 - 01);
+    assert_eq!(
+        pane_relative_month(base, 1, date!(2027 - 01 - 15), range),
+        RelativeMonth::Current
+    );
+}
+
 // ── navigate_with (disabled-date skip) ──────────────────────────────
 
 #[test]

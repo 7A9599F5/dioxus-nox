@@ -695,7 +695,10 @@ fn Cell(date: Date) -> Element {
     let is_disabled = base.is_date_disabled(date);
     let is_unavailable = base.is_date_unavailable(date);
     let is_focused = focus.is_focused(date);
-    let rel_month = math::relative_month(date, view.month(), base.enabled_range());
+    // Classify against this pane's month (base view + MonthView offset), not the
+    // base month — otherwise every in-month cell of a non-base pane reads as
+    // outside-month. `view` stays on the base view for the focus fallback below.
+    let rel_month = math::pane_relative_month(view, current_offset(), date, base.enabled_range());
     let is_outside = !rel_month.is_current();
 
     let (is_selected, range_pos) = match selection {

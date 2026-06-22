@@ -113,6 +113,24 @@ pub fn relative_month(
     }
 }
 
+/// Classify a cell's relative month against the month of its own pane.
+///
+/// In a multi-month layout each pane is offset `offset` months ahead of the
+/// base view date. The pane's grid is built from that offset-adjusted month,
+/// so cells must be classified against the same month — not the base month —
+/// or every in-month cell of a non-base pane would read as outside-month.
+pub fn pane_relative_month(
+    base_view: Date,
+    offset: u8,
+    date: Date,
+    enabled_range: DateRange,
+) -> RelativeMonth {
+    let pane_month = nth_month_next(base_view, offset)
+        .unwrap_or(base_view)
+        .month();
+    relative_month(date, pane_month, enabled_range)
+}
+
 // ── Grid generation ─────────────────────────────────────────────────
 
 /// Generate a flat list of dates for a calendar month grid.
