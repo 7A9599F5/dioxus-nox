@@ -728,10 +728,9 @@ fn compute_nested_displacement(
                 .as_ref()
                 .and_then(|src_cid| ctx.find_nested_parent(src_cid))
                 .and_then(|parent_id| {
-                    parent_items
-                        .iter()
-                        .position(|id| id == &parent_id)
-                        .map(|idx| (idx, parent_id))
+                    // Not Option::zip: `parent_id` is needed to compute the position.
+                    let idx = parent_items.iter().position(|id| id == &parent_id)?;
+                    Some((idx, parent_id))
                 });
             if let Some((idx, parent_id)) = nested_source {
                 (Some(idx), ctx.get_zone_size(&parent_id))

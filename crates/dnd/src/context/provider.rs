@@ -439,15 +439,13 @@ pub fn DragContextProvider(props: DragContextProviderProps) -> Element {
                     // Activation: Space/Enter on a focused SortableItem starts
                     // a keyboard drag. This is the single owner of activation —
                     // SortableItem only registers focus, never starts drags.
-                    Key::Character(ref c) if c == " " => {
-                        if start_keyboard_drag_from_focus(context) {
-                            e.prevent_default();
-                        }
+                    Key::Character(ref c)
+                        if c == " " && start_keyboard_drag_from_focus(context) =>
+                    {
+                        e.prevent_default();
                     }
-                    Key::Enter => {
-                        if start_keyboard_drag_from_focus(context) {
-                            e.prevent_default();
-                        }
+                    Key::Enter if start_keyboard_drag_from_focus(context) => {
+                        e.prevent_default();
                     }
                     Key::Escape if context.is_dragging() => {
                         context.cancel_drag();

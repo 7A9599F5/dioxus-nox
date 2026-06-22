@@ -14,13 +14,12 @@ use crate::viewport::ViewportNode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PendingCaretRestore {
+    /// Absolute raw byte offset; remapped to a visible offset through the *current*
+    /// model when the restore runs, so the caret stays in lockstep with marker
+    /// visibility after a reparse.
     Raw(usize),
-    Visible(usize),
     /// Visible UTF-16 offsets for a non-collapsed selection.
-    Selection {
-        start: usize,
-        end: usize,
-    },
+    Selection { start: usize, end: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,6 +67,7 @@ pub fn InlineEditor(
     let parsed = (ctx.parsed_doc)();
     let raw = ctx.raw_value();
     let augmented_ast = inject_gap_paragraphs(&parsed.ast, &raw);
+    let augmented_len = augmented_ast.len();
 
     // Cursor snapping: if cursor is in a gap between blocks, snap to nearest
     use_effect(move || {
@@ -108,8 +108,15 @@ pub fn InlineEditor(
             div {
                 class: "nox-md-viewport",
                 "data-md-viewport": "true",
-                for node in augmented_ast.into_iter() {
+                for (block_idx , node) in augmented_ast.iter().enumerate() {
                     InlineBlockNode {
+                        // Key by block start offset so Dioxus matches blocks by identity,
+                        // not list position. Without this, inserting/removing a synthetic
+                        // gap paragraph shifts positions and grafts the active block's live
+                        // contenteditable (caret/IME) and its `current_len` signal onto a
+                        // different block — corrupting edits.
+                        key: "{node.range.start}",
+                        is_last: block_idx + 1 == augmented_len,
                         node: node.clone(),
                         cursor_offset: cursor_offset,
                         on_active_block_input: on_active_block_input,
@@ -136,10 +143,15 @@ fn is_editable_block(node: &OwnedAstNode) -> bool {
 fn InlineBlockNode(
     node: OwnedAstNode,
     cursor_offset: usize,
+    #[props(default = false)] is_last: bool,
     on_active_block_input: Option<EventHandler<ActiveBlockInputEvent>>,
     on_key_intercept: Option<Callback<String, bool>>,
 ) -> Element {
-    let is_active = cursor_offset >= node.range.start && cursor_offset < node.range.end;
+    // Half-open interval, except the final block is inclusive at its upper bound so
+    // the caret can rest at the very end of a document with no trailing newline
+    // (otherwise no editor renders there and the caret snaps back one char).
+    let is_active = cursor_offset >= node.range.start
+        && (cursor_offset < node.range.end || (is_last && cursor_offset == node.range.end));
     if !is_active {
         return rsx! { InactiveBlockView { node: node } };
     }
@@ -312,7 +324,6 @@ fn TokenAwareBlockEditor(
     let current_len = use_signal(|| safe_end.saturating_sub(safe_start));
     let mut is_composing = use_signal(|| false);
     let mut input_revision = use_signal(|| 0u64);
-    let applied_revision = use_signal(|| 0u64);
     let mut caret_generation = use_signal(|| 0u64);
     let restore_generation = use_signal(|| 0u64);
     let mut pending_restore_raw = use_signal(|| None::<PendingCaretRestore>);
@@ -360,6 +371,9 @@ fn TokenAwareBlockEditor(
                     // Arrow navigation for empty blocks
                     if key == "ArrowUp" || key == "ArrowDown" {
                         evt.prevent_default();
+                        // NOTE (#75): the visual-line sub-issues (multi-line block caret
+                        // trap; soft-wrapped single raw line treated as one visual line)
+                        // remain unaddressed — they need DOM line geometry.
                         if let Some(mut cctx) = cursor_ctx {
                             let parsed = (ctx.parsed_doc)();
                             let raw_nav = ctx.raw_value();
@@ -369,22 +383,36 @@ fn TokenAwareBlockEditor(
                             } else {
                                 NavDirection::Next
                             };
-                            let mut nodes = Vec::new();
-                            collect_editable_nodes(&augmented, &mut nodes);
-                            let target = match direction {
-                                NavDirection::Prev => nodes
-                                    .iter()
-                                    .rev()
-                                    .find(|n| n.range.start < safe_start)
-                                    .map(|n| n.range.start),
-                                NavDirection::Next => nodes
-                                    .iter()
-                                    .find(|n| n.range.start > safe_start)
-                                    .map(|n| n.range.start),
+                            // Preserve goal_column across the empty block, mirroring the
+                            // token handler. An empty block's caret is always at visible
+                            // column 0, so when goal_column is unset we seed it with 0;
+                            // when it is already set (carried in from an earlier block) we
+                            // keep it so the caret lands at that column in the target.
+                            let goal_col = if let Some(nc) = nav_ctx {
+                                if let Some(gc) = (nc.goal_column)() {
+                                    gc
+                                } else {
+                                    let mut gc_sig = nc.goal_column;
+                                    gc_sig.set(Some(0));
+                                    0
+                                }
+                            } else {
+                                0
                             };
-                            if let Some(target_offset) = target {
+                            if let Some(target_node) =
+                                adjacent_editable_node(&augmented, safe_start, direction)
+                            {
+                                let t_start = target_node.range.start.min(raw_nav.len());
+                                let t_end = target_node.range.end.min(raw_nav.len());
+                                let clamped = resolve_visible_column_in_block(
+                                    &target_node,
+                                    &raw_nav,
+                                    t_start,
+                                    t_end,
+                                    goal_col,
+                                );
                                 cctx.cursor_position.set(CursorPosition {
-                                    offset: target_offset,
+                                    offset: clamped,
                                     line: 0,
                                     column: 0,
                                 });
@@ -508,10 +536,6 @@ fn TokenAwareBlockEditor(
                 let v = raw_offset_to_visible_utf16(&model_for_effect, local_raw);
                 interop::caret_adapter().set_contenteditable_selection_js(&block_id_effect, v)
             }
-            PendingCaretRestore::Visible(visible) => {
-                let v = visible.min(utf16_len(&model_for_effect.visible_text));
-                interop::caret_adapter().set_contenteditable_selection_js(&block_id_effect, v)
-            }
             PendingCaretRestore::Selection { start, end } => interop::caret_adapter()
                 .set_contenteditable_selection_range_js(&block_id_effect, start, end),
         };
@@ -589,6 +613,11 @@ fn TokenAwareBlockEditor(
                 }
                 if is_single_line_block && (key == "ArrowUp" || key == "ArrowDown") {
                     evt.prevent_default();
+                    // NOTE (#75): the visual-line sub-issues remain unaddressed here — a
+                    // soft-wrapped single raw line is still treated as one visual line
+                    // (`is_single_line_block`), so ArrowUp/Down jumps to the adjacent
+                    // block instead of the adjacent visual row. That requires DOM line
+                    // geometry and is out of scope for this fix.
                     if let Some(mut cctx) = cursor_ctx {
                         let parsed = (ctx.parsed_doc)();
                         let direction = if key == "ArrowUp" {
@@ -598,6 +627,12 @@ fn TokenAwareBlockEditor(
                         };
                         let block_id_vert = block_id_nav.clone();
                         let raw_vert = ctx.raw_value();
+                        // Navigate over the AUGMENTED AST so synthetic blank-line gap
+                        // paragraphs (from `inject_gap_paragraphs`) are reachable by
+                        // arrow keys — matching the empty-block handler. Navigating the
+                        // raw `parsed.ast` would skip them, jumping over visible blank
+                        // lines that are clickable but otherwise unreachable.
+                        let augmented = inject_gap_paragraphs(&parsed.ast, &raw_vert);
                         spawn(async move {
                             let visible_now = {
                                 let js = interop::caret_adapter()
@@ -620,7 +655,7 @@ fn TokenAwareBlockEditor(
                                 visible_now
                             };
                             if let Some(target_node) = adjacent_editable_node(
-                                &parsed.ast,
+                                &augmented,
                                 safe_start,
                                 direction,
                             ) {
@@ -721,7 +756,6 @@ fn TokenAwareBlockEditor(
                     handler,
                     next_revision,
                     input_revision,
-                    applied_revision,
                     pending_restore_raw,
                 );
             },
@@ -756,7 +790,6 @@ fn TokenAwareBlockEditor(
                     handler,
                     next_revision,
                     input_revision,
-                    applied_revision,
                     pending_restore_raw,
                 );
             },
@@ -1008,10 +1041,15 @@ fn spawn_token_editor_sync(
     handler: Option<EventHandler<ActiveBlockInputEvent>>,
     captured_revision: u64,
     latest_revision: Signal<u64>,
-    mut applied_revision: Signal<u64>,
     mut pending_restore: Signal<Option<PendingCaretRestore>>,
 ) {
     spawn(async move {
+        // Early bail: if a newer oninput already superseded us, stop before issuing
+        // any DOM reads. The beforeinput metadata read below is non-destructive, so a
+        // stale sync that slips past here cannot starve the latest sync of its meta.
+        if *latest_revision.read() != captured_revision {
+            return;
+        }
         let new_visible = {
             let js = interop::caret_adapter().read_contenteditable_text_js(&block_id);
             let mut eval = interop::start_eval(&js);
@@ -1053,6 +1091,12 @@ fn spawn_token_editor_sync(
             && let Some((raw_del_start, raw_del_end, new_cursor_vis)) =
                 direct_delete_from_beforeinput(meta, &model, &block_raw_current)
         {
+            // Floor to char boundaries: the delete range is derived from the
+            // render-time model, which may disagree with the live `block_raw_current`
+            // around multi-byte characters.
+            let raw_del_start = clamp_to_char_boundary(&block_raw_current, raw_del_start);
+            let raw_del_end =
+                clamp_to_char_boundary(&block_raw_current, raw_del_end).max(raw_del_start);
             let rebuilt_local = format!(
                 "{}{}",
                 &block_raw_current[..raw_del_start],
@@ -1067,7 +1111,6 @@ fn spawn_token_editor_sync(
             len_sig.set(rebuilt_local.len());
             ctx.handle_value_change(rebuilt_global.clone());
             ctx.trigger_parse.call(());
-            applied_revision.set(captured_revision);
 
             let raw_cursor_local = raw_del_start.min(last_caret_offset(&(0..rebuilt_local.len())));
 
@@ -1078,7 +1121,14 @@ fn spawn_token_editor_sync(
                     column: 0,
                 });
             }
-            pending_restore.set(Some(PendingCaretRestore::Visible(new_cursor_vis)));
+            // Restore by RAW offset, not a visible offset captured in the pre-edit
+            // model's coordinate space: after reparse the marker visibility can
+            // change, so a stale visible offset drifts the caret (and compounds on
+            // the next keystroke). The restore effect remaps this through the fresh
+            // model. `new_cursor_vis` is still reported to the handler below.
+            pending_restore.set(Some(PendingCaretRestore::Raw(
+                start.saturating_add(raw_cursor_local),
+            )));
 
             if let Some(handler) = handler {
                 let mut fresh_node = node_local.clone();
@@ -1160,10 +1210,18 @@ fn spawn_token_editor_sync(
             cursor_visible_utf16,
             utf16_len(&new_visible),
         );
-        let old_raw_start = visible_utf16_to_raw_offset(selected_model, edit.old_start_utf16)
-            .min(block_raw_current.len());
-        let old_raw_end = visible_utf16_to_raw_offset(selected_model, edit.old_end_utf16)
-            .min(block_raw_current.len());
+        // Floor to char boundaries: `selected_model` may be the render-time model,
+        // whose `raw_text` can disagree with the live `block_raw_current` around
+        // multi-byte characters; slicing at a non-boundary would panic.
+        let old_raw_start = clamp_to_char_boundary(
+            &block_raw_current,
+            visible_utf16_to_raw_offset(selected_model, edit.old_start_utf16),
+        );
+        let old_raw_end = clamp_to_char_boundary(
+            &block_raw_current,
+            visible_utf16_to_raw_offset(selected_model, edit.old_end_utf16),
+        )
+        .max(old_raw_start);
         let rebuilt_local = format!(
             "{}{}{}",
             &block_raw_current[..old_raw_start],
@@ -1179,7 +1237,6 @@ fn spawn_token_editor_sync(
         len_sig.set(rebuilt_local.len());
         ctx.handle_value_change(rebuilt_global.clone());
         ctx.trigger_parse.call(());
-        applied_revision.set(captured_revision);
 
         let raw_cursor_local = cursor_after_visible_edit(
             selected_model,
@@ -1197,7 +1254,13 @@ fn spawn_token_editor_sync(
                 column: 0,
             });
         }
-        pending_restore.set(Some(PendingCaretRestore::Visible(effective_cursor_visible)));
+        // Restore by RAW offset (remapped through the fresh model by the restore
+        // effect) rather than a visible offset in the pre-edit model's space, which
+        // drifts when marker visibility changes on reparse. `effective_cursor_visible`
+        // is still reported to the handler below.
+        pending_restore.set(Some(PendingCaretRestore::Raw(
+            start.saturating_add(raw_cursor_local),
+        )));
 
         if let Some(handler) = handler {
             let mut fresh_node = node_local.clone();
@@ -1395,7 +1458,6 @@ fn ActiveBlockEditor(
             },
             onmounted: move |_| {
                 let js = interop::caret_adapter().mount_active_textarea_js(&block_id_mount, target_cursor);
-                let mut len_sig = current_len;
                 if let Some(mut cctx) = cursor_ctx {
                     spawn(async move {
                         let mut eval = interop::start_eval(&js);
@@ -1434,23 +1496,9 @@ fn ActiveBlockEditor(
                                 perform_block_join(ctx, Some(cctx), safe_start);
                                 continue;
                             }
-                            if let Some(rest) = msg.strip_prefix("split:")
-                                && let Ok(split_utf16) = rest.parse::<usize>()
-                            {
-                                let current_global = ctx.raw_value();
-                                let start = safe_start.min(current_global.len());
-                                let old_len = *len_sig.read();
-                                let end = (start + old_len).min(current_global.len());
-                                let block = &current_global[start..end];
-                                let split_byte = utf16_to_byte_index(block, split_utf16).unwrap_or(block.len());
-                                perform_block_split(
-                                    ctx,
-                                    Some(cctx),
-                                    safe_start,
-                                    &mut len_sig,
-                                    split_byte,
-                                );
-                            }
+                            // Enter is not intercepted for code blocks (see
+                            // mount_active_textarea_js): it inserts a literal newline,
+                            // so no "split:" message is dispatched here.
                         }
                     });
                 } else {
@@ -1635,6 +1683,20 @@ fn is_navigation_key(key: &str) -> bool {
 
 fn utf16_len(s: &str) -> usize {
     s.chars().map(char::len_utf16).sum()
+}
+
+/// Clamp a byte offset to a valid UTF-8 char boundary of `s` (flooring).
+///
+/// Offsets mapped through a possibly-stale `TokenizedBlock` model can land in the
+/// middle of a multi-byte char when the model's `raw_text` differs from the string
+/// actually being sliced; slicing there would panic. This floors to the nearest
+/// preceding char boundary so the splice is always valid.
+fn clamp_to_char_boundary(s: &str, idx: usize) -> usize {
+    let mut idx = idx.min(s.len());
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
 }
 
 fn is_latest_revision(captured: u64, latest: u64) -> bool {
@@ -1966,35 +2028,37 @@ pub(crate) fn inject_gap_paragraphs(ast: &[OwnedAstNode], raw: &str) -> Vec<Owne
         let gap_start = prev_end;
         let gap_end = node.range.start;
         if gap_start < gap_end {
-            let gap_bytes = &raw[gap_start..gap_end];
-            // Every `\n` in the gap becomes a synthetic empty paragraph.
-            // Standard `\n\n` separator → 1 synthetic node (visible blank line).
-            let newline_count = gap_bytes.bytes().filter(|&b| b == b'\n').count();
-            for i in 0..newline_count {
-                let byte_pos = gap_start + i;
-                result.push(OwnedAstNode {
-                    node_type: NodeType::Paragraph,
-                    range: byte_pos..byte_pos + 1,
-                    children: vec![],
-                });
+            // Every `\n` in the gap becomes a synthetic empty paragraph, placed at the
+            // newline's ACTUAL byte offset. Using the filtered-newline index as the
+            // position is wrong whenever the gap also contains non-newline bytes (e.g.
+            // a blank line with trailing spaces), producing a synthetic node over the
+            // wrong byte. Standard `\n\n` separator → 1 synthetic node (visible blank line).
+            for (offset, &b) in raw.as_bytes()[gap_start..gap_end].iter().enumerate() {
+                if b == b'\n' {
+                    let byte_pos = gap_start + offset;
+                    result.push(OwnedAstNode {
+                        node_type: NodeType::Paragraph,
+                        range: byte_pos..byte_pos + 1,
+                        children: vec![],
+                    });
+                }
             }
         }
         result.push(node.clone());
         prev_end = node.range.end;
     }
 
-    // Trailing gap: after the last block
+    // Trailing gap: after the last block — same actual-byte-offset rule.
     if prev_end < raw.len() {
-        let trailing = &raw[prev_end..];
-        let newline_count = trailing.bytes().filter(|&b| b == b'\n').count();
-        // Every `\n` in the trailing gap becomes a synthetic node
-        for i in 0..newline_count {
-            let byte_pos = prev_end + i;
-            result.push(OwnedAstNode {
-                node_type: NodeType::Paragraph,
-                range: byte_pos..byte_pos + 1,
-                children: vec![],
-            });
+        for (offset, &b) in raw.as_bytes()[prev_end..].iter().enumerate() {
+            if b == b'\n' {
+                let byte_pos = prev_end + offset;
+                result.push(OwnedAstNode {
+                    node_type: NodeType::Paragraph,
+                    range: byte_pos..byte_pos + 1,
+                    children: vec![],
+                });
+            }
         }
     }
 
@@ -2024,17 +2088,52 @@ pub(crate) fn snap_cursor_to_block(ast: &[OwnedAstNode], cursor: usize) -> usize
     // Past all blocks — snap to last block's range
     let last = &ast[ast.len() - 1];
     if last.range.end > last.range.start {
-        last.range.end.saturating_sub(1)
+        // The caret exactly at the last block's end is a valid end-of-document
+        // position (the block editor trims any trailing newline itself); keep it so
+        // it stays usable. Only step back off a trailing newline when the cursor is
+        // genuinely beyond the document.
+        if cursor == last.range.end {
+            cursor
+        } else {
+            last.range.end.saturating_sub(1)
+        }
     } else {
         last.range.start
     }
 }
 
-/// Perform a block split: insert `\n\n` at the cursor position within a block.
+/// Pure logic for splitting a block at `split_byte` (offset within the block).
 ///
-/// Shared between `TokenAwareBlockEditor` (Enter key) and `ActiveBlockEditor`
-/// (textarea split message). Updates raw content, triggers reparse, and sets
-/// cursor to the start of the new paragraph.
+/// Returns `(rebuilt_global, new_left_len, cursor_offset)`. Inserts a paragraph
+/// break at the split point. When splitting at the very END of a block that is
+/// already followed by a blank-line gap (`after` begins with `\n`), inserts a
+/// single `\n` instead of `\n\n` — otherwise the block's own trailing newline plus
+/// the inserted pair stack into 3-4 consecutive newlines and the gap grows on every
+/// Enter-at-block-end.
+fn compute_block_split(
+    global: &str,
+    start: usize,
+    end: usize,
+    split_byte: usize,
+) -> (String, usize, usize) {
+    let before = &global[..start];
+    let block = &global[start..end];
+    let after = &global[end..];
+    let split_at = clamp_to_char_boundary(block, split_byte.min(block.len()));
+    let left = &block[..split_at];
+    let right = &block[split_at..];
+    let sep: &str = if right.is_empty() && after.starts_with('\n') {
+        "\n"
+    } else {
+        "\n\n"
+    };
+    let rebuilt = format!("{before}{left}{sep}{right}{after}");
+    (rebuilt, left.len(), start + split_at + sep.len())
+}
+
+/// Apply a block split via [`compute_block_split`]: rewrite the raw content,
+/// trigger a reparse, update the block length signal, and move the cursor to the
+/// start of the new paragraph.
 fn perform_block_split(
     ctx: MarkdownContext,
     cursor_ctx: Option<CursorContext>,
@@ -2046,19 +2145,14 @@ fn perform_block_split(
     let start = safe_start.min(current_global.len());
     let old_len = *len_sig.read();
     let end = (start + old_len).min(current_global.len());
-    let before = &current_global[..start];
-    let block = &current_global[start..end];
-    let after = &current_global[end..];
-    let split_at = split_byte.min(block.len());
-    let left = &block[..split_at];
-    let right = &block[split_at..];
-    let rebuilt = format!("{before}{left}\n\n{right}{after}");
+    let (rebuilt, left_len, cursor_offset) =
+        compute_block_split(&current_global, start, end, split_byte);
     ctx.handle_value_change(rebuilt);
     ctx.trigger_parse.call(());
-    len_sig.set(left.len());
+    len_sig.set(left_len);
     if let Some(mut cctx) = cursor_ctx {
         cctx.cursor_position.set(CursorPosition {
-            offset: start + split_at + 2,
+            offset: cursor_offset,
             line: 0,
             column: 0,
         });
@@ -2099,8 +2193,9 @@ fn perform_block_join(ctx: MarkdownContext, cursor_ctx: Option<CursorContext>, b
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_offset,
-        block_has_inline_markup, compute_post_visible_caret, cursor_within_inline_markup,
+        BeforeInputMeta, NavDirection, VisibleEdit, adjacent_editable_node,
+        adjacent_editable_offset, block_has_inline_markup, clamp_to_char_boundary,
+        compute_block_split, compute_post_visible_caret, cursor_within_inline_markup,
         direct_delete_from_beforeinput, inject_gap_paragraphs, is_latest_revision,
         next_visible_char_utf16, normalize_cursor_visible_for_edit, previous_visible_char_utf16,
         select_best_input_projection, snap_cursor_to_block, uses_token_aware_surface,
@@ -2186,6 +2281,94 @@ mod tests {
 
         let prev = adjacent_editable_offset(&ast, 7, 12, NavDirection::Prev);
         assert_eq!(prev, 4);
+    }
+
+    // ── adjacent_editable_node over the AUGMENTED ast (#75) ──────────
+    //
+    // The vertical-arrow handlers navigate over `inject_gap_paragraphs(...)`
+    // so the synthetic blank-line gap paragraphs are reachable. These guard
+    // that `adjacent_editable_node` lands on the synthetic gap node rather than
+    // skipping over it to the next real block.
+
+    fn augmented_two_paragraphs() -> Vec<OwnedAstNode> {
+        // "Hello\n\nWorld\n": pulldown-cmark absorbs one trailing '\n' into the
+        // first block (0..6), leaving a 1-byte gap (the second '\n') at 6..7.
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6, // "Hello\n"
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 7..13, // "World\n"
+                children: vec![text_node(7, 12, "World")],
+            },
+        ];
+        let augmented = inject_gap_paragraphs(&ast, "Hello\n\nWorld\n");
+        // Sanity: [Hello, <gap 6..7>, World].
+        assert_eq!(augmented.len(), 3);
+        assert_eq!(augmented[1].range, 6..7);
+        assert!(augmented[1].children.is_empty());
+        augmented
+    }
+
+    #[test]
+    fn adjacent_node_next_reaches_synthetic_gap_paragraph() {
+        let augmented = augmented_two_paragraphs();
+        // From the first block (start 0), Next must land on the synthetic gap
+        // paragraph at 6..7, NOT skip ahead to "World" at 7.
+        let target = adjacent_editable_node(&augmented, 0, NavDirection::Next)
+            .expect("a next editable node exists");
+        assert_eq!(target.range, 6..7);
+        assert!(target.children.is_empty());
+    }
+
+    #[test]
+    fn adjacent_node_prev_reaches_synthetic_gap_paragraph() {
+        let augmented = augmented_two_paragraphs();
+        // From "World" (start 7), Prev must land on the synthetic gap paragraph
+        // at 6..7, NOT skip back to "Hello" at 0.
+        let target = adjacent_editable_node(&augmented, 7, NavDirection::Prev)
+            .expect("a prev editable node exists");
+        assert_eq!(target.range, 6..7);
+        assert!(target.children.is_empty());
+    }
+
+    #[test]
+    fn adjacent_node_skips_gap_when_navigating_off_synthetic_node() {
+        // Standing ON the synthetic gap node (start 6): Next reaches "World" (7),
+        // Prev reaches "Hello" (0). Confirms the gap is a first-class waypoint that
+        // arrow keys stop on exactly once in each direction.
+        let augmented = augmented_two_paragraphs();
+        let next = adjacent_editable_node(&augmented, 6, NavDirection::Next)
+            .expect("next exists from gap");
+        assert_eq!(next.range, 7..13);
+        let prev = adjacent_editable_node(&augmented, 6, NavDirection::Prev)
+            .expect("prev exists from gap");
+        assert_eq!(prev.range, 0..6);
+    }
+
+    #[test]
+    fn adjacent_node_non_augmented_ast_skips_gap() {
+        // Contrast: over the RAW (non-augmented) ast there is no node between the
+        // two paragraphs, so Next from "Hello" jumps straight to "World". This is
+        // the pre-#75 behaviour the augmented-ast fix corrects.
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..6,
+                children: vec![text_node(0, 5, "Hello")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 7..13,
+                children: vec![text_node(7, 12, "World")],
+            },
+        ];
+        let target =
+            adjacent_editable_node(&ast, 0, NavDirection::Next).expect("a next editable node");
+        assert_eq!(target.range, 7..13);
     }
 
     #[test]
@@ -2361,6 +2544,74 @@ mod tests {
     }
 
     #[test]
+    fn inject_gap_paragraphs_places_node_at_actual_newline_byte() {
+        // Gap with a blank line carrying trailing spaces: "A\n   \nB".
+        // The single gap newline sits at byte 5 (after "A\n   "), NOT at the
+        // filtered-newline index 2. The synthetic node must land on byte 5.
+        let ast = vec![
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 0..2, // "A\n"
+                children: vec![text_node(0, 1, "A")],
+            },
+            OwnedAstNode {
+                node_type: NodeType::Paragraph,
+                range: 6..7, // "B"
+                children: vec![text_node(6, 7, "B")],
+            },
+        ];
+        let raw = "A\n   \nB";
+        let result = inject_gap_paragraphs(&ast, raw);
+        // Gap is raw[2..6] = "   \n" → one newline at absolute byte 5.
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].range, 0..2);
+        assert_eq!(result[1].range, 5..6); // synthetic at the real '\n', not 2..3
+        assert_eq!(result[2].range, 6..7);
+    }
+
+    #[test]
+    fn compute_block_split_midblock_inserts_paragraph_break() {
+        // "HelloWorld" split at 5 → two paragraphs, cursor at start of "World".
+        let (rebuilt, left_len, cursor) = compute_block_split("HelloWorld", 0, 10, 5);
+        assert_eq!(rebuilt, "Hello\n\nWorld");
+        assert_eq!(left_len, 5);
+        assert_eq!(cursor, 7);
+    }
+
+    #[test]
+    fn compute_block_split_at_end_before_gap_avoids_triple_newline() {
+        // "Hello\n\nWorld": block "Hello" is bytes 0..5 (trimmed), so `after`
+        // ("\n\nWorld") already starts with the block's trailing newline. Splitting
+        // at the end must insert ONE newline, not "\n\n" (which would stack to 4).
+        let (rebuilt, left_len, cursor) = compute_block_split("Hello\n\nWorld", 0, 5, 5);
+        assert_eq!(rebuilt, "Hello\n\n\nWorld");
+        assert!(!rebuilt.contains("\n\n\n\n"));
+        assert_eq!(left_len, 5);
+        assert_eq!(cursor, 6); // lands in the new blank paragraph
+    }
+
+    #[test]
+    fn compute_block_split_at_end_of_last_block_uses_full_break() {
+        // Last block, no following gap → "\n\n" so a new empty paragraph is created.
+        let (rebuilt, _left, cursor) = compute_block_split("Hello", 0, 5, 5);
+        assert_eq!(rebuilt, "Hello\n\n");
+        assert_eq!(cursor, 7);
+    }
+
+    #[test]
+    fn clamp_to_char_boundary_floors_into_multibyte_char() {
+        let s = "a😀b"; // 'a'=1 byte, '😀'=4 bytes (1..5), 'b'=1 byte (5..6)
+        assert_eq!(clamp_to_char_boundary(s, 0), 0);
+        assert_eq!(clamp_to_char_boundary(s, 1), 1); // boundary before emoji
+        assert_eq!(clamp_to_char_boundary(s, 2), 1); // mid-emoji → floor to 1
+        assert_eq!(clamp_to_char_boundary(s, 3), 1);
+        assert_eq!(clamp_to_char_boundary(s, 4), 1);
+        assert_eq!(clamp_to_char_boundary(s, 5), 5); // boundary after emoji
+        assert_eq!(clamp_to_char_boundary(s, 6), 6); // end
+        assert_eq!(clamp_to_char_boundary(s, 99), 6); // past end → len
+    }
+
+    #[test]
     fn inject_gap_paragraphs_multiple_extra_blank_lines() {
         // "Hello\n\n\n\nWorld\n" — gap is 3 bytes ("\n\n\n"),
         // 3 newlines in gap → 3 synthetic nodes (loop 0..3)
@@ -2470,6 +2721,10 @@ mod tests {
         ];
         // Cursor at 20 is past all blocks, snaps to last block end - 1
         assert_eq!(snap_cursor_to_block(&ast, 20), 13);
+        // Cursor EXACTLY at the last block's end is a valid end-of-document caret
+        // (e.g. a document with no trailing newline) and must be preserved, not
+        // pulled back to end-1.
+        assert_eq!(snap_cursor_to_block(&ast, 14), 14);
     }
 
     #[test]

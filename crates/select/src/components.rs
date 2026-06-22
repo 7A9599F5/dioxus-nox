@@ -217,17 +217,13 @@ pub fn Trigger(
                 }
                 ctx.highlight_last();
             }
-            Key::Escape => {
-                if was_open {
-                    event.prevent_default();
-                    ctx.set_open(false);
-                }
+            Key::Escape if was_open => {
+                event.prevent_default();
+                ctx.set_open(false);
             }
-            Key::Tab => {
-                // Close on Tab (do NOT prevent default — let focus move)
-                if was_open {
-                    ctx.confirm_highlighted();
-                }
+            // Close on Tab (do NOT prevent default — let focus move)
+            Key::Tab if was_open => {
+                ctx.confirm_highlighted();
             }
             // Type-ahead for printable characters
             Key::Character(ref c) if c != " " => {
@@ -428,29 +424,21 @@ pub fn Input(
                     ctx.highlight_next();
                 }
             }
-            Key::ArrowUp => {
-                if was_open {
-                    event.prevent_default();
-                    ctx.highlight_prev();
-                }
+            Key::ArrowUp if was_open => {
+                event.prevent_default();
+                ctx.highlight_prev();
             }
-            Key::Enter => {
-                if was_open && ctx.highlighted.read().is_some() {
-                    event.prevent_default();
-                    ctx.confirm_highlighted();
-                }
+            Key::Enter if was_open && ctx.highlighted.read().is_some() => {
+                event.prevent_default();
+                ctx.confirm_highlighted();
             }
-            Key::Escape => {
-                if was_open {
-                    event.prevent_default();
-                    ctx.set_open(false);
-                }
+            Key::Escape if was_open => {
+                event.prevent_default();
+                ctx.set_open(false);
             }
             // Home/End: let the input handle cursor movement (no preventDefault)
-            Key::Tab => {
-                if was_open {
-                    ctx.set_open(false);
-                }
+            Key::Tab if was_open => {
+                ctx.set_open(false);
             }
             _ => {}
         }

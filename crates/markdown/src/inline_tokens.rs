@@ -376,13 +376,24 @@ fn block_prefix_range(node: &OwnedAstNode, raw: &str) -> Option<Range<usize>> {
 }
 
 fn heading_prefix_len(raw: &str) -> usize {
+    // Prefix = optional indentation + the `#` marker run + one separating space run.
+    // It must NOT swallow content that merely starts with `#` (e.g. `# #tag` is an
+    // h1 whose content is `#tag`, so the prefix is just `# `).
+    let bytes = raw.as_bytes();
     let mut idx = 0usize;
-    for ch in raw.chars() {
-        if ch == '#' || ch == ' ' {
-            idx += ch.len_utf8();
-        } else {
-            break;
-        }
+    while idx < bytes.len() && bytes[idx] == b' ' {
+        idx += 1;
+    }
+    let mut saw_hash = false;
+    while idx < bytes.len() && bytes[idx] == b'#' {
+        idx += 1;
+        saw_hash = true;
+    }
+    if !saw_hash {
+        return 0;
+    }
+    while idx < bytes.len() && bytes[idx] == b' ' {
+        idx += 1;
     }
     idx
 }
@@ -400,23 +411,33 @@ fn blockquote_prefix_len(raw: &str) -> usize {
 }
 
 fn list_prefix_len(raw: &str) -> usize {
+    // Prefix = optional indentation + a bullet (`-`/`*`/`+`) or an ordered marker
+    // (digits + `.`/`)`) + one required separating space. It must NOT swallow
+    // content such as a task checkbox `[x]` or a bracketed link — `- [x] done`
+    // has prefix `- ` and content `[x] done`, not `- [`.
     let bytes = raw.as_bytes();
     let mut idx = 0usize;
-    while idx < bytes.len() {
-        let b = bytes[idx];
-        let is_prefix = b == b'-'
-            || b == b'*'
-            || b == b'+'
-            || b == b'['
-            || b == b']'
-            || b == b' '
-            || b == b'.'
-            || (b as char).is_ascii_digit();
-        if is_prefix {
+    while idx < bytes.len() && bytes[idx] == b' ' {
+        idx += 1;
+    }
+    if idx < bytes.len() && matches!(bytes[idx], b'-' | b'*' | b'+') {
+        idx += 1;
+    } else {
+        let digits_start = idx;
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
             idx += 1;
-        } else {
-            break;
         }
+        if idx == digits_start || idx >= bytes.len() || !matches!(bytes[idx], b'.' | b')') {
+            return 0;
+        }
+        idx += 1; // the `.` or `)`
+    }
+    let after_marker = idx;
+    while idx < bytes.len() && bytes[idx] == b' ' {
+        idx += 1;
+    }
+    if idx == after_marker {
+        return 0; // a list marker requires a following space
     }
     idx
 }
@@ -467,6 +488,47 @@ mod tests {
         let raw = "- hello world";
         let markers = collect_marker_tokens(&node, raw, 0);
         assert!(!markers.is_empty());
+        assert_eq!(markers[0].kind, MarkerKind::BlockPrefix);
+        assert_eq!(markers[0].raw_range, 0..2);
+    }
+
+    #[test]
+    fn list_prefix_does_not_swallow_task_checkbox() {
+        // `- [x] done` — the prefix is `- `, NOT `- [` (the checkbox is content).
+        let node = OwnedAstNode {
+            node_type: NodeType::Item,
+            range: 0..10,
+            children: vec![text_node(2, 10, "[x] done")],
+        };
+        let raw = "- [x] done";
+        let markers = collect_marker_tokens(&node, raw, 0);
+        assert_eq!(markers[0].kind, MarkerKind::BlockPrefix);
+        assert_eq!(markers[0].raw_range, 0..2);
+    }
+
+    #[test]
+    fn ordered_list_prefix_is_marker_plus_space() {
+        let node = OwnedAstNode {
+            node_type: NodeType::Item,
+            range: 0..9,
+            children: vec![text_node(3, 9, "item")],
+        };
+        let raw = "12. item";
+        let markers = collect_marker_tokens(&node, raw, 0);
+        assert_eq!(markers[0].kind, MarkerKind::BlockPrefix);
+        assert_eq!(markers[0].raw_range, 0..4); // "12. "
+    }
+
+    #[test]
+    fn heading_prefix_does_not_swallow_content_hash() {
+        // `# #tag` — h1 whose content is `#tag`; the prefix is `# ` (len 2).
+        let node = OwnedAstNode {
+            node_type: NodeType::Heading(1),
+            range: 0..6,
+            children: vec![text_node(2, 6, "#tag")],
+        };
+        let raw = "# #tag";
+        let markers = collect_marker_tokens(&node, raw, 0);
         assert_eq!(markers[0].kind, MarkerKind::BlockPrefix);
         assert_eq!(markers[0].raw_range, 0..2);
     }

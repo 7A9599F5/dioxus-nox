@@ -56,12 +56,8 @@ pub(crate) fn compute_displacement_offset(
             }
         }
         // Drag out: source here, target elsewhere/none
-        (Some(src), None) => {
-            if my_idx >= src {
-                -dragged_size // Shift up/left to fill gap
-            } else {
-                0.0
-            }
+        (Some(src), None) if my_idx >= src => {
+            -dragged_size // Shift up/left to fill gap
         }
         // Drag in: source elsewhere, target here
         (None, Some(tgt)) => {

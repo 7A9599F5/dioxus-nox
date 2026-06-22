@@ -337,11 +337,9 @@ pub fn DropZone(props: DropZoneProps) -> Element {
                     on_drop.call(event);
                 }
             }
-            Key::Escape => {
-                if dragging {
-                    ctx.cancel_drag();
-                    e.prevent_default();
-                }
+            Key::Escape if dragging => {
+                ctx.cancel_drag();
+                e.prevent_default();
             }
             _ => {}
         }

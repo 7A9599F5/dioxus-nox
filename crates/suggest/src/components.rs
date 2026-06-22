@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
@@ -160,9 +161,49 @@ pub fn Trigger(
 ) -> Element {
     let ctx = use_context::<TriggerContext>();
 
+    // Generation counter that the detection effect ALWAYS reads first, so it
+    // retains at least one signal subscription even while `external_input` is
+    // `None`. Without this, the `None`-branch early-return below would leave the
+    // effect with zero subscriptions; when the prop later flips `None -> Some`
+    // (e.g. editor mode switch Inline -> Source -> Inline), Dioxus 0.7's effect
+    // scheduler has nothing to invalidate and the effect never re-runs, so
+    // trigger detection silently dies until reload. Bumping this counter on every
+    // `None <-> Some` transition (see below) gives the scheduler a subscription to
+    // invalidate, forcing the effect to re-run and rebind to the new prop.
+    let detect_gen: Signal<u64> = use_signal(|| 0);
+
+    // Previous `external_input.is_some()` value, tracked via a plain Cell so the
+    // transition check in the render body adds no extra reactive subscription
+    // (workspace gotcha: "Signal transition detection -> Rc<Cell<_>> via use_hook").
+    let prev_external_some: Rc<Cell<bool>> =
+        use_hook(|| Rc::new(Cell::new(external_input.is_some())));
+
+    // The component body re-renders whenever the `external_input` prop changes
+    // (props are PartialEq-compared). On a `None <-> Some` flip we bump
+    // `detect_gen` to re-run the detection effect. The bump is deferred to a
+    // spawned task rather than written here directly: a bare signal `.set()` in
+    // the render body is the AP-3 anti-pattern. Since the body never *reads*
+    // `detect_gen`, the bump only invalidates the detection effect's reactive
+    // context, never this component's — so it cannot re-render the body and
+    // cannot re-enter this transition check. The Cell is updated synchronously,
+    // so even a redundant re-render would not bump again. This provably cannot
+    // loop.
+    let current_external_some = external_input.is_some();
+    if current_external_some != prev_external_some.get() {
+        prev_external_some.set(current_external_some);
+        let mut g = detect_gen;
+        spawn(async move {
+            let next = g.peek().wrapping_add(1);
+            g.set(next);
+        });
+    }
+
     // Reactive trigger detection from external signal (contenteditable / InlineEditor).
     // Hook is always called unconditionally; Option guard is inside.
     use_effect(move || {
+        // Subscribe to `detect_gen` BEFORE the `None` early-return so the effect
+        // always has at least one subscription to invalidate (Dioxus 0.7 gotcha).
+        let _gen = detect_gen();
         let Some(ext) = external_input else { return };
         let (text, cursor_utf16) = (ext)();
         let configs = ctx.trigger_configs.read().clone();
@@ -284,11 +325,9 @@ pub fn Trigger(
                         e.prevent_default();
                         ctx.select_prev();
                     }
-                    "Enter" => {
-                        if ctx.highlighted_index.read().is_some() {
-                            e.prevent_default();
-                            ctx.confirm_selection();
-                        }
+                    "Enter" if ctx.highlighted_index.read().is_some() => {
+                        e.prevent_default();
+                        ctx.confirm_selection();
                     }
                     "Escape" | "Tab" => {
                         ctx.close();

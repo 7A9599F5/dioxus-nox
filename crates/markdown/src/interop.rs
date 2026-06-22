@@ -122,12 +122,10 @@ impl CaretAdapter for WebviewCaretAdapter {
                         e.preventDefault();
                         dioxus.send("backjoin");
                     }}
-                }} else if (e.key === 'Enter') {{
-                    if (!e.shiftKey) {{
-                        e.preventDefault();
-                        dioxus.send("split:" + (el.selectionStart ?? 0));
-                    }}
                 }}
+                // Enter is intentionally NOT intercepted: this textarea backs a fenced
+                // code block, where Enter must insert a literal newline within the block
+                // (native textarea behavior), not split it into two paragraphs.
             }});
             el._noxTraversalBound = true;
         }}
@@ -176,17 +174,26 @@ impl CaretAdapter for WebviewCaretAdapter {
         dioxus.send("");
         return;
     }}
-    var meta = root._noxBeforeInputMeta;
-    root._noxBeforeInputMeta = null;
-    dioxus.send(meta);
+    // Non-destructive: do NOT null the slot here. Each `beforeinput` overwrites it,
+    // so the slot always reflects the latest edit; reading it destructively let a
+    // stale (superseded) sync consume the metadata before the surviving latest sync
+    // could read it, which dropped the latest edit onto the lossy diff fallback.
+    dioxus.send(root._noxBeforeInputMeta);
 }})();"#
         )
     }
 
     fn read_contenteditable_text_js(&self, block_id: &str) -> String {
+        // Use `textContent`, not `innerText`: every caret/selection offset in this
+        // module is measured with `range.toString().length` / `node.nodeValue.length`,
+        // which share `textContent` semantics. `innerText` is layout-aware (collapses
+        // whitespace, emits "\n" for <br>/block boundaries, forces reflow) and would
+        // put the text read in a different coordinate space than the offsets, corrupting
+        // edit reconstruction. Hidden markers are excluded from the rendered DOM, so
+        // `textContent` equals the model's `visible_text`.
         format!(
             "var el = document.getElementById('{block_id}');\
-             if(el) dioxus.send(el.innerText ?? '');\
+             if(el) dioxus.send(el.textContent ?? '');\
              else dioxus.send('');"
         )
     }
