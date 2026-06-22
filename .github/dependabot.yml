@@ -4,6 +4,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # keyboard-types is held at 0.7 to match the version Dioxus 0.7.x re-exports
+    # for its event Key/Modifiers types. Bumping to 0.8 pulls a second, incompatible
+    # keyboard-types into the tree (ambiguous imports, restructured Key enum). Revisit
+    # once Dioxus itself moves to keyboard-types 0.8.
+    ignore:
+      - dependency-name: "keyboard-types"
+        versions: ["0.8.x"]
     groups:
       rust-dependencies:
         patterns:
