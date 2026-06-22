@@ -1809,7 +1809,8 @@ mod sec_003_escape_tests {
 // ============================================================
 #[cfg(test)]
 mod gap_001_utf16_tests {
-    use crate::components::{detect_slash_trigger, utf16_to_byte_index};
+    use crate::components::detect_slash_trigger;
+    use crate::inline_tokens::utf16_to_byte_index;
 
     #[test]
     fn utf16_ascii_cursor() {

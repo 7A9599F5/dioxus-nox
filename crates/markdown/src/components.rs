@@ -12,6 +12,7 @@ use crate::hooks::{
     wrap_selection_js,
 };
 use crate::inline_editor::InlineEditor;
+use crate::inline_tokens::utf16_to_byte_index;
 use crate::interop;
 use crate::types::{
     ActiveBlockInputEvent, CursorPosition, HtmlRenderPolicy, Layout, LivePreviewVariant, Mode,
@@ -974,27 +975,6 @@ fn render_editor_gutter(gutter_id: String, line_count: usize) -> Element {
                 div { "data-md-line-number": "{i}", "{i}" }
             }
         }
-    }
-}
-
-// ── UTF-16 ↔ byte-index conversion ──────────────────────────────────
-
-/// Convert a UTF-16 code-unit index (e.g. JavaScript `selectionStart`) to a
-/// Rust `str` byte offset. Returns `None` if `utf16_idx` falls outside or in
-/// the middle of a character boundary.
-pub(crate) fn utf16_to_byte_index(s: &str, utf16_idx: usize) -> Option<usize> {
-    let mut utf16_count = 0usize;
-    for (byte_idx, ch) in s.char_indices() {
-        if utf16_count == utf16_idx {
-            return Some(byte_idx);
-        }
-        utf16_count += ch.len_utf16();
-    }
-    // Cursor may sit right after the last character (end-of-string).
-    if utf16_count == utf16_idx {
-        Some(s.len())
-    } else {
-        None
     }
 }
 
