@@ -26,7 +26,7 @@ use std::sync::LazyLock;
 use dioxus::prelude::*;
 use dioxus_nox_dnd::{FEEDBACK_STYLES, FUNCTIONAL_STYLES};
 use dioxus_nox_markdown::prelude::{Mode, generate_theme_css};
-use dioxus_nox_shell::AppShell;
+use dioxus_nox_shell::{AppShell, MobileSidebarBackdrop};
 
 use crate::css::CSS;
 use crate::editor::NoteEditor;
@@ -72,6 +72,7 @@ fn App() -> Element {
             } else {
                 div { style: "padding:32px; color:#444", "Select a note to begin editing" }
             }
+            MobileSidebarBackdrop {}
         }
     }
 }

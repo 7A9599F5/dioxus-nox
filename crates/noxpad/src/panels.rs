@@ -2,6 +2,7 @@
 
 use crate::models::Note;
 use dioxus::prelude::*;
+use dioxus_nox_shell::ShellContext;
 
 #[component]
 pub(crate) fn PreviewPane(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usize>>) -> Element {
@@ -39,7 +40,17 @@ pub(crate) fn StatusBar(notes: Signal<Vec<Note>>, active_idx: Signal<Option<usiz
         Some((words, tags))
     });
 
+    let shell_ctx = try_use_context::<ShellContext>();
+
     rsx! {
+        if let Some(ctx) = shell_ctx {
+            button {
+                class: "mobile-sidebar-toggle",
+                "aria-label": "Toggle sidebar",
+                onclick: move |_| ctx.toggle_sidebar(),
+                "☰"
+            }
+        }
         if let Some((words, tags)) = (stats)() {
             span { "{words} words" }
             span { "{tags} tags" }

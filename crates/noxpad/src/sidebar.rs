@@ -9,6 +9,7 @@ use dioxus_nox_dnd::{
     SortableItem,
 };
 use dioxus_nox_gestures::{SwipeConfig, swipe_actions};
+use dioxus_nox_shell::use_shell_context;
 
 #[component]
 pub(crate) fn NoteSidebar(
@@ -17,6 +18,11 @@ pub(crate) fn NoteSidebar(
     active_idx: Signal<Option<usize>>,
     tabs: Signal<Vec<usize>>,
 ) -> Element {
+    let shell_ctx = use_shell_context();
+    // Single source of truth for "compact viewport": the shell's own breakpoint
+    // (same 640/1024 thresholds AppShell uses by default), so the swipe gate and
+    // the drawer-close logic can never disagree.
+    let is_touch = shell_ctx.is_mobile();
     let folders_snapshot = folders.read().clone();
     let notes_snapshot = notes.read().clone();
     let folder_drag_ids: Vec<DragId> = folders_snapshot
@@ -132,21 +138,8 @@ pub(crate) fn NoteSidebar(
                                                                         drag_type: Some(DragType::new(NOTE_DRAG_TYPE)),
                                                                         handle: Some("[data-drag-handle]".to_string()),
 
-                                                                        swipe_actions::Root {
-                                                                            config: SwipeConfig { action_width_px: 72.0, ..Default::default() },
-                                                                            on_commit: {
-                                                                                let folder_id = folder_id.clone();
-                                                                                move |_| {
-                                                                                    let mut folder_state = folders.write();
-                                                                                    if let Some(f) = folder_state.iter_mut().find(|f| f.id == folder_id) {
-                                                                                        f.note_indices.retain(|&i| i != note_idx);
-                                                                                    }
-                                                                                    let mut tab_state = tabs.write();
-                                                                                    let new_active = close_tab(&mut tab_state, (active_idx)(), note_idx);
-                                                                                    active_idx.set(new_active);
-                                                                                }
-                                                                            },
-                                                                            swipe_actions::Content {
+                                                                        {
+                                                                            let note_row = rsx! {
                                                                                 div {
                                                                                     class: "note-item",
                                                                                     "data-active": if is_active { "true" } else { "false" },
@@ -154,6 +147,9 @@ pub(crate) fn NoteSidebar(
                                                                                         active_idx.set(Some(note_idx));
                                                                                         let mut tab_state = tabs.write();
                                                                                         ensure_tab_open(&mut tab_state, note_idx);
+                                                                                        if shell_ctx.is_mobile() {
+                                                                                            shell_ctx.close_sidebar();
+                                                                                        }
                                                                                     },
                                                                                     span { "data-drag-handle": "", class: "drag-handle", "⠿" }
                                                                                     div { class: "note-item-title", "{title}" }
@@ -161,13 +157,32 @@ pub(crate) fn NoteSidebar(
                                                                                         div { class: "note-item-tags", "{tags_preview}" }
                                                                                     }
                                                                                 }
-                                                                            }
-                                                                            swipe_actions::Actions {
-                                                                                button {
-                                                                                    class: "swipe-action-delete",
-                                                                                    style: "background: var(--danger, #e53935); color: white; border: none; padding: 0 16px; cursor: pointer;",
-                                                                                    "Delete"
+                                                                            };
+                                                                            if is_touch {
+                                                                                let folder_id = folder_id.clone();
+                                                                                rsx! {
+                                                                                    swipe_actions::Root {
+                                                                                        config: SwipeConfig { action_width_px: 72.0, ..Default::default() },
+                                                                                        on_commit: move |_| {
+                                                                                            let mut folder_state = folders.write();
+                                                                                            if let Some(f) = folder_state.iter_mut().find(|f| f.id == folder_id) {
+                                                                                                f.note_indices.retain(|&i| i != note_idx);
+                                                                                            }
+                                                                                            let mut tab_state = tabs.write();
+                                                                                            let new_active = close_tab(&mut tab_state, (active_idx)(), note_idx);
+                                                                                            active_idx.set(new_active);
+                                                                                        },
+                                                                                        swipe_actions::Content { {note_row} }
+                                                                                        swipe_actions::Actions {
+                                                                                            button {
+                                                                                                class: "swipe-action-delete",
+                                                                                                "Delete"
+                                                                                            }
+                                                                                        }
+                                                                                    }
                                                                                 }
+                                                                            } else {
+                                                                                note_row
                                                                             }
                                                                         }
                                                                     }
