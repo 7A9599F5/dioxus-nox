@@ -61,6 +61,16 @@ impl ShellContext {
         }
     }
 
+    /// Closes the mobile overlay sidebar.
+    ///
+    /// Setting `sidebar_mobile_open` to `false` is harmless on desktop, where
+    /// the mobile open-state signal is not consulted. Mirrors [`close_modal`]
+    /// and [`close_search`].
+    pub fn close_sidebar(&self) {
+        let mut mob = self.sidebar_mobile_open;
+        mob.set(false);
+    }
+
     /// Returns the `data-shell-sidebar-state` attribute value for the root element.
     ///
     /// | Context | Value |
